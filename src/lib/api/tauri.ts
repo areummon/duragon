@@ -32,6 +32,7 @@ export class TauriBackend implements Backend {
   listChat = (noteId: string) => invoke<Message[]>('list_chat', { noteId });
 
   getSettings = () => invoke<Settings>('get_settings');
+  wheelScale = () => invoke<number>('wheel_scale');
   saveSettings = (settings: Settings) => invoke<void>('save_settings', { settings });
   listRiddlers = () => invoke<Riddler[]>('list_riddlers');
   saveRiddler = (riddler: Riddler) => invoke<Riddler>('save_riddler', { riddler });

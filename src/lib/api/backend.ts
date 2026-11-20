@@ -53,6 +53,8 @@ export interface Backend {
   stopSpeaking(): Promise<void>;
 
   exportNote(id: string, format: ExportFormat, path: string): Promise<void>;
+  /** Factor for page wheel deltas; 1 leaves scrolling to the engine. */
+  wheelScale(): Promise<number>;
 
   on<K extends keyof BackendEvents>(
     event: K,

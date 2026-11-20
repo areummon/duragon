@@ -306,6 +306,9 @@ export class MockBackend implements Backend {
     return structuredClone(this.chat.get(noteId) ?? []);
   }
 
+  async wheelScale() {
+    return 1;
+  }
   async getSettings() {
     return { ...this.settings };
   }
