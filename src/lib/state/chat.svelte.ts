@@ -49,9 +49,11 @@ export const visibleChat = () => chat.messages.filter((m) => m.createdAt > chat.
 export async function send(text: string) {
   const t = text.trim();
   if (!t || !chat.noteId) return;
+  const id = `local-${++seq}`;
   chat.messages.push({
-    id: `local-${++seq}`, noteId: chat.noteId, threadId: null, author: 'you', text: t, drawing: 'none', svg: null, sources: [], createdAt: Date.now(),
+    id, noteId: chat.noteId, threadId: null, author: 'you', text: t, drawing: 'none', svg: null, sources: [], createdAt: Date.now(),
   });
+  chat.fresh[id] = true;
   chat.waiting = true;
   await (await getBackend()).aiChat(chat.noteId, t, caretParagraph());
 }

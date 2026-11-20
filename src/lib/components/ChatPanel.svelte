@@ -91,7 +91,7 @@
     {:else}
       {#each messages as m (m.id)}
         {#if m.author === 'you'}
-          <div class="you"><InkText text={m.text} /></div>
+          <div class="you" class:in={!!chat.fresh[m.id]}><InkText text={m.text} /></div>
         {:else}
           <div class="riddled">
             <InkText text={m.text} animate={!!chat.fresh[m.id]} />
@@ -156,6 +156,7 @@
   .chips button:hover { color: var(--ink); background: var(--riddle-wash); }
 
   .you { align-self: flex-end; max-width: 85%; padding: 8px 14px; border-radius: 16px; background: var(--shelf); font-size: 14px; line-height: 1.5; }
+  .you.in { animation: ink-in var(--dur-ink-in) var(--ease-step) both; }
   .riddled { font-family: var(--font-voice); font-size: 16.5px; line-height: 1.55; color: var(--riddle); --ink-para-gap: 1.1em; }
   .art { margin-top: 18px; }
   .wait { display: flex; }
