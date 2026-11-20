@@ -10,6 +10,7 @@ import { app } from '../state/app.svelte';
 import { collapseOnType, geometry, open, threads, visibleThreads, type Geometry } from '../state/threads.svelte';
 import { anchorKey, anchorPlugin, type AnchorInput } from './anchors';
 import { measureLines } from './pencil';
+import { blockTexts } from './plain';
 import { current } from './current';
 import { QUIET } from './create';
 import { TextSelection } from '@tiptap/pm/state';
@@ -188,8 +189,8 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     measure,
     onEdit() {
       collapseOnType();
-      if (threads.thinking.some((t) => t.task === 'read')) cancelRead();
-      else readTarget = null;
+      // A read stays valid while its line is unchanged: pressing Enter after it, or writing elsewhere, keeps it.
+      if (readTarget !== null && !blockTexts(editor.getJSON()).some((t) => t.trim() === readTarget)) cancelRead();
       const block = editor.state.selection.$from.index(0);
       if (block === caretBlock + 1 && !settings.value.justMyWords) {
         const line = editor.state.doc.child(caretBlock).textContent;

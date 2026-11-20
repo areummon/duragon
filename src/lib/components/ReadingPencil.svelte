@@ -55,7 +55,9 @@
   });
 
   $effect(() => {
-    const view = editor.view;
+    // Cleanup must reach the editor this subscribed to: when a note is deleted the prop is gone before teardown.
+    const ed = editor;
+    const view = ed.view;
     let frame = 0;
     const remeasure = () => {
       cancelAnimationFrame(frame);
@@ -74,11 +76,11 @@
     const ro = new ResizeObserver(remeasure);
     ro.observe(view.dom);
     ro.observe(page);
-    editor.on('update', remeasure);
+    ed.on('update', remeasure);
     return () => {
       cancelAnimationFrame(frame);
       ro.disconnect();
-      editor.off('update', remeasure);
+      ed.off('update', remeasure);
     };
   });
 </script>
