@@ -168,6 +168,9 @@
     font-variation-settings: 'opsz' 14;
     letter-spacing: 0.004em;
   }
+  /* While the page width is dragged, each sketch gets its own layer, or WebKitGTK repaints every sketch on each frame the
+     toolbar glides and the drag halves its frame rate. Not at rest: a layer at a fractional offset paints a touch softer. */
+  :global(.page.dragging) .canvas :global(svg) { will-change: transform; }
   /* A paper-coloured halo behind each label, so lines fade out just before they reach the words. */
   .canvas :global(text) { paint-order: stroke; stroke: var(--paper) !important; stroke-width: 4px !important; stroke-linejoin: round; }
   /* As in Riddled, a sketch fills the column up to 440 px tall; the width cap keeps a short one from growing past 1.3×. */

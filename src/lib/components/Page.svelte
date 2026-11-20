@@ -55,7 +55,6 @@
       if (e.button !== 0) return;
       const el = e.currentTarget as HTMLElement;
       el.setPointerCapture(e.pointerId);
-      document.documentElement.classList.add('col-resizing');
       const startX = e.clientX;
       const start = page!.getBoundingClientRect().width;
       let width = Math.round(start);
@@ -69,7 +68,6 @@
         el.removeEventListener('pointermove', move);
         el.removeEventListener('pointerup', up);
         el.removeEventListener('pointercancel', up);
-        document.documentElement.classList.remove('col-resizing');
         void updateSettings({ pageWidth: width === PAGE_WIDTH_DEFAULT ? null : width });
         layout.dragWidth = null;
         dragSide = null;
@@ -84,7 +82,7 @@
 
 <main class="stage" class:aside={app.chatOpen && !app.sidebarOpen && layout.vw >= 1100} class:shifted={app.sidebarOpen} class:dim={app.chatOpen && !chat.pinned}>
   <!-- Set on the page itself: a width variable on the root restyles the whole document, every sketch included, on each drag step. -->
-  <div class="page" bind:this={page} style:width="min({pageWidth()}px, calc(100vw - 48px))">
+  <div class="page" class:dragging={dragSide !== null} bind:this={page} style:width="min({pageWidth()}px, calc(100vw - 48px))">
     {#each [-1, 1] as const as side (side)}
       <div
         class="handle"
@@ -104,6 +102,8 @@
         {#if dragSide === side}<span class="readout" aria-hidden="true">{layout.dragWidth}px</span>{/if}
       </div>
     {/each}
+    <!-- Holds the resize cursor over everything while dragging; a class on the root would restyle the whole document. -->
+    {#if dragSide !== null}<div class="drag-cursor" aria-hidden="true"></div>{/if}
 
     {#if app.note}
       <NoteHeaderRow />
@@ -154,6 +154,7 @@
     touch-action: none;
     user-select: none;
   }
+  .drag-cursor { position: fixed; inset: 0; z-index: 1000; cursor: var(--cursor-col-resize); }
   .handle.left { left: -12px; }
   .handle.right { right: -12px; }
   .line {

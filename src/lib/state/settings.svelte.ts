@@ -38,7 +38,8 @@ export async function loadSettings() {
 }
 
 export async function updateSettings(patch: Partial<Settings>) {
-  settings.value = { ...settings.value, ...patch };
+  // In place, so only what reads a changed key re-runs; replacing the object re-ran every reader (~45 ms in WebKitGTK).
+  Object.assign(settings.value, patch);
   apply();
   await (await getBackend()).saveSettings($state.snapshot(settings.value));
 }
