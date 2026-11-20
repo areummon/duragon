@@ -214,8 +214,9 @@
   .right .edge { left: -1.5px; }
   .left .edge { right: -1.5px; }
   .edge line {
-    stroke: var(--riddle-line);
-    stroke-width: 1;
+    stroke: var(--riddle);
+    stroke-opacity: 0.32;
+    stroke-width: 1.5;
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
     vector-effect: non-scaling-stroke;

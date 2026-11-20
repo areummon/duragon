@@ -4,11 +4,13 @@
   import { settings } from '../state/settings.svelte';
   import { voice } from '../state/voice.svelte';
   import { geometry, threads, visibleThreads } from '../state/threads.svelte';
+  import Tether from './Tether.svelte';
   import Thread from './Thread.svelte';
 
   const GAP = 16;
   const BLOT_C = -0.5;
   const BLOT_Y = 12.5;
+  const QUOTE_GAP = 9;
 
   let heights = $state<Record<string, number>>({});
 
@@ -50,21 +52,34 @@
     return out;
   });
 
-  const target = $derived.by(() => {
-    const id = threads.openId ?? threads.hoverId;
-    const p = placed.find((x) => x.thread.id === id && !x.orphan);
-    const g = id ? geometry.byId[id] : null;
-    return p && g ? { p, g, open: p.thread.id === threads.openId } : null;
+  /** A thread that just arrived gets the full tether for a moment, unasked. */
+  const NEW_MS = 2400;
+  let arrivedId = $state<string | null>(null);
+  $effect(() => {
+    const latest = Object.entries(threads.arrivedAt).sort((a, b) => b[1] - a[1])[0];
+    if (!latest) return;
+    const left = NEW_MS - (performance.now() - latest[1]);
+    if (left <= 0) return;
+    arrivedId = latest[0];
+    const t = window.setTimeout(() => (arrivedId = null), left);
+    return () => window.clearTimeout(t);
   });
 
-  function tether(p: Placed, g: { endX: number; endY: number }) {
-    const sx = g.endX + 3;
-    const sy = g.endY;
-    const bx = p.side === 'right' ? geometry.pageWidth + MARGIN_GAP + BLOT_C - 11 : -MARGIN_GAP - BLOT_C + 11;
-    const by = p.y + BLOT_Y;
-    const mx = (sx + bx) / 2;
-    return `M${sx} ${sy}C${mx} ${sy} ${mx} ${by} ${bx} ${by}`;
-  }
+  const target = $derived.by(() => {
+    const id = threads.openId ?? threads.hoverId ?? arrivedId;
+    const p = placed.find((x) => x.thread.id === id && !x.orphan);
+    const g = id ? geometry.byId[id] : null;
+    if (!p || !g) return null;
+    const right = p.side === 'right';
+    return {
+      id: p.thread.id,
+      faint: p.thread.id !== threads.openId && p.thread.id !== arrivedId,
+      sx: right ? g.endX + QUOTE_GAP : g.startX - QUOTE_GAP,
+      sy: right ? g.endY : g.startY,
+      ex: right ? geometry.pageWidth + MARGIN_GAP + BLOT_C - 11 : -MARGIN_GAP - BLOT_C + 11,
+      ey: p.y + BLOT_Y,
+    };
+  });
 
   const focusId = $derived(
     threads.openId ?? (voice.playing ? (threads.list.find((t) => t.messages.some((m) => m.id === voice.speakingId))?.id ?? null) : null),
@@ -74,10 +89,8 @@
 {#if placed.length}
   <div class="margins" style:--mw="{width}px" style:--gap="{MARGIN_GAP}px">
     {#if target}
-      {#key `${target.p.thread.id}:${target.open}`}
-        <svg class="tether" aria-hidden="true">
-          <path d={tether(target.p, target.g)} pathLength="1" />
-        </svg>
+      {#key `${target.id}:${target.faint}`}
+        <Tether sx={target.sx} sy={target.sy} ex={target.ex} ey={target.ey} faint={target.faint} />
       {/key}
     {/if}
     {#each placed as p (p.thread.id)}
@@ -107,14 +120,4 @@
   .slot.left { right: calc(100% + var(--gap)); }
   .slot.orphan { opacity: 0.5; }
   .slot.dim { opacity: 0.4; }
-  .tether { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-  .tether path {
-    fill: none;
-    stroke: var(--riddle-line);
-    stroke-width: 1;
-    stroke-linecap: round;
-    stroke-dasharray: 1;
-    stroke-dashoffset: 1;
-    animation: tether-draw var(--dur-tether) var(--ease-tether) var(--delay-tether) both;
-  }
 </style>
