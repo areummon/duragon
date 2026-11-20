@@ -1,6 +1,7 @@
 import { riddlerName } from '../state/riddler';
 import { Editor } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
+import type { Node as PMNode } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import { CodeBlock } from './codeblock';
 import { TextColor } from './textcolor';
@@ -14,13 +15,21 @@ export interface EditorOptions {
   onUpdate: (editor: Editor) => void;
 }
 
-function placeholder({ node, pos, editor }: { node: { type: { name: string } }; pos: number; editor: Editor }) {
-  const doc = editor.state.doc;
+interface PlaceholderProps {
+  editor: Editor;
+  node: PMNode;
+  pos: number;
+  hasAnchor: boolean;
+}
+
+// A brand-new note invites writing; any other empty line shows the hint only where the caret is.
+function placeholder({ editor, node, pos, hasAnchor }: PlaceholderProps) {
   if (node.type.name === 'title') return 'Untitled';
-  if (node.type.name !== 'paragraph') return '';
-  const index = doc.resolve(pos).index(0);
-  if (index === 1) return `Write, talk to ${riddlerName()}, or type / for commands…`;
-  return index === doc.childCount - 1 ? 'Just start writing.' : '';
+  const doc = editor.state.doc;
+  if (doc.childCount === 2 && doc.child(1) === node && node.type.name === 'paragraph') return 'Just start writing.';
+  if (!hasAnchor || node.type.name !== 'paragraph') return '';
+  if (doc.resolve(pos).parent.type.name === 'listItem') return 'List';
+  return `Write, talk to ${riddlerName()}, or type / for commands…`;
 }
 
 export function createEditor({ element, content, autofocus, onUpdate }: EditorOptions) {
