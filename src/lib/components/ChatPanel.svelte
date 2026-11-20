@@ -17,6 +17,19 @@
   let draft = $state('');
   let input = $state<HTMLInputElement>();
   let scroller = $state<HTMLElement>();
+  let copied = $state(false);
+  let copiedTimer: number | undefined;
+
+  async function copyChat() {
+    try {
+      await navigator.clipboard.writeText(chatAsText());
+    } catch {
+      return;
+    }
+    copied = true;
+    window.clearTimeout(copiedTimer);
+    copiedTimer = window.setTimeout(() => (copied = false), 1200);
+  }
 
   const messages = $derived(visibleChat());
   const open = $derived(app.chatOpen);
@@ -61,7 +74,7 @@
     </div>
     <div class="tools">
       {#if messages.length}
-        <button class="t" onclick={() => void navigator.clipboard?.writeText(chatAsText())}>Copy</button>
+        <button class="t" class:done={copied} onclick={copyChat}>{copied ? 'Copied' : 'Copy'}</button>
         <button class="t" onclick={clearChat}>Clear</button>
       {/if}
       <button class="i" aria-pressed={chat.pinned} aria-label="Pin open while you write" title="Pin open while you write" onclick={() => (chat.pinned = !chat.pinned)}><Pin size={15} strokeWidth={1.5} /></button>
@@ -125,6 +138,7 @@
   .tools { display: flex; align-items: center; gap: 4px; color: var(--faint); }
   .t { padding: 4px 8px; font-size: 13px; line-height: 1.2; transition: color var(--dur-ui) var(--ease-ui); }
   .t:hover, .i:hover, .i[aria-pressed='true'] { color: var(--ink); }
+  .t.done { color: var(--ink); }
   .i { display: grid; place-items: center; width: 28px; height: 28px; transition: color var(--dur-ui) var(--ease-ui); }
 
   .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 26px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
