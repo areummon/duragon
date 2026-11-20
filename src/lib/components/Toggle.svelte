@@ -26,4 +26,8 @@
   }
   .on { background: var(--graphite); }
   .on .knob { transform: translateX(10px); background: var(--paper); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .knob { transition: background-color 180ms var(--ease-ui); }
+  }
 </style>

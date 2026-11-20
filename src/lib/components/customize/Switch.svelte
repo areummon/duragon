@@ -28,4 +28,8 @@
   }
   .on { background: var(--ink); }
   .on .knob { transform: translateX(16px); background: var(--paper); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .knob { transition: background-color 180ms var(--ease-ui); }
+  }
 </style>

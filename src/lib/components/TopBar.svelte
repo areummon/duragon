@@ -94,4 +94,11 @@
   .chat:hover { opacity: 0.75; }
   .chat[aria-pressed='true'] { background: var(--riddle-wash); }
   .chat.away { opacity: 0; transform: scale(0.9); pointer-events: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .swap { transform: none; transition: opacity 200ms var(--ease-ui); }
+    .chat { transition: opacity 200ms var(--ease-ui), background-color var(--dur-ui) var(--ease-ui); }
+    .chat.away { transform: none; }
+    .brand { transition: border-color 200ms var(--ease-ui), background-color 200ms var(--ease-ui); }
+  }
 </style>

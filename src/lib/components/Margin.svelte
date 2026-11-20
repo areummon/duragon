@@ -121,4 +121,9 @@
   .slot.orphan { opacity: 0.5; }
   .slot.dim { opacity: 0.4; }
   .margins.resizing .slot { transition: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slot { transition: opacity 340ms var(--ease-step); }
+    .margins.resizing .slot { transition: none; }
+  }
 </style>

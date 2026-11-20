@@ -146,21 +146,38 @@
   to { transform: scale(1); }
 }
 
+/* Reduced motion keeps fades and color, and holds still anything that travels, grows or wipes. */
 @media (prefers-reduced-motion: reduce) {
-  :root {
-    --dur-settle: 0ms; --dur-tether: 0ms; --dur-tether-2: 0ms;
-    --delay-tether: 0ms; --delay-tether-2: 0ms; --dur-quote: 0ms;
-    --dur-reply-in: 0ms; --dur-reply-underline: 0ms; --dur-ink-wait: 0ms;
-    --dur-ink-word: 0ms; --delay-ink-word: 0ms; --dur-blot-splat: 0ms;
-    --dur-ink-dry: 0ms; --dur-ink-sheen: 0ms; --delay-ink-sheen: 0ms;
-    --dur-ink-drip: 0ms; --delay-ink-drip: 0ms; --dur-step: 0ms; --dur-ui: 0ms;
-    --dur-ink-in: 0ms; --dur-unfold: 0ms; --dur-pencil: 0ms; --dur-quiet-mark: 0ms;
-    --dur-breathe: 0ms; --dur-caret: 0ms; --dur-code-in: 0ms; --dur-sketch: 0ms;
+  @keyframes settle { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes ink-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes code-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes unfold { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes reply-underline { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes blot-splat { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sketch-grow { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sketch-pop { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sketch-dot { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes tether-draw {
+    from { stroke-dashoffset: 0; opacity: 0; }
+    to { stroke-dashoffset: 0; opacity: 1; }
   }
-  *, *::before, *::after {
-    animation-duration: 0ms !important;
-    animation-delay: 0ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0ms !important;
+  @keyframes ink-wait {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 0.95; }
   }
+  @keyframes reading-breathe {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 0.85; }
+  }
+  @keyframes hearing {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+  @keyframes quiet-mark {
+    0% { opacity: 0; }
+    15%, 70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @keyframes ink-drip { from, to { opacity: 0; } }
+  @keyframes voice-bar { from, to { transform: scaleY(0.6); } }
 }

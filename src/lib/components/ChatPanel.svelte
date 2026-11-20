@@ -164,4 +164,9 @@
     transition: opacity var(--dur-ui) var(--ease-ui);
   }
   .go:disabled { opacity: 0.3; cursor: default; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel { transition: opacity var(--dur-drawer) var(--ease-drawer), visibility 0s linear var(--dur-drawer); }
+    .panel.open { transition-delay: 0s; }
+  }
 </style>

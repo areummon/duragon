@@ -11,10 +11,11 @@ interface RiseOptions {
 
 /** Fade with a small rise. Popovers, menus. */
 export function rise(_node: Element, { y = 4, scale = 1, duration = 160 }: RiseOptions = {}): TransitionConfig {
+  const still = reduced();
   return {
-    duration: reduced() ? 0 : duration,
+    duration,
     easing: quintOut,
-    css: (t) => `opacity:${t};transform:translateY(${(1 - t) * y}px) scale(${scale + (1 - scale) * t})`,
+    css: (t) => (still ? `opacity:${t}` : `opacity:${t};transform:translateY(${(1 - t) * y}px) scale(${scale + (1 - scale) * t})`),
   };
 }
 
@@ -50,14 +51,15 @@ const easeStep = bezier(0.22, 1, 0.36, 1);
 
 /** Modal card: fade with a scale from .98. */
 export function pop(_node: Element, { duration = 200, from = 0.98 }: { duration?: number; from?: number } = {}): TransitionConfig {
+  const still = reduced();
   return {
-    duration: reduced() ? 0 : duration,
+    duration,
     easing: easeStep,
-    css: (t) => `opacity:${t};transform:scale(${from + (1 - from) * t})`,
+    css: (t) => (still ? `opacity:${t}` : `opacity:${t};transform:scale(${from + (1 - from) * t})`),
   };
 }
 
 /** Backdrop fade. */
 export function veil(_node: Element, { duration = 200 }: { duration?: number } = {}): TransitionConfig {
-  return { duration: reduced() ? 0 : duration, easing: easeStep, css: (t) => `opacity:${t}` };
+  return { duration, easing: easeStep, css: (t) => `opacity:${t}` };
 }

@@ -213,4 +213,8 @@
   .brief:hover .label, .brief:hover .text { color: var(--ink); }
   .title-gap { height: 12px; }
   .title-gap.has-meta { height: 4px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stage { transition: opacity var(--dur-drawer) var(--ease-drawer); }
+  }
 </style>

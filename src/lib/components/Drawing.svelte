@@ -69,8 +69,9 @@
     const g = steps[i];
     g.getAnimations({ subtree: true }).forEach((a) => a.cancel());
     g.style.opacity = '1';
-    if (!animated || reduced()) return;
+    if (!animated) return;
     g.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+    if (reduced()) return;
     g.querySelectorAll<SVGGeometryElement>(DRAWABLE).forEach((p) => {
       p.setAttribute('pathLength', '1');
       p.style.strokeDasharray = '1';
@@ -83,7 +84,7 @@
     const g = steps[i];
     g.getAnimations({ subtree: true }).forEach((a) => a.cancel());
     g.style.opacity = '0';
-    if (animated && !reduced()) g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150 });
+    if (animated) g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150 });
   }
 
   function stop() {

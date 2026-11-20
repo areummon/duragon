@@ -414,4 +414,11 @@
   .inline .msg + .msg { margin-top: 12px; }
   .thread.dialog { padding: 0; animation: none; font-size: 17px; }
   .thread.dialog .art { margin-top: 18px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .thread { transition: opacity var(--dur-settle) var(--ease-settle); }
+    .thread.leaving { transform: none; }
+    .write::after { transform: scaleX(1); transition: opacity 180ms ease-out; }
+    .icon :global(.lucide-pin) { transition: none; }
+  }
 </style>

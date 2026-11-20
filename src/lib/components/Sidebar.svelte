@@ -316,4 +316,9 @@
   .settings span { flex: 1; }
   .empty { padding: 6px 10px; font-size: 13px; color: var(--faint); }
   .danger { color: var(--text-red); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar { transition: opacity var(--dur-drawer) var(--ease-drawer), visibility 0s linear var(--dur-drawer); }
+    .sidebar.open { transition-delay: 0s; }
+  }
 </style>
