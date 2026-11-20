@@ -149,6 +149,19 @@ fn the_sentence_beside_a_sketch_is_its_brief_in_every_task() {
 }
 
 #[test]
+fn every_conversational_prompt_explains_math_and_code() {
+    for task in [AiTask::Read, AiTask::Answer, AiTask::Reply, AiTask::Chat, AiTask::Ask, AiTask::Visualize] {
+        let p = system_prompt(task, &riddler(), "", "", false);
+        assert!(p.contains("LaTeX math between `$` signs"), "{task:?} reads the note's math");
+        assert!(p.contains("keep their source exactly as written"), "{task:?} quotes the math source");
+        assert!(p.contains("`$...$` inline and `$$...$$`"), "{task:?} writes math in LaTeX");
+        assert!(p.contains("fenced ``` block with its language"), "{task:?} fences multi-line code");
+        assert!(p.contains("No other markdown"), "{task:?}");
+    }
+    assert!(!system_prompt(AiTask::Chat, &riddler(), "", "", false).contains("Still plain text"));
+}
+
+#[test]
 fn schemas_are_strict_objects() {
     for task in [AiTask::Read, AiTask::Answer, AiTask::Reply, AiTask::Chat, AiTask::Draw, AiTask::Learn] {
         let s = prompts::schema(task, false);
