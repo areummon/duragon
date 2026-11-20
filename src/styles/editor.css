@@ -135,3 +135,10 @@
 .ProseMirror [data-color='green'] { color: var(--text-green); }
 .ProseMirror [data-color='blue'] { color: var(--text-blue); }
 .ProseMirror [data-color='purple'] { color: var(--text-purple); }
+
+/* Math live preview: the LaTeX source stays in the note; it hides while its rendering shows. */
+.ProseMirror .math-source { display: none; }
+.ProseMirror .math-render { cursor: text; }
+.ProseMirror .math-render .katex-display { display: inline-block; margin: 0; }
+.ProseMirror .math-whole { display: block; overflow-x: auto; overflow-y: hidden; text-align: center; padding: 0.2em 0; scrollbar-width: thin; }
+.ProseMirror .math-whole .katex-display { display: block; }

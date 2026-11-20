@@ -5,6 +5,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import { Caret } from './caret';
 import { CodeBlock } from './codeblock';
+import { MathPreview } from './math';
 import { TextColor } from './textcolor';
 import { SlashCommands } from './slash.svelte';
 import { NoteDocument, Title } from './title';
@@ -53,6 +54,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       TextColor,
       Title,
       CodeBlock,
+      MathPreview,
       Caret,
       SlashCommands,
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),
