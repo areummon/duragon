@@ -1,6 +1,6 @@
 <script lang="ts">
   import X from 'lucide-svelte/icons/x';
-  import { rise } from '../motion/transitions';
+  import { pop, veil } from '../motion/transitions';
   import { find, threads } from '../state/threads.svelte';
   import Thread from './Thread.svelte';
 
@@ -11,8 +11,8 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && threads.fullId && !e.defaultPrevented && close()} />
 
 {#if thread}
-  <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:rise={{ y: 0, duration: 180 }}>
-    <div class="card" role="dialog" aria-modal="true" aria-label="Thread" tabindex="-1">
+  <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:veil>
+    <div class="card" role="dialog" aria-modal="true" aria-label="Thread" tabindex="-1" in:pop out:pop={{ duration: 140 }}>
       <button class="close" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
       <blockquote>{thread.quote}</blockquote>
       <Thread {thread} variant="dialog" />

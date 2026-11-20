@@ -1,7 +1,7 @@
 <script lang="ts">
   import X from 'lucide-svelte/icons/x';
   import { lightbox } from '../state/layout.svelte';
-  import { rise } from '../motion/transitions';
+  import { pop, veil } from '../motion/transitions';
   import Drawing from './Drawing.svelte';
 
   const close = () => (lightbox.svg = null);
@@ -10,8 +10,8 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && lightbox.svg && (e.stopPropagation(), close())} />
 
 {#if lightbox.svg}
-  <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:rise={{ y: 0, duration: 180 }}>
-    <div class="card" role="dialog" aria-modal="true" aria-label="The drawing, larger" tabindex="-1">
+  <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:veil>
+    <div class="card" role="dialog" aria-modal="true" aria-label="The drawing, larger" tabindex="-1" in:pop out:pop={{ duration: 140 }}>
       <header>
         <h2>The drawing, larger</h2>
         <button aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
