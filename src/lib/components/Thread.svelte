@@ -156,10 +156,12 @@
 
   {#if !isOpen}
     <div class="collapsed">
-      <button class="first" onclick={() => openThread(thread.id)}>
-        {#if first}<InkText text={first.text} animate={!!threads.freshText[first.id]} />{/if}
-        {#if replies > 0}<span class="replies">{replies} {replies === 1 ? 'reply' : 'replies'}</span>{/if}
-      </button>
+      {#if first?.text.trim() || replies > 0}
+        <button class="first" onclick={() => openThread(thread.id)}>
+          {#if first?.text.trim()}<InkText text={first.text} animate={!!threads.freshText[first.id]} />{/if}
+          {#if replies > 0}<span class="replies">{replies} {replies === 1 ? 'reply' : 'replies'}</span>{/if}
+        </button>
+      {/if}
       {#if drawn}
         <div class="art"><Drawing status={drawn.drawing} svg={drawn.svg} fresh={!!threads.freshDraw[drawn.id]} onLarger={() => enlarge(drawn.svg)} /></div>
       {/if}
@@ -177,7 +179,7 @@
             {#if m.author === 'you'}
               <p>{m.text}</p>
             {:else}
-              <p>
+              {#if m.text.trim()}<p>
                 {#if inline && i === 0}
                   <span class="close" role="button" tabindex="0" aria-label="Close this thread"
                     onclick={() => openThread(null)}
@@ -186,7 +188,7 @@
                 {:else}
                   <InkText text={m.text} animate={!!threads.freshText[m.id] || variant === 'card'} />
                 {/if}<button class="speak" aria-label={playingId === m.id ? 'Stop' : 'Read aloud'} title={playingId === m.id ? 'Stop' : 'Read aloud'} onclick={() => speak(m)}>{#if playingId === m.id}<span class="stop"></span>{:else}<Volume2 size={12} strokeWidth={1.7} />{/if}</button>
-              </p>
+              </p>{/if}
               <Sources sources={m.sources} />
               {#if m.drawing !== 'none'}
                 <div class="art"><Drawing status={m.drawing} svg={m.svg} fresh={!!threads.freshDraw[m.id]} size={variant === 'dialog' ? 'dialog' : variant === 'margin' ? 'margin' : 'large'} onLarger={() => enlarge(m.svg)} /></div>
@@ -265,6 +267,7 @@
   .first { display: block; width: 100%; text-align: inherit; cursor: var(--cursor-pointer); }
   .replies { display: block; margin-top: 2px; font-family: var(--font-sans); font-size: 12.5px; line-height: 1.4; color: var(--faint); }
   .art { margin-top: 14px; }
+  .art:first-child { margin-top: 0; }
   .left .art :global(figure) { margin-left: auto; }
   .left .art :global(.player) { text-align: left; }
   .left .art :global(.wait) { justify-content: flex-end; }

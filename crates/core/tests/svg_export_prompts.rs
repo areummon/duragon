@@ -131,8 +131,18 @@ fn system_prompts_carry_riddler_brief_and_about_you() {
     assert!(p.contains("Speak only for clear errors"));
     assert!(!p.contains("What this note is for"));
     assert!(!p.contains("About the writer"));
-    assert!(system_prompt(AiTask::Answer, &riddler(), "", "", false).contains("MUST return a \"draw\""));
     assert!(system_prompt(AiTask::Draw, &riddler(), "", "", false).contains("viewBox=\"0 0 320"));
+}
+
+#[test]
+fn every_task_the_writer_can_ask_to_draw_in_answers_with_the_sketch_alone() {
+    for task in [AiTask::Read, AiTask::Answer, AiTask::Reply, AiTask::Chat, AiTask::Ask] {
+        let p = system_prompt(task, &riddler(), "", "", false);
+        assert!(p.contains("MUST return a \"draw\"") && p.contains("The sketch is the whole answer"), "{task:?}");
+        assert!(!p.contains("{asked_to_draw}"), "{task:?}");
+    }
+    let s = prompts::schema(AiTask::Visualize, false);
+    assert_eq!((s["required"].clone(), s["properties"].get("message")), (serde_json::json!(["draw"]), None));
 }
 
 #[test]

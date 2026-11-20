@@ -50,10 +50,16 @@ fn question_kind() -> ThreadKind {
 
 #[derive(Deserialize)]
 struct SayOut {
+    #[serde(default)]
     message: String,
     draw: Option<String>,
     #[serde(default)]
     sources: Vec<Source>,
+}
+
+/// An answer is words, a sketch, or both: a request to draw is answered by the sketch alone.
+fn says_nothing(message: &str, draw: Option<&str>) -> bool {
+    message.trim().is_empty() && draw.is_none_or(|d| d.trim().is_empty())
 }
 
 #[derive(Deserialize)]
@@ -274,13 +280,13 @@ impl Ai {
             ThreadKind::Reply => Some(target.trim_end().to_string()),
             ThreadKind::Question => out.quote.as_deref().and_then(|q| resolve_quote(target, q)),
         };
-        let message = out.message.as_deref().map(str::trim).filter(|m| !m.is_empty());
-        let (true, Some(quote), Some(message)) = (out.said, quote, message) else {
+        let message = out.message.unwrap_or_default();
+        let (true, Some(quote), false) = (out.said, quote, says_nothing(&message, out.draw.as_deref())) else {
             self.events.emit("ai:quiet", json!({ "noteId": note_id, "target": target }));
             return Ok(());
         };
         let thread = self.db.create_thread(note_id, out.kind, &quote)?;
-        self.deliver(&ctx, Some(&thread), true, message, out.draw, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), true, &message, out.draw, &out.sources).await?;
         if out.kind == ThreadKind::Reply {
             self.spawn_learn(&ctx, target);
         }
@@ -301,7 +307,7 @@ impl Ai {
         let Some(out) = self.call::<SayOut>(&ctx, AiTask::Answer, payload).await else {
             return Ok(());
         };
-        if out.message.trim().is_empty() {
+        if says_nothing(&out.message, out.draw.as_deref()) {
             self.error(note_id, AiTask::Answer, "empty answer");
             return Ok(());
         }
@@ -327,7 +333,7 @@ impl Ai {
         let Some(out) = self.call::<SayOut>(&ctx, AiTask::Reply, payload).await else {
             return Ok(());
         };
-        if out.message.trim().is_empty() {
+        if says_nothing(&out.message, out.draw.as_deref()) {
             self.error(&note_id, AiTask::Reply, "empty reply");
             return Ok(());
         }
@@ -351,7 +357,7 @@ impl Ai {
         let Some(out) = self.call::<SayOut>(&ctx, AiTask::Chat, payload).await else {
             return Ok(());
         };
-        if out.message.trim().is_empty() {
+        if says_nothing(&out.message, out.draw.as_deref()) {
             self.error(note_id, AiTask::Chat, "empty reply");
             return Ok(());
         }
@@ -435,6 +441,7 @@ fn plain_of(note: &Note) -> String {
 #[derive(Deserialize)]
 struct AskOut {
     quote: String,
+    #[serde(default)]
     message: String,
     draw: Option<String>,
     #[serde(default)]
@@ -458,7 +465,7 @@ impl Ai {
         let Some(out) = self.call::<AskOut>(&ctx, AiTask::Ask, payload).await else {
             return Ok(());
         };
-        if out.message.trim().is_empty() {
+        if says_nothing(&out.message, out.draw.as_deref()) {
             self.error(note_id, AiTask::Ask, "empty answer");
             return Ok(());
         }
@@ -481,12 +488,11 @@ impl Ai {
         let Some(out) = self.call::<SayOut>(&ctx, AiTask::Visualize, payload).await else {
             return Ok(());
         };
-        let brief = out.draw.filter(|d| !d.trim().is_empty());
-        let Some(brief) = brief.filter(|_| !out.message.trim().is_empty()) else {
+        let Some(brief) = out.draw.filter(|d| !d.trim().is_empty()) else {
             self.error(note_id, AiTask::Visualize, "no drawing brief returned");
             return Ok(());
         };
         let thread = self.db.create_thread(note_id, ThreadKind::Question, target.trim())?;
-        self.deliver(&ctx, Some(&thread), true, &out.message, Some(brief), &[]).await
+        self.deliver(&ctx, Some(&thread), true, "", Some(brief), &[]).await
     }
 }

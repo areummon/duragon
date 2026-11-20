@@ -220,6 +220,35 @@ async fn answer_reply_and_chat_flow() {
 }
 
 #[tokio::test]
+async fn a_request_to_draw_is_answered_by_the_sketch_alone() {
+    let line = "Draw a max heap";
+    let fx = setup(json!({"said":true,"kind":"reply","quote":line,"message":"","draw":"a max heap"}), json!({"svg": SVG}));
+    disable_learn(&fx);
+    fx.ai.read(&fx.note, line).await.unwrap();
+    assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread", "ai:thinking", "ai:message"]);
+    let m = &fx.ai.db.list_threads(&fx.note).unwrap()[0].messages[0];
+    assert_eq!((m.text.as_str(), m.drawing), ("", DrawingState::Done));
+
+    let fx = setup(json!({"draw":"a max heap"}), json!({"svg": SVG}));
+    disable_learn(&fx);
+    fx.ai.answer(&fx.note, "Duragon, draw a max heap").await.unwrap();
+    let m = &fx.ai.db.list_threads(&fx.note).unwrap()[0].messages[0];
+    assert_eq!((m.text.as_str(), m.drawing), ("", DrawingState::Done));
+}
+
+#[tokio::test]
+async fn an_answer_with_neither_words_nor_a_sketch_is_not_delivered() {
+    let fx = setup(json!({"said":true,"kind":"reply","quote":"Draw it","message":" "}), json!({}));
+    fx.ai.read(&fx.note, "Draw it").await.unwrap();
+    assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:quiet"]);
+
+    let fx = setup(json!({"message":"","draw":" "}), json!({}));
+    fx.ai.answer(&fx.note, "Duragon, draw it").await.unwrap();
+    assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:error"]);
+    assert!(fx.ai.db.list_threads(&fx.note).unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn learn_updates_about_you_and_caps_length() {
     let fx = setup(json!({"changed":true,"aboutYou":"y".repeat(900)}), json!({}));
     fx.ai.learn("I study biology").await.unwrap();
@@ -258,14 +287,15 @@ async fn ask_must_say_something_and_persists_the_question() {
 
 #[tokio::test]
 async fn visualize_always_chains_a_drawing() {
-    let fx = setup(json!({"message":"Here it is.","draw":"cell parts"}), json!({"svg": SVG}));
+    let fx = setup(json!({"draw":"cell parts"}), json!({"svg": SVG}));
     fx.ai.visualize(&fx.note, TARGET).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread", "ai:thinking", "ai:message"]);
     assert_eq!(fx.cap.all()[0].1["task"], "visualize");
     assert_eq!(fx.cap.all()[1].1["messages"][0]["drawing"], "pending");
+    assert_eq!(fx.cap.all()[1].1["messages"][0]["text"], "");
     assert_eq!(fx.cap.all()[3].1["drawing"], "done");
 
-    let fx = setup(json!({"message":"Here it is."}), json!({"svg": SVG}));
+    let fx = setup(json!({}), json!({"svg": SVG}));
     fx.ai.visualize(&fx.note, TARGET).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:error"]);
 }
