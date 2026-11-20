@@ -56,6 +56,7 @@
       const el = e.currentTarget as HTMLElement;
       el.setPointerCapture(e.pointerId);
       layout.resizing = true;
+      document.documentElement.classList.add('col-resizing');
       const startX = e.clientX;
       const start = page!.getBoundingClientRect().width;
       let width = start;
@@ -70,6 +71,7 @@
         el.removeEventListener('pointerup', up);
         el.removeEventListener('pointercancel', up);
         layout.resizing = false;
+        document.documentElement.classList.remove('col-resizing');
         dragging = null;
         void updateSettings({ pageWidth: width === PAGE_WIDTH_DEFAULT ? null : width });
       };
@@ -149,7 +151,7 @@
     justify-content: center;
     width: 24px;
     height: 28px;
-    cursor: col-resize;
+    cursor: var(--cursor-col-resize);
     touch-action: none;
     user-select: none;
   }

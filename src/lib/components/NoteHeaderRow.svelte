@@ -5,6 +5,7 @@
   import { notes } from '../state/notes.svelte';
   import { riddlerName } from '../state/riddler';
   import { layout } from '../state/layout.svelte';
+  import { reflow } from '../motion/reflow';
   import Blot from './Blot.svelte';
   import Popover from './Popover.svelte';
   import Toggle from './Toggle.svelte';
@@ -31,9 +32,49 @@
     close();
     void updateMeta({ mode: id });
   }
+
+  const LINE = 30;
+  const ROW_GAP = 2;
+  const COLUMN_GAP = 4;
+  const BLEED = 16;
+
+  let row = $state<HTMLElement>();
+  let spill = $state(0);
+
+  /** Lines the row would wrap to at the page's width, filled the way flex-wrap fills them. */
+  function linesAt(width: number, items: number[]): number {
+    let lines = 1;
+    let x = 0;
+    for (const w of items) {
+      if (x > 0 && x + COLUMN_GAP + w > width) {
+        lines += 1;
+        x = w;
+      } else x += (x > 0 ? COLUMN_GAP : 0) + w;
+    }
+    return lines;
+  }
+
+  /** The scrolled pill sits on one line; this holds the space the wrapped row took, so the page below never jumps. */
+  function measureSpill() {
+    if (!row || !layout.scrolled) {
+      spill = 0;
+      return;
+    }
+    const items = [...row.children].map((c) => (c as HTMLElement).offsetWidth);
+    const lines = linesAt((row.parentElement?.clientWidth ?? 0) + BLEED, items);
+    const natural = lines * LINE + (lines - 1) * ROW_GAP;
+    spill = Math.max(0, natural - row.clientHeight);
+  }
 </script>
 
-<div class="row" class:pill={layout.scrolled} role="toolbar" aria-label="Note settings">
+<div
+  class="row"
+  class:pill={layout.scrolled}
+  role="toolbar"
+  aria-label="Note settings"
+  bind:this={row}
+  use:reflow={{ tracksEdge: (el) => el.classList.contains('end'), onLayout: measureSpill }}
+>
   <div class="slot">
     <button class="item" aria-haspopup="menu" aria-expanded={menu === 'riddler'} onclick={toggle('riddler')}>
       <Blot size={15} /><span>{riddler?.name ?? 'Duragon'}</span><ChevronDown class="chev" size={13} strokeWidth={1.6} />
@@ -64,29 +105,27 @@
     </button>
   {/if}
 
-  <div class="group">
-    <div class="slot">
-      <button class="item" aria-haspopup="menu" aria-expanded={menu === 'mode'} onclick={toggle('mode')}>
-        {#if note.mode === 'thinks'}<Lightbulb size={15} strokeWidth={1.5} style="color: var(--bulb)" />{:else}<MessageCircle size={15} strokeWidth={1.5} />{/if}<span>{mode.label}</span><ChevronDown class="chev" size={13} strokeWidth={1.6} />
-      </button>
-      <Popover open={menu === 'mode'} onclose={close} width={300} label="Reading mode">
-        {#each MODES as m (m.id)}
-          <button class="menu-item opt" role="menuitemradio" aria-checked={m.id === note.mode} onclick={() => pickMode(m.id)}>
-            {#if m.id === 'thinks'}<Lightbulb size={15} strokeWidth={1.5} style={m.id === note.mode ? 'color: var(--bulb)' : ''} />{:else}<MessageCircle size={15} strokeWidth={1.5} />{/if}
-            <span class="text"><span class="name">{m.label}</span><span class="desc">{m.description}</span></span>
-            {#if m.id === note.mode}<Check size={15} strokeWidth={1.6} />{/if}
-          </button>
-        {/each}
-      </Popover>
-    </div>
-
-    <button class="item" role="switch" aria-checked={note.voiceOn} onclick={() => updateMeta({ voiceOn: !note.voiceOn })}>
-      <Volume2 size={15} strokeWidth={1.5} /><span>Voice</span><Toggle on={note.voiceOn} />
+  <div class="slot">
+    <button class="item" aria-haspopup="menu" aria-expanded={menu === 'mode'} onclick={toggle('mode')}>
+      {#if note.mode === 'thinks'}<Lightbulb size={15} strokeWidth={1.5} style="color: var(--bulb)" />{:else}<MessageCircle size={15} strokeWidth={1.5} />{/if}<span>{mode.label}</span><ChevronDown class="chev" size={13} strokeWidth={1.6} />
     </button>
-    <button class="item" role="switch" aria-checked={note.webOn} onclick={() => updateMeta({ webOn: !note.webOn })}>
-      <Globe size={15} strokeWidth={1.5} /><span>Web</span><Toggle on={note.webOn} />
-    </button>
+    <Popover open={menu === 'mode'} onclose={close} width={300} label="Reading mode">
+      {#each MODES as m (m.id)}
+        <button class="menu-item opt" role="menuitemradio" aria-checked={m.id === note.mode} onclick={() => pickMode(m.id)}>
+          {#if m.id === 'thinks'}<Lightbulb size={15} strokeWidth={1.5} style={m.id === note.mode ? 'color: var(--bulb)' : ''} />{:else}<MessageCircle size={15} strokeWidth={1.5} />{/if}
+          <span class="text"><span class="name">{m.label}</span><span class="desc">{m.description}</span></span>
+          {#if m.id === note.mode}<Check size={15} strokeWidth={1.6} />{/if}
+        </button>
+      {/each}
+    </Popover>
   </div>
+
+  <button class="item" role="switch" aria-checked={note.voiceOn} onclick={() => updateMeta({ voiceOn: !note.voiceOn })}>
+    <Volume2 size={15} strokeWidth={1.5} /><span>Voice</span><Toggle on={note.voiceOn} />
+  </button>
+  <button class="item" role="switch" aria-checked={note.webOn} onclick={() => updateMeta({ webOn: !note.webOn })}>
+    <Globe size={15} strokeWidth={1.5} /><span>Web</span><Toggle on={note.webOn} />
+  </button>
 
   <div class="slot end">
     <button class="item" aria-haspopup="menu" aria-expanded={menu === 'export'} onclick={toggle('export')}>
@@ -99,6 +138,7 @@
     </Popover>
   </div>
 </div>
+{#if spill}<div class="spill" style:height="{spill}px" aria-hidden="true"></div>{/if}
 
 <style>
   .row {
@@ -117,17 +157,24 @@
   }
   .row {
     position: sticky;
-    top: 14px;
+    top: 20px;
     z-index: 15;
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
-    transition: border-color 200ms var(--ease-ui), background-color 200ms var(--ease-ui), padding 200ms var(--ease-ui);
+    transition: border-color 200ms var(--ease-ui), background-color 200ms var(--ease-ui);
   }
   .row.pill { border-color: var(--rule); background: var(--paper); padding: 0 10px; margin-left: -18px; margin-right: -18px; }
-  .row.pill { border-radius: 18px; }
+  .row.pill {
+    width: max-content;
+    min-width: calc(100% + 36px);
+    max-width: calc(100vw - 32px);
+    margin-left: 50%;
+    margin-right: 0;
+    transform: translateX(-50%);
+    border-radius: 18px;
+  }
   .slot { position: relative; }
-  .group { display: flex; align-items: center; gap: 2px; }
   .slot.end { margin-left: auto; }
   .item {
     display: inline-flex;
