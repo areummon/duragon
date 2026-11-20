@@ -3,6 +3,7 @@ import { Editor } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
+import { Caret } from './caret';
 import { CodeBlock } from './codeblock';
 import { TextColor } from './textcolor';
 import { SlashCommands } from './slash.svelte';
@@ -52,6 +53,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       TextColor,
       Title,
       CodeBlock,
+      Caret,
       SlashCommands,
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),
     ],

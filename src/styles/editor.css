@@ -8,6 +8,12 @@
   caret-color: var(--ink);
 }
 .ProseMirror > * + * { margin-top: 18px; }
+/* The caret is drawn by caret.ts so it keeps one height on every line. */
+.ProseMirror.drawn-caret { caret-color: transparent; }
+.caret { position: absolute; top: 0; left: 0; width: 1px; background: var(--ink); pointer-events: none; }
+.caret.blink { animation: caret-blink var(--dur-caret) infinite; }
+/* A zero-length blink would end on its hidden frame. */
+@media (prefers-reduced-motion: reduce) { .caret.blink { animation: none; } }
 .ProseMirror ::selection { background: color-mix(in srgb, var(--ink) 14%, transparent); }
 
 .ProseMirror .note-title {
@@ -117,7 +123,7 @@
 }
 
 @media print {
-  body::before, .bar, .sidebar, .hint, .handle, .row, .tell, .brief, .code-lang { display: none !important; }
+  body::before, .bar, .sidebar, .hint, .handle, .row, .tell, .brief, .code-lang, .caret { display: none !important; }
   .stage { transform: none !important; opacity: 1 !important; }
 }
 

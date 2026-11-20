@@ -118,6 +118,7 @@
 
 <style>
   .editor {
+    position: relative;
     min-height: 60vh;
     padding-bottom: 40vh;
   }
