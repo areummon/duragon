@@ -35,11 +35,17 @@ struct Ctx {
 #[derive(Deserialize)]
 struct ReadOut {
     said: bool,
+    #[serde(default = "question_kind")]
+    kind: ThreadKind,
     quote: Option<String>,
     message: Option<String>,
     draw: Option<String>,
     #[serde(default)]
     sources: Vec<Source>,
+}
+
+fn question_kind() -> ThreadKind {
+    ThreadKind::Question
 }
 
 #[derive(Deserialize)]
@@ -264,14 +270,21 @@ impl Ai {
         let Some(out) = self.call::<ReadOut>(&ctx, AiTask::Read, payload).await else {
             return Ok(());
         };
-        let quote = out.quote.as_deref().and_then(|q| resolve_quote(target, q));
+        let quote = match out.kind {
+            ThreadKind::Reply => Some(target.trim_end().to_string()),
+            ThreadKind::Question => out.quote.as_deref().and_then(|q| resolve_quote(target, q)),
+        };
         let message = out.message.as_deref().map(str::trim).filter(|m| !m.is_empty());
         let (true, Some(quote), Some(message)) = (out.said, quote, message) else {
             self.events.emit("ai:quiet", json!({ "noteId": note_id, "target": target }));
             return Ok(());
         };
-        let thread = self.db.create_thread(note_id, ThreadKind::Question, &quote)?;
-        self.deliver(&ctx, Some(&thread), true, message, out.draw, &out.sources).await
+        let thread = self.db.create_thread(note_id, out.kind, &quote)?;
+        self.deliver(&ctx, Some(&thread), true, message, out.draw, &out.sources).await?;
+        if out.kind == ThreadKind::Reply {
+            self.spawn_learn(&ctx, target);
+        }
+        Ok(())
     }
 
     pub async fn answer(&self, note_id: &str, target: &str) -> Result<()> {

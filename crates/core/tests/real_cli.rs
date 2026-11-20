@@ -90,3 +90,39 @@ async fn real_answer_with_web_sources() {
     println!("{}\nSOURCES: {:#?}", t.messages[0].text, t.messages[0].sources);
     assert!(!t.messages[0].sources.is_empty());
 }
+
+async fn real_read_of(title: &str, text: &str) -> Vec<Thread> {
+    let db = Db::open_in_memory().unwrap();
+    let mut s = db.get_settings().unwrap();
+    s.learn_about_you = false;
+    db.save_settings(&s).unwrap();
+    let note = db.create_note(Some(title)).unwrap();
+    let doc = json!({"type":"doc","content":[
+        {"type":"title","content":[{"type":"text","text":title}]},
+        {"type":"paragraph","content":[{"type":"text","text":text}]}]});
+    db.save_note(&note.meta.id, title, &doc, &format!("{title}\n{text}")).unwrap();
+    let cap = Arc::new(Capture::default());
+    let ai = Ai::new(db, cap.clone());
+    ai.read(&note.meta.id, text).await.unwrap();
+    for (name, payload) in cap.all() {
+        println!("{name}: {payload}");
+    }
+    ai.db.list_threads(&note.meta.id).unwrap()
+}
+
+#[tokio::test]
+#[ignore]
+async fn real_read_answers_an_unaddressed_request() {
+    let text = "Can you explain how a hash map handles collisions";
+    let threads = real_read_of("Data structures", text).await;
+    assert_eq!(threads.len(), 1, "{threads:?}");
+    assert_eq!((threads[0].kind, threads[0].quote.as_str()), (ThreadKind::Reply, text));
+    assert!(!threads[0].messages[0].text.trim().is_empty());
+}
+
+#[tokio::test]
+#[ignore]
+async fn real_read_does_not_answer_a_statement() {
+    let threads = real_read_of("Plants", "Plants grow faster when you play them classical music.").await;
+    assert!(threads.iter().all(|t| t.kind != ThreadKind::Reply), "{threads:?}");
+}

@@ -55,6 +55,61 @@ async fn read_creates_a_thread_for_an_exact_quote() {
     assert!(fx.ai.db.get_note(&fx.note).unwrap().meta.has_open_question);
 }
 
+fn disable_learn(fx: &Fx) {
+    let mut s = fx.ai.db.get_settings().unwrap();
+    s.learn_about_you = false;
+    fx.ai.db.save_settings(&s).unwrap();
+}
+
+#[tokio::test]
+async fn read_answers_a_request_inline_under_the_whole_line() {
+    let line = "Can you explain how a hash map handles collisions  \n";
+    let fx = setup(
+        json!({"said":true,"kind":"reply","quote":"hash map","message":"Two keys can land in one bucket."}),
+        json!({}),
+    );
+    disable_learn(&fx);
+    fx.ai.read(&fx.note, line).await.unwrap();
+    assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread"], "{:?}", fx.cap.all());
+    let th = &fx.cap.all()[1].1;
+    assert_eq!(th["kind"], "reply");
+    assert_eq!(th["quote"], line.trim_end());
+    assert_eq!(th["messages"][0]["text"], "Two keys can land in one bucket.");
+    let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
+    assert_eq!((t.kind, t.quote.as_str()), (ThreadKind::Reply, line.trim_end()));
+}
+
+#[tokio::test]
+async fn read_reply_with_a_brief_chains_a_drawing() {
+    let line = "Draw how a hash map handles collisions";
+    let fx = setup(
+        json!({"said":true,"kind":"reply","quote":line,"message":"Here is the idea.","draw":"buckets with a chain"}),
+        json!({"svg": SVG}),
+    );
+    disable_learn(&fx);
+    fx.ai.read(&fx.note, line).await.unwrap();
+    assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread", "ai:thinking", "ai:message"]);
+    assert_eq!(fx.cap.all()[1].1["kind"], "reply");
+    assert_eq!(fx.cap.all()[1].1["messages"][0]["drawing"], "pending");
+    assert_eq!(fx.cap.all()[3].1["drawing"], "done");
+    let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
+    assert_eq!((t.kind, t.messages[0].drawing), (ThreadKind::Reply, DrawingState::Done));
+}
+
+#[tokio::test]
+async fn read_with_explicit_question_kind_stays_a_margin_question() {
+    let fx = setup(json!({"said":true,"kind":"question","quote":"mitochondria","message":"Sure?"}), json!({}));
+    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
+    assert_eq!((t.kind, t.quote.as_str()), (ThreadKind::Question, "mitochondria"));
+}
+
+#[test]
+fn read_schema_offers_question_or_reply() {
+    let s = duragon_core::ai::prompts::schema(AiTask::Read, false);
+    assert_eq!(s["properties"]["kind"]["enum"], json!(["question", "reply"]));
+}
+
 #[tokio::test]
 async fn read_repairs_a_sloppy_quote() {
     let fx = setup(json!({"said":true,"quote":"PHOTOSYNTHESIS  happens","message":"Really?"}), json!({}));
