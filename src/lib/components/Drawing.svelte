@@ -147,6 +147,7 @@
   .drawing.large { max-width: 480px; margin-inline: auto; }
   .drawing.dialog { max-width: 640px; margin-inline: auto; }
   .canvas :global(svg) { display: block; width: 100%; height: auto; overflow: visible; }
+  .large .canvas :global(svg) { max-width: 384px; max-height: 440px; margin-inline: auto; }
   .canvas :global(g[data-step]) { will-change: opacity; }
   .player {
     display: flex;

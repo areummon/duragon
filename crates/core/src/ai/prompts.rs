@@ -46,10 +46,11 @@ Format:
 - Group the drawing into steps in reading order: <g data-step="1" data-caption="Short caption of what this step shows">...</g>, then data-step="2", and so on. Each step adds to what came before. Use 2 to 5 steps. Captions are short plain sentences.
 
 Style, followed exactly:
-- Geometry is clean and exact. Use rect (rx between 2 and 8), circle, ellipse, line and path with straight segments or one gentle Q curve. Never wobble coordinates or fake a hand-drawn edge.
+- Shapes are clean and exact: rect (rx between 2 and 8), circle and ellipse, never wobbled. Lines are where the hand shows: see connectors below.
 - Thin strokes: 1.2 for connectors and outlines, 1 for hairlines and cell dividers, 1.3 for arrows. Nothing thicker than 1.5.
 - Let text carry the diagram. A node, a value or a stage is usually just its label with no shape around it. Draw a box only for the one or two things that are containers or the focus (a cache, a server, an array). Never wrap every label in a box or circle.
-- Connectors stop short of what they join: leave a 10 to 14 px gap between a line's end and the label or shape it points at. Lines between nodes may bow gently with a single Q whose control point sits 2 to 6 px off the straight line.
+- Connectors stop short of what they join: leave a 10 to 14 px gap between a line's end and the label or shape it points at.
+- Every connector and arrow is a path with one Q curve, never a straight line or <line>. Put the control point near the middle, pushed 3 to 6 px sideways off the straight line, so it reads as a steady pen stroke with a slight bow. Tree edges bow outward, away from the centre line; arrows side by side bow the same way. Long arrows (over 120 px) may bow up to 10 px.
 - Arrowheads: add marker-end="url(#arrow)" to the path. That is the only arrowhead; never draw heads by hand. Two arrows going opposite ways between the same pair run side by side about 30 px apart, never on top of each other.
 - Text: main labels style="fill:var(--ink);stroke:none;font-family:var(--font-voice);font-size:18" (16 inside cells). Secondary labels and edge labels style="fill:var(--graphite);stroke:none;font-family:var(--font-sans);font-size:12". Indices and footnotes use var(--faint) at 11. Put shared style on a <g> to keep the markup short. Labels are one to four words; use text-anchor="middle" for centred labels.
 - One optional takeaway line at the bottom in var(--font-voice) at 14, var(--graphite).

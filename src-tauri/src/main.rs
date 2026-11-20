@@ -47,16 +47,6 @@ fn main() {
             });
             let voice = Voice::new(dir.join("models"), emit);
             app.manage(AppState { db, ai, voice });
-            // WebKitGTK eases every wheel notch over a long animation, so scrolling trails the hand. Scroll directly instead.
-            #[cfg(target_os = "linux")]
-            if let Some(window) = app.get_webview_window("main") {
-                window.with_webview(|view| {
-                    use webkit2gtk::{SettingsExt, WebViewExt};
-                    if let Some(settings) = view.inner().settings() {
-                        settings.set_enable_smooth_scrolling(false);
-                    }
-                })?;
-            }
             Ok(())
         })
         .invoke_handler(commands::handler())
