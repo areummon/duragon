@@ -13,7 +13,7 @@
   import { app, deleteNote, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
   import { createFolder, deleteFolder, notes, renameFolder } from '../state/notes.svelte';
   import { kbd } from '../keys';
-  import { unfold } from '../motion/transitions';
+  import { unfold, veil } from '../motion/transitions';
   import Blot from './Blot.svelte';
   import Popover from './Popover.svelte';
   import SettingsMenu from './SettingsMenu.svelte';
@@ -183,35 +183,43 @@
 <Popover open={noteMenu !== null} onclose={() => (noteMenu = null)} at={noteMenu?.at} width={200} label="Note options">
   {#if noteMenu}
     {@const id = noteMenu.id}
-    {#if noteMenu.view === 'main'}
-      <button class="menu-item" role="menuitem" onclick={() => renameNote(id)}>Rename</button>
-      <button class="menu-item" role="menuitem" onclick={() => noteMenu && (noteMenu.view = 'move')}>Move to folder</button>
-      <button class="menu-item" role="menuitem" onclick={() => noteMenu && (noteMenu.view = 'confirm')}>Delete</button>
-    {:else if noteMenu.view === 'move'}
-      <button class="menu-item" role="menuitem" onclick={() => { moveNote(id, null); noteMenu = null; }}>No folder</button>
-      {#each notes.folders as f (f.id)}
-        <button class="menu-item" role="menuitem" onclick={() => { moveNote(id, f.id); noteMenu = null; }}>{f.name}</button>
-      {/each}
-      {#if notes.folders.length === 0}<div class="empty">Make a folder first.</div>{/if}
-    {:else}
-      <div class="empty">Delete this note for good?</div>
-      <button class="menu-item danger" role="menuitem" onclick={() => { deleteNote(id); noteMenu = null; }}>Delete</button>
-      <button class="menu-item" role="menuitem" onclick={() => (noteMenu = null)}>Keep it</button>
-    {/if}
+    {#key noteMenu.view}
+      <div class="view" in:veil={{ duration: 150 }}>
+        {#if noteMenu.view === 'main'}
+          <button class="menu-item" role="menuitem" onclick={() => renameNote(id)}>Rename</button>
+          <button class="menu-item" role="menuitem" onclick={() => noteMenu && (noteMenu.view = 'move')}>Move to folder</button>
+          <button class="menu-item" role="menuitem" onclick={() => noteMenu && (noteMenu.view = 'confirm')}>Delete</button>
+        {:else if noteMenu.view === 'move'}
+          <button class="menu-item" role="menuitem" onclick={() => { moveNote(id, null); noteMenu = null; }}>No folder</button>
+          {#each notes.folders as f (f.id)}
+            <button class="menu-item" role="menuitem" onclick={() => { moveNote(id, f.id); noteMenu = null; }}>{f.name}</button>
+          {/each}
+          {#if notes.folders.length === 0}<div class="empty">Make a folder first.</div>{/if}
+        {:else}
+          <div class="empty">Delete this note for good?</div>
+          <button class="menu-item danger" role="menuitem" onclick={() => { deleteNote(id); noteMenu = null; }}>Delete</button>
+          <button class="menu-item" role="menuitem" onclick={() => (noteMenu = null)}>Keep it</button>
+        {/if}
+      </div>
+    {/key}
   {/if}
 </Popover>
 
 <Popover open={folderMenu !== null} onclose={() => (folderMenu = null)} at={folderMenu?.at} width={200} label="Folder options">
   {#if folderMenu}
     {@const id = folderMenu.id}
-    {#if !folderMenu.confirm}
-      <button class="menu-item" role="menuitem" onclick={() => { editing = { id, name: notes.folders.find((f) => f.id === id)?.name ?? '' }; folderMenu = null; }}>Rename</button>
-      <button class="menu-item" role="menuitem" onclick={() => folderMenu && (folderMenu.confirm = true)}>Delete folder</button>
-    {:else}
-      <div class="empty">Notes inside stay, without a folder.</div>
-      <button class="menu-item danger" role="menuitem" onclick={() => { deleteFolder(id); folderMenu = null; }}>Delete folder</button>
-      <button class="menu-item" role="menuitem" onclick={() => (folderMenu = null)}>Keep it</button>
-    {/if}
+    {#key folderMenu.confirm}
+      <div class="view" in:veil={{ duration: 150 }}>
+        {#if !folderMenu.confirm}
+          <button class="menu-item" role="menuitem" onclick={() => { editing = { id, name: notes.folders.find((f) => f.id === id)?.name ?? '' }; folderMenu = null; }}>Rename</button>
+          <button class="menu-item" role="menuitem" onclick={() => folderMenu && (folderMenu.confirm = true)}>Delete folder</button>
+        {:else}
+          <div class="empty">Notes inside stay, without a folder.</div>
+          <button class="menu-item danger" role="menuitem" onclick={() => { deleteFolder(id); folderMenu = null; }}>Delete folder</button>
+          <button class="menu-item" role="menuitem" onclick={() => (folderMenu = null)}>Keep it</button>
+        {/if}
+      </div>
+    {/key}
   {/if}
 </Popover>
 
@@ -316,6 +324,7 @@
   .settings span { flex: 1; }
   .empty { padding: 6px 10px; font-size: 13px; color: var(--faint); }
   .danger { color: var(--text-red); }
+  .view { display: flex; flex-direction: column; }
 
   @media (prefers-reduced-motion: reduce) {
     .sidebar { transition: opacity var(--dur-drawer) var(--ease-drawer), visibility 0s linear var(--dur-drawer); }
