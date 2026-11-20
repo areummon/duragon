@@ -19,24 +19,35 @@
   const DRAWABLE = 'path, line, polyline, polygon, rect, circle, ellipse';
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const PAD = 12;
-  const arrowId = `arrow-${Math.random().toString(36).slice(2, 9)}`;
+  const uid = Math.random().toString(36).slice(2, 9);
+  /** The arrowheads a drawing may name, by the colour of the line they finish. */
+  const HEADS: Record<string, string> = { arrow: 'var(--ink)', 'arrow-quiet': 'var(--graphite)' };
 
-  /** Gives the drawing its arrowhead and trims the empty space above and below what was drawn. */
+  function head(name: string): SVGMarkerElement {
+    const marker = document.createElementNS(SVG_NS, 'marker');
+    const attrs = { id: `${name}-${uid}`, viewBox: '0 0 8 8', refX: '7', refY: '4', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' };
+    for (const [k, v] of Object.entries(attrs)) marker.setAttribute(k, v);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M 1 1 L 7 4 L 1 7');
+    path.setAttribute('style', `fill:none;stroke:${HEADS[name]};stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round`);
+    marker.append(path);
+    return marker;
+  }
+
+  /** Gives the drawing its arrowheads and trims the empty space above and below what was drawn. */
   function frame(svg: SVGSVGElement) {
-    const arrows = svg.querySelectorAll('[marker-end], [marker-start]');
-    if (arrows.length) {
-      const marker = document.createElementNS(SVG_NS, 'marker');
-      for (const [k, v] of Object.entries({ id: arrowId, viewBox: '0 0 8 8', refX: '6', refY: '4', markerWidth: '6', markerHeight: '6', orient: 'auto-start-reverse' })) marker.setAttribute(k, v);
-      const head = document.createElementNS(SVG_NS, 'path');
-      head.setAttribute('d', 'M 1 1 L 6 4 L 1 7');
-      head.setAttribute('style', 'fill:none;stroke:var(--ink);stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round');
-      marker.append(head);
+    const used = new Set<string>();
+    for (const el of svg.querySelectorAll('[marker-end], [marker-start]'))
+      for (const attr of ['marker-end', 'marker-start']) {
+        const name = el.getAttribute(attr)?.match(/^url\(#([\w-]+)\)$/)?.[1];
+        if (!name || !(name in HEADS)) continue;
+        used.add(name);
+        el.setAttribute(attr, `url(#${name}-${uid})`);
+      }
+    if (used.size) {
       const defs = document.createElementNS(SVG_NS, 'defs');
-      defs.append(marker);
+      for (const name of used) defs.append(head(name));
       svg.prepend(defs);
-      for (const el of arrows)
-        for (const attr of ['marker-end', 'marker-start'])
-          if (el.getAttribute(attr) === 'url(#arrow)') el.setAttribute(attr, `url(#${arrowId})`);
     }
     const box = svg.getBBox();
     const view = svg.viewBox.baseVal;

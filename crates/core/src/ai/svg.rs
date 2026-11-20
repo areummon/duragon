@@ -14,7 +14,7 @@ const ATTRIBUTES: &[&str] = &[
 ];
 
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
-const ARROW: &str = "url(#arrow)";
+const ARROWS: &[&str] = &["url(#arrow)", "url(#arrow-quiet)"];
 
 fn escape(s: &str, out: &mut String) {
     for c in s.chars() {
@@ -63,11 +63,11 @@ fn write(node: Node, out: &mut String, root: bool) {
         let value = if a.name() == "style" {
             clean_style(a.value())
         } else if a.name().starts_with("marker-") {
-            // The only marker is the arrowhead the renderer supplies; any other reference is dropped.
-            if a.value() != ARROW {
+            // The only markers are the arrowheads the renderer supplies; any other reference is dropped.
+            if !ARROWS.contains(&a.value()) {
                 continue;
             }
-            ARROW.to_string()
+            a.value().to_string()
         } else if unsafe_value(a.value()) {
             continue;
         } else {

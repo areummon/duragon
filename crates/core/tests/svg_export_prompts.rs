@@ -45,9 +45,10 @@ fn sanitizer_strips_dangerous_content() {
 
 #[test]
 fn sanitizer_keeps_only_the_renderer_arrow_marker() {
-    let svg = r##"<svg viewBox="0 0 320 100"><path d="M0 0 L9 9" marker-end="url(#arrow)"/><path d="M1 1" marker-start="url(http://x/#a)" marker-end="url(#other)"/></svg>"##;
+    let svg = r##"<svg viewBox="0 0 320 100"><path d="M0 0 L9 9" marker-end="url(#arrow)"/><path d="M2 2" marker-end="url(#arrow-quiet)"/><path d="M1 1" marker-start="url(http://x/#a)" marker-end="url(#other)"/></svg>"##;
     let out = sanitize(svg).unwrap();
     assert!(out.contains(r##"d="M0 0 L9 9" marker-end="url(#arrow)""##), "{out}");
+    assert!(out.contains(r##"d="M2 2" marker-end="url(#arrow-quiet)""##), "{out}");
     assert!(!out.contains("http://x") && !out.contains("#other"), "{out}");
     assert_eq!(sanitize(&out).unwrap(), out);
 }
