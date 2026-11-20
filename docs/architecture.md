@@ -1,0 +1,196 @@
+# Duragon architecture
+
+Duragon is a personal, open-source notebook in the style of Riddled (see `reference-riddled.md`). You write; Claude reads along and asks questions in the margin, answers when addressed, and sketches. It runs on the user's own Claude subscription by spawning the installed `claude` CLI.
+
+Desktop first (Tauri 2). The core crate has no Tauri dependency so a web server can wrap it later.
+
+## Layout
+
+```
+flake.nix                 dev shell: rust, cargo-tauri, node, webkitgtk_4_1, gtk3, libsoup_3, openssl, pkg-config
+Cargo.toml                workspace: crates/core, src-tauri
+crates/core/              duragon-core: storage + AI. No tauri imports.
+  src/lib.rs
+  src/model.rs            domain types (serde, shared with the frontend through types.ts)
+  src/db/                 rusqlite, migrations, one module per table group
+  src/ai/                 claude runner, prompts, task orchestration
+  src/export/             markdown + docx from ProseMirror JSON
+src-tauri/                thin shell: commands.rs maps 1:1 onto core functions, emits events
+src/                      Svelte 5 + Vite + TypeScript frontend
+  lib/api/backend.ts      the Backend interface (the only way the UI talks to Rust)
+  lib/api/tauri.ts        Backend over invoke/listen
+  lib/api/mock.ts         in-memory Backend with canned AI replies, for browser dev and UI tests
+  lib/state/              rune-based stores (notes, threads, settings, riddlers)
+  lib/editor/             TipTap setup and extensions
+  lib/components/         UI
+  lib/motion/             animation helpers (ink words, blot, tether, drawing reveal)
+  styles/                 tokens.css (themes), motion.css (keyframes), base.css
+docs/
+```
+
+The frontend picks `mock` when `window.__TAURI_INTERNALS__` is absent, so `npm run dev` in a normal browser shows the whole UI with fake data. This is how UI work is verified with agent-browser.
+
+## Domain model
+
+All ids are UUID v4 strings. Times are unix milliseconds (i64 / number).
+
+```ts
+type ReadingMode = 'thinks' | 'asks';            // "Thinks with you" | "When you ask"
+type Tone = 'plain' | 'warm' | 'blunt' | 'riddle';
+type Frequency = 'rarely' | 'matters' | 'often';
+
+interface NoteMeta { id; title; folderId: string | null; updatedAt; hasOpenQuestion: boolean }
+interface Note extends NoteMeta {
+  doc: unknown;               // TipTap/ProseMirror JSON. Source of truth for content.
+  riddlerId: string;          // builtin Riddled = '00000000-0000-4000-8000-000000000001'
+  mode: ReadingMode;
+  voiceOn: boolean;
+  webOn: boolean;
+  brief: string;              // "Tell Riddled" text, '' when unset
+  createdAt;
+}
+interface Folder { id; name; createdAt }
+
+type ThreadKind = 'question' | 'reply';          // question: unprompted, margin. reply: addressed, inline under the line
+type ThreadStatus = 'open' | 'resolved' | 'dismissed';
+interface Thread { id; noteId; kind: ThreadKind; quote: string; status: ThreadStatus; pinned: boolean; createdAt; messages: Message[] }
+type DrawingState = 'none' | 'pending' | 'done' | 'failed';
+interface Message { id; noteId; threadId: string | null; author: 'you' | 'riddled'; text: string; drawing: DrawingState; svg: string | null; createdAt }
+// chat panel messages are Message rows with threadId = null and a noteId
+
+interface Riddler { id; name; description; howItThinks; tone: Tone; frequency: Frequency; builtin: boolean }
+
+interface Settings {
+  newNoteMode: ReadingMode;            // default 'thinks'
+  readingPace: 'regular' | 'slow';     // debounce 900 ms | 1800 ms
+  questionPlacement: 'both' | 'right' | 'marks';
+  webInNewNotes: boolean;
+  voiceInNewNotes: boolean;
+  voiceName: string;
+  speakingSpeed: number;               // 0.5..2, default 1
+  appearance: 'system' | 'light' | 'dark';
+  textSize: 'small' | 'default' | 'large';   // 15 / 16 / 18 px
+  pageWidth: number | null;            // px, null = default 690
+  lettering: 'own' | 'notes';          // Newsreader serif | same as notes
+  inkColour: 'ink' | 'blue' | 'green' | 'red' | 'purple' | 'brown' | 'orange';
+  inkFromPointer: boolean;
+  justMyWords: boolean;                // hide all Riddled marks
+  aboutYou: string;                    // <= 700 chars
+  learnAboutYou: boolean;
+  readModel: string;                   // default 'sonnet'  (read-along, answers, replies)
+  chatModel: string;                   // default 'sonnet'
+  drawModel: string;                   // default 'sonnet'
+  sidebarOpen: boolean;
+}
+```
+
+## SQLite schema (crates/core/src/db/migrations)
+
+```sql
+notes(id TEXT PK, title TEXT, doc TEXT, plain TEXT, folder_id TEXT NULL, riddler_id TEXT, mode TEXT,
+      voice_on INT, web_on INT, brief TEXT, created_at INT, updated_at INT)
+notes_fts USING fts5(title, plain, content='notes', content_rowid='rowid')  + triggers
+folders(id TEXT PK, name TEXT, created_at INT)
+threads(id TEXT PK, note_id TEXT REFERENCES notes ON DELETE CASCADE, kind TEXT, quote TEXT, status TEXT, pinned INT, created_at INT)
+messages(id TEXT PK, note_id TEXT, thread_id TEXT NULL REFERENCES threads ON DELETE CASCADE, author TEXT,
+         text TEXT, drawing TEXT, svg TEXT NULL, created_at INT)
+riddlers(id TEXT PK, name, description, how_it_thinks, tone, frequency, builtin INT)
+kv(key TEXT PK, value TEXT)          -- settings JSON under key 'settings'
+```
+
+Database file: `$XDG_DATA_HOME/duragon/duragon.db` (Tauri `app_data_dir`). `PRAGMA journal_mode=WAL; foreign_keys=ON`. Migrations run on open and are idempotent (`user_version`).
+
+The `plain` column is derived from `doc` by the frontend on save (title + block text joined by newlines) and is what AI tasks and search read.
+
+## Backend interface (Tauri commands; same names in backend.ts, camelCase args)
+
+```
+list_notes() -> NoteMeta[]                    newest first
+search_notes(query) -> NoteMeta[]             FTS5, prefix match
+get_note(id) -> Note
+create_note(title?) -> Note                   applies settings defaults (mode, web, voice)
+save_note(id, title, doc, plain) -> NoteMeta
+update_note_meta(id, patch: {riddlerId?, mode?, voiceOn?, webOn?, brief?, folderId?}) -> Note
+delete_note(id)
+list_folders() / create_folder(name) / rename_folder(id,name) / delete_folder(id)
+
+list_threads(noteId) -> Thread[]              includes messages
+set_thread_status(id, status) / set_thread_pinned(id, pinned)
+thread_to_note(id) -> Note                    "Make a note"
+list_chat(noteId) -> Message[]
+
+get_settings() -> Settings / save_settings(Settings)
+list_riddlers() / save_riddler(Riddler) / delete_riddler(id)
+
+ai_read(noteId, target)                       fire and forget; result arrives as events
+ai_answer(noteId, target)
+ai_reply(threadId, text)
+ai_chat(noteId, text)
+ai_cancel_read(noteId)                        user typed again: kill in-flight read for the note
+
+export_note(id, format: 'md'|'docx', path)    PDF goes through the webview's print
+```
+
+Events (Rust → UI), payload in parentheses:
+
+```
+ai:thinking   ({noteId, target, task})        show the reading mark / "Sketching it…"
+ai:thread     (Thread)                        new or updated thread
+ai:message    (Message)                       new or updated message (drawing pending → done)
+ai:quiet      ({noteId, target})              read decided to say nothing
+ai:error      ({noteId, task, message})
+about:updated (string)                        about-you paragraph changed
+```
+
+## AI runner (crates/core/src/ai)
+
+One function spawns the CLI and returns parsed structured output:
+
+```
+claude -p --model <m> --output-format json --json-schema <schema>
+       --system-prompt <prompt> --tools <"" | "WebSearch,WebFetch">
+       --setting-sources "" --strict-mcp-config --no-session-persistence --disable-slash-commands
+stdin: the task payload as text
+```
+
+The result is the `structured_output` field of the JSON on stdout. The binary is `claude` on PATH, overridable with `DURAGON_CLAUDE_BIN` (tests point it at a fake script). Each child is tracked per (noteId, task) so `ai_cancel_read` can kill it. A non-zero exit or missing `structured_output` becomes `ai:error`.
+
+Tasks, prompts and schemas live in `ai/prompts.rs`. Every prompt gets the Riddler (name, how it thinks, tone, frequency), the note brief, the About-you paragraph, the note title and plain text, and the open threads (so it doesn't repeat itself).
+
+| task | trigger | output schema | follow-up |
+|---|---|---|---|
+| read | pause in typing, mode = thinks | `{said, quote?, message?, draw?}` where quote is an exact substring of target | creates Thread(kind=question); if `draw` is a non-empty brief, run draw |
+| answer | a paragraph starting with or addressing "Riddled," / the riddler's name, any mode | `{message, draw?}` | creates Thread(kind=reply, quote=the line) |
+| reply | user writes back in a thread | `{message, draw?}` | appends Message |
+| chat | chat panel | `{message, draw?}` | appends chat Message |
+| draw | after any of the above with a brief | `{svg}` | fills the Message's svg, drawing=done |
+| learn | after reply/chat/answer when learnAboutYou | `{changed, aboutYou?}` | saves setting, emits about:updated |
+
+The read task never fires twice for the same unchanged target, and never when an open thread already quotes inside the target.
+
+Drawing rules sent to the model: SVG only, viewBox width 320, `fill:none;stroke-linecap:round;stroke-linejoin:round` on the root, colours only through `var(--ink) var(--graphite) var(--faint) var(--rule) var(--riddle-wash)`, fonts through `var(--font-voice)` and `var(--font-sans)` at 11–18 px, slightly bowed hand-drawn paths, content grouped in `<g data-step="N" data-caption="...">` in reading order. The backend sanitizes the SVG (allow-list of elements and attributes, no scripts, no external refs, no event handlers) before storing it.
+
+## Frontend structure
+
+- `App.svelte`: TopBar (hamburger, blot + wordmark, Chat pill), Sidebar, Page, ChatPanel, CommandPalette, CustomizeDialog, voice hint.
+- `Page.svelte`: width handles, NoteHeaderRow (Riddler picker, Tell Riddled, mode, Voice, Web, Export), TellRiddledCard, Editor, Margin(s).
+- Editor: TipTap with a Title node as the first block, StarterKit (headings 1–4, lists, quote), CodeBlockLowlight with a per-block language picker, HorizontalRule with `---` input rule, SlashMenu, a Decorations plugin that underlines each open thread's quote, and widget decorations that render `reply` threads inline under their line.
+- Margin layout: each thread's top = the top of its quote's first line; threads are stacked to avoid overlap (push down). Both-margins placement alternates by order; right puts all on the right; marks renders a small `?` widget after the quote that opens the thread.
+- Read trigger: on doc change, debounce by reading pace; target = the block(s) changed since the last read; cancel any in-flight read on new input.
+- Theme: `data-theme` on `<html>` from Settings.appearance (system follows `prefers-color-scheme`). Ink colour sets `--riddle`/`--riddle-ink`. Lettering sets `--font-voice`.
+
+## Motion
+
+Reproduce the measured timings in `reference-riddled.md` (Animation timings). All keyframes live in `styles/motion.css`; helpers in `lib/motion/`. Respect `prefers-reduced-motion` by collapsing durations to 0 and skipping the per-word reveal.
+
+## Verification
+
+- Rust: `cargo test -p duragon-core` covers migrations, CRUD, FTS, settings round-trip, the runner against a fake `claude` script (success, error exit, cancel), prompt assembly, and SVG sanitizing.
+- UI: `npm run dev` with the mock backend, driven by agent-browser in its own headless session (`--session duragon`), never the user's Chromium.
+- Desktop: `cargo tauri dev` inside `nix develop` launches the window and talks to the real CLI.
+
+## Voice (last phase)
+
+- Speech to text: NVIDIA Parakeet TDT 0.6B v2 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2, English, CC-BY-4.0), run on CPU through ONNX Runtime from Rust using an int8 ONNX export of the same model. No GPU needed. The model is downloaded on first use into the app data dir, not bundled. Hold Alt to talk, tap Alt twice for hands-free (voice activity detection ends an utterance).
+- Text to speech: Kokoro-82M on CPU (ONNX), voices chosen in Customize → Voice.
+- Audio capture with cpal in Rust; the webview never touches the microphone.

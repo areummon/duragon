@@ -1,0 +1,170 @@
+<script lang="ts">
+  import { untrack } from 'svelte';
+  import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-svelte';
+  import type { DrawingState } from '../api/types';
+  import Blot from './Blot.svelte';
+
+  interface Props {
+    status: DrawingState;
+    svg: string | null;
+    /** Auto-plays the steps in. Stored drawings show every step at once. */
+    fresh?: boolean;
+    size?: 'margin' | 'large' | 'dialog';
+    onLarger?: () => void;
+  }
+  let { status, svg, fresh = false, size = 'margin', onLarger }: Props = $props();
+
+  const STEP_MS = 1300;
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const DRAWABLE = 'path, line, polyline';
+
+  let host = $state<HTMLElement>();
+  let steps: SVGGElement[] = [];
+  let captions = $state<string[]>([]);
+  let shown = $state(0);
+  let timer: number | undefined;
+
+  const total = $derived(captions.length);
+  const caption = $derived(captions[Math.max(shown, 1) - 1] ?? '');
+
+  function reveal(i: number, animated: boolean) {
+    const g = steps[i];
+    g.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+    g.style.opacity = '1';
+    if (!animated || reduced()) return;
+    g.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+    g.querySelectorAll<SVGGeometryElement>(DRAWABLE).forEach((p) => {
+      p.setAttribute('pathLength', '1');
+      p.style.strokeDasharray = '1';
+      const a = p.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 600, easing: 'ease-out' });
+      a.onfinish = a.oncancel = () => p.style.removeProperty('stroke-dasharray');
+    });
+  }
+
+  function hide(i: number, animated: boolean) {
+    const g = steps[i];
+    g.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+    g.style.opacity = '0';
+    if (animated && !reduced()) g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150 });
+  }
+
+  function stop() {
+    window.clearTimeout(timer);
+    timer = undefined;
+  }
+
+  function goto(n: number, animated = true) {
+    stop();
+    const prev = shown;
+    shown = Math.max(0, Math.min(total, n));
+    steps.forEach((_, i) => {
+      if (i < shown && i >= prev) reveal(i, animated);
+      else if (i >= shown && i < prev) hide(i, animated);
+      else if (i < shown) steps[i].style.opacity = '1';
+      else steps[i].style.opacity = '0';
+    });
+  }
+
+  function play() {
+    stop();
+    goto(0, false);
+    const tick = () => {
+      goto(shown + 1);
+      if (shown < total) timer = window.setTimeout(tick, STEP_MS);
+    };
+    timer = window.setTimeout(tick, 120);
+  }
+
+  $effect(() => {
+    if (!host || status !== 'done' || !svg) return;
+    const el = host;
+    untrack(() => {
+      steps = [...el.querySelectorAll<SVGGElement>('g[data-step]')];
+      captions = steps.map((g) => g.getAttribute('data-caption') ?? '');
+      if (steps.length === 0) return;
+      shown = 0;
+      if (fresh) play();
+      else goto(steps.length, false);
+    });
+    return stop;
+  });
+</script>
+
+{#if status === 'pending'}
+  <div class="wait"><Blot size={15} seed="sketch" waiting /><span>Sketching it…</span></div>
+{:else if status === 'failed'}
+  <div class="failed">Couldn’t sketch that.</div>
+{:else if status === 'done' && svg}
+  <figure class="drawing {size}">
+    <div class="canvas" bind:this={host}>{@html svg}</div>
+    {#if total > 0}
+      <div class="player">
+        <span class="caption">{caption}</span>
+        <span class="controls">
+          <button aria-label="Previous step" disabled={shown <= 1} onclick={() => goto(shown - 1)}><ChevronLeft size={14} strokeWidth={1.6} /></button>
+          <span class="count">{Math.max(shown, 1)}/{total}</span>
+          <button aria-label="Next step" disabled={shown >= total} onclick={() => goto(shown + 1)}><ChevronRight size={14} strokeWidth={1.6} /></button>
+          <button aria-label="Replay" onclick={play}><RotateCcw size={13} strokeWidth={1.6} /></button>
+        </span>
+      </div>
+    {/if}
+    {#if onLarger && size !== 'dialog'}
+      <button class="larger" onclick={onLarger}>See it larger</button>
+    {/if}
+  </figure>
+{/if}
+
+<style>
+  .drawing { margin: 0; width: 100%; }
+  .drawing.margin { max-width: 320px; }
+  .drawing.large { max-width: 480px; margin-inline: auto; }
+  .drawing.dialog { max-width: 640px; margin-inline: auto; }
+  .canvas :global(svg) { display: block; width: 100%; height: auto; overflow: visible; }
+  .canvas :global(g[data-step]) { will-change: opacity; }
+  .player {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+    min-height: 24px;
+  }
+  .caption {
+    font-family: var(--font-voice);
+    font-size: 15px;
+    line-height: 1.4;
+    color: var(--graphite);
+  }
+  .controls { font-family: var(--font-sans); display: inline-flex; align-items: center; gap: 2px; flex: none; color: var(--faint); font-size: 12px; line-height: 24px; }
+  .controls button {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    transition: opacity var(--dur-ui) var(--ease-ui);
+  }
+  .controls button:hover:not(:disabled) { color: var(--ink); }
+  .controls button:disabled { opacity: 0.35; cursor: default; }
+  .count { min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; }
+  .larger {
+    font-family: var(--font-sans);
+    display: block;
+    margin-top: 14px;
+    font-size: 12.5px;
+    line-height: 1;
+    color: var(--faint);
+    transition: color var(--dur-ui) var(--ease-ui);
+  }
+  .larger:hover { color: var(--graphite); }
+  .wait {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--font-voice);
+    font-size: 15px;
+    color: var(--faint);
+    padding: 6px 0;
+  }
+  .failed { font-family: var(--font-voice); font-size: 14px; color: var(--faint); padding: 6px 0; }
+</style>

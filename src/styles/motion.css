@@ -1,0 +1,164 @@
+:root {
+  --ease-settle: ease-out;
+  --ease-tether: cubic-bezier(0.3, 0.7, 0.3, 1);
+  --ease-reply: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-ink: cubic-bezier(0.25, 0.6, 0.3, 1);
+  --ease-splat: cubic-bezier(0.2, 0.9, 0.25, 1.12);
+  --ease-drip: cubic-bezier(0.5, 0, 0.8, 0.6);
+  --ease-step: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-ui: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --dur-settle: 200ms;
+  --dur-tether: 560ms;
+  --dur-tether-2: 700ms;
+  --delay-tether: 140ms;
+  --delay-tether-2: 640ms;
+  --dur-quote: 180ms;
+  --dur-reply-in: 180ms;
+  --dur-reply-underline: 460ms;
+  --dur-ink-wait: 1800ms;
+  --dur-ink-word: 640ms;
+  --delay-ink-word: 19ms;
+  --dur-blot-splat: 460ms;
+  --dur-ink-dry: 3400ms;
+  --dur-ink-sheen: 2600ms;
+  --delay-ink-sheen: 200ms;
+  --dur-ink-drip: 1500ms;
+  --delay-ink-drip: 650ms;
+  --dur-step: 450ms;
+  --dur-ui: 150ms;
+  --dur-ink-in: 240ms;
+  --dur-unfold: 360ms;
+  --dur-pencil: 900ms;
+  --dur-quiet-mark: 2400ms;
+  --dur-breathe: 2200ms;
+  --dur-caret: 1060ms;
+  --dur-code-in: 200ms;
+  --dur-sketch: 420ms;
+
+  --ink-sepia: #b08a5a;
+}
+
+@keyframes settle {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes tether-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes quote-highlight {
+  from { background-color: transparent; }
+  to { background-color: color-mix(in srgb, var(--ink) 8%, transparent); }
+}
+@keyframes reply-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes reply-underline {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes ink-wait {
+  0%, 100% { transform: scale(0.82); opacity: 0.45; }
+  50% { transform: scale(1); opacity: 0.95; }
+}
+@keyframes ink-word {
+  0% { opacity: 0; color: color-mix(in srgb, var(--riddle) 45%, var(--ink-sepia)); }
+  35% { opacity: 0.55; }
+  100% { opacity: 1; color: var(--riddle); }
+}
+@keyframes blot-splat {
+  from { transform: scale(0.12); }
+  to { transform: scale(1); }
+}
+@keyframes ink-dry {
+  0%, 45% { opacity: 0.9; }
+  100% { opacity: 0.45; }
+}
+@keyframes ink-sheen {
+  from { opacity: 0.55; }
+  to { opacity: 0; }
+}
+@keyframes ink-drip {
+  0% { transform: translateY(0) scale(0.3); opacity: 1; }
+  30% { transform: translateY(0) scale(1); opacity: 1; }
+  60% { transform: translateY(2px) scale(0.85, 1.9); opacity: 1; }
+  100% { transform: translateY(16px) scale(0.85, 1.9); opacity: 0; }
+}
+@keyframes drawing-step {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ui-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ink-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes unfold {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes pencil-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes quiet-mark {
+  0% { opacity: 0; transform: translateX(-4px); }
+  15%, 70% { opacity: 0.8; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(0); }
+}
+@keyframes reading-breathe {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50% { opacity: 0.85; transform: scale(1.05); }
+}
+@keyframes voice-bar {
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1); }
+}
+@keyframes hearing {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+@keyframes caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes code-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sketch-grow {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes sketch-pop {
+  0% { transform: scale(0.8); opacity: 0; }
+  70% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes sketch-dot {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-settle: 0ms; --dur-tether: 0ms; --dur-tether-2: 0ms;
+    --delay-tether: 0ms; --delay-tether-2: 0ms; --dur-quote: 0ms;
+    --dur-reply-in: 0ms; --dur-reply-underline: 0ms; --dur-ink-wait: 0ms;
+    --dur-ink-word: 0ms; --delay-ink-word: 0ms; --dur-blot-splat: 0ms;
+    --dur-ink-dry: 0ms; --dur-ink-sheen: 0ms; --delay-ink-sheen: 0ms;
+    --dur-ink-drip: 0ms; --delay-ink-drip: 0ms; --dur-step: 0ms; --dur-ui: 0ms;
+    --dur-ink-in: 0ms; --dur-unfold: 0ms; --dur-pencil: 0ms; --dur-quiet-mark: 0ms;
+    --dur-breathe: 0ms; --dur-caret: 0ms; --dur-code-in: 0ms; --dur-sketch: 0ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 0ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
+}

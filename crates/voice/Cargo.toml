@@ -1,0 +1,22 @@
+[package]
+name = "duragon-voice"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "duragon_voice"
+
+[dependencies]
+anyhow = "1"
+bzip2 = "0.5"
+cpal = "0.15"
+futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sherpa-onnx = "=1.13.8"
+tar = "0.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
+
+[dev-dependencies]
+tempfile = "3"

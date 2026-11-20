@@ -1,0 +1,42 @@
+.riddle-quote {
+  text-decoration: underline dotted var(--riddle-line);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color var(--dur-quote) ease;
+}
+.riddle-quote.active { background-color: color-mix(in srgb, var(--ink) 8%, transparent); }
+.riddle-quote.reply { text-decoration: none; cursor: default; }
+.sel-pin { background-color: var(--riddle-wash); }
+
+.q-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 6px;
+  padding: 0 2px;
+  color: var(--riddle);
+  opacity: 0.6;
+  vertical-align: -2px;
+  cursor: pointer;
+  animation: ui-fade var(--dur-ink-in) ease-out both;
+  transition: opacity var(--dur-ui) var(--ease-ui);
+}
+.q-mark:hover { opacity: 1; }
+.q-mark i { width: 2.5px; height: 2.5px; margin-top: 6px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+
+.reading-mark {
+  display: inline-flex;
+  margin-left: 8px;
+  vertical-align: -1px;
+  user-select: none;
+}
+.reading-mark .blot {
+  color: var(--riddle);
+  animation: reading-breathe var(--dur-breathe) ease-in-out infinite;
+}
+
+.inline-answer-host { user-select: text; }
+
+.thread-card-host { user-select: text; }

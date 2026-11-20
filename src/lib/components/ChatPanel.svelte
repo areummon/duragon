@@ -1,0 +1,167 @@
+<script lang="ts">
+  import { ArrowUp, Pin, X } from 'lucide-svelte';
+  import { tick } from 'svelte';
+  import { app } from '../state/app.svelte';
+  import { chat, chatAsText, clearChat, loadChat, send, visibleChat } from '../state/chat.svelte';
+  import { enlarge } from '../state/layout.svelte';
+  import { riddlerName } from '../state/riddler';
+  import { threads } from '../state/threads.svelte';
+  import Blot from './Blot.svelte';
+  import Drawing from './Drawing.svelte';
+  import InkText from './InkText.svelte';
+
+  const CHIPS = ['What am I still misunderstanding?', 'What have we figured out so far?', 'What should I work on next?'];
+
+  let draft = $state('');
+  let input = $state<HTMLInputElement>();
+  let scroller = $state<HTMLElement>();
+
+  const messages = $derived(visibleChat());
+  const open = $derived(app.chatOpen);
+  const dim = $derived(open && !chat.pinned);
+  const nThreads = $derived(threads.list.length);
+  const nOpen = $derived(threads.list.filter((t) => t.status === 'open').length);
+
+  $effect(() => {
+    const id = app.note?.id;
+    if (id) void loadChat(id);
+  });
+
+  $effect(() => {
+    if (open) window.setTimeout(() => input?.focus(), 320);
+  });
+
+  $effect(() => {
+    void messages.length;
+    void chat.waiting;
+    void tick().then(() => scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' }));
+  });
+
+  function submit(text = draft) {
+    if (!text.trim()) return;
+    draft = '';
+    void send(text);
+  }
+
+  const paragraphs = (t: string) => t.split(/\n{2,}/).filter(Boolean);
+</script>
+
+<svelte:window onkeydown={(e) => e.key === 'Escape' && open && !e.defaultPrevented && (app.chatOpen = false)} />
+
+{#if dim}
+  <div class="scrim" role="presentation" onclick={() => (app.chatOpen = false)}></div>
+{/if}
+
+<aside class="panel" class:open aria-label="Chat" inert={!open}>
+  <header>
+    <div class="who">
+      <span class="name"><Blot size={13} seed="duragon" />{riddlerName()}</span>
+      <span class="sub">On “{app.note?.title || 'Untitled'}”. Reading this note: {nThreads} {nThreads === 1 ? 'thread' : 'threads'} ({nOpen} open)</span>
+    </div>
+    <div class="tools">
+      {#if messages.length}
+        <button class="t" onclick={() => void navigator.clipboard?.writeText(chatAsText())}>Copy</button>
+        <button class="t" onclick={clearChat}>Clear</button>
+      {/if}
+      <button class="i" aria-pressed={chat.pinned} aria-label="Pin open while you write" title="Pin open while you write" onclick={() => (chat.pinned = !chat.pinned)}><Pin size={15} strokeWidth={1.5} /></button>
+      <button class="i" aria-label="Close" onclick={() => (app.chatOpen = false)}><X size={17} strokeWidth={1.5} /></button>
+    </div>
+  </header>
+
+  <div class="scroll" bind:this={scroller}>
+    {#if messages.length === 0}
+      <p class="empty">I've read the whole note and its threads. Ask me anything about it.</p>
+      <div class="chips">
+        {#each CHIPS as c (c)}<button onclick={() => submit(c)}>{c}</button>{/each}
+      </div>
+    {:else}
+      {#each messages as m (m.id)}
+        {#if m.author === 'you'}
+          <div class="you">{m.text}</div>
+        {:else}
+          <div class="riddled">
+            {#each paragraphs(m.text) as p, i (i)}<p><InkText text={p} animate={!!chat.fresh[m.id]} /></p>{/each}
+            {#if m.drawing !== 'none'}
+              <div class="art"><Drawing status={m.drawing} svg={m.svg} fresh={!!chat.fresh[`d${m.id}`]} size="large" onLarger={() => enlarge(m.svg)} /></div>
+            {/if}
+          </div>
+        {/if}
+      {/each}
+      {#if chat.waiting}<div class="wait"><Blot size={15} seed="thinking" waiting /></div>{/if}
+    {/if}
+  </div>
+
+  <form class="compose" onsubmit={(e) => { e.preventDefault(); submit(); }}>
+    <input bind:this={input} bind:value={draft} placeholder="Ask about this note…" aria-label="Ask about this note" />
+    <button class="go" aria-label="Send" disabled={!draft.trim()}><ArrowUp size={16} strokeWidth={1.8} /></button>
+  </form>
+</aside>
+
+<style>
+  .scrim { position: fixed; inset: 0; z-index: 38; }
+  .panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: min(480px, 100vw);
+    background: var(--paper);
+    border-left: 1px solid var(--rule);
+    transform: translateX(100%);
+    transition: transform 320ms var(--ease-step);
+    visibility: hidden;
+  }
+  .panel.open { transform: none; visibility: visible; }
+  .panel:not(.open) { transition: transform 320ms var(--ease-step), visibility 0s linear 320ms; }
+
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 20px 10px 24px; }
+  .who { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .name { display: flex; align-items: center; gap: 9px; font-family: var(--font-voice); font-size: 17px; line-height: 1.2; color: var(--riddle); }
+  .sub { font-size: 12.5px; line-height: 1.45; color: var(--faint); padding-right: 8px; }
+  .tools { display: flex; align-items: center; gap: 4px; color: var(--faint); }
+  .t { padding: 4px 8px; font-size: 13px; line-height: 1.2; transition: color var(--dur-ui) var(--ease-ui); }
+  .t:hover, .i:hover, .i[aria-pressed='true'] { color: var(--ink); }
+  .i { display: grid; place-items: center; width: 28px; height: 28px; transition: color var(--dur-ui) var(--ease-ui); }
+
+  .scroll { flex: 1; overflow-y: auto; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 26px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
+  .empty { font-family: var(--font-voice); font-size: 16.5px; line-height: 1.55; color: var(--riddle); }
+  .chips { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: -8px; }
+  .chips button {
+    padding: 8px 14px;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    font-size: 13.5px;
+    line-height: 1.3;
+    color: var(--graphite);
+    transition: color var(--dur-ui) var(--ease-ui), background-color var(--dur-ui) var(--ease-ui);
+  }
+  .chips button:hover { color: var(--ink); background: var(--riddle-wash); }
+
+  .you { align-self: flex-end; max-width: 85%; padding: 8px 14px; border-radius: 16px; background: var(--shelf); font-size: 14px; line-height: 1.5; }
+  .riddled { font-family: var(--font-voice); font-size: 16.5px; line-height: 1.55; color: var(--riddle); }
+  .riddled p + p { margin-top: 1.1em; }
+  .art { margin-top: 18px; }
+  .wait { display: flex; }
+
+  .compose { position: relative; margin: 0; padding: 14px 20px 18px 24px; border-top: 1px solid var(--rule); }
+  .compose input { width: 100%; padding: 8px 44px 8px 0; border: 0; outline: none; background: transparent; font-size: 15px; color: var(--ink); }
+  .compose input::placeholder { color: var(--faint); }
+  .go {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    margin-top: -16px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    transition: opacity var(--dur-ui) var(--ease-ui);
+  }
+  .go:disabled { opacity: 0.3; cursor: default; }
+</style>

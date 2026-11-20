@@ -1,0 +1,92 @@
+//! Smoke tests against the real `claude` CLI. Run by hand:
+//! `cargo test -p duragon-core --test real_cli -- --ignored --nocapture <name>`
+mod common;
+use common::Capture;
+use duragon_core::ai::{prompts, run_claude, svg, Ai, ClaudeRequest};
+use duragon_core::db::Db;
+use duragon_core::model::*;
+use serde_json::json;
+use std::sync::Arc;
+use std::time::Duration;
+
+#[tokio::test]
+#[ignore]
+async fn real_read_on_a_wrong_sentence() {
+    let db = Db::open_in_memory().unwrap();
+    let mut s = db.get_settings().unwrap();
+    s.read_model = "haiku".into();
+    db.save_settings(&s).unwrap();
+    let text = "Photosynthesis happens in the mitochondria.";
+    let note = db.create_note(Some("Plants")).unwrap();
+    let doc = json!({"type":"doc","content":[
+        {"type":"title","content":[{"type":"text","text":"Plants"}]},
+        {"type":"paragraph","content":[{"type":"text","text":text}]}]});
+    db.save_note(&note.meta.id, "Plants", &doc, &format!("Plants\n{text}")).unwrap();
+    let cap = Arc::new(Capture::default());
+    let ai = Ai::new(db, cap.clone());
+    ai.read(&note.meta.id, text).await.unwrap();
+    for (name, payload) in cap.all() {
+        println!("{name}: {payload}");
+    }
+    let names = cap.names();
+    assert_eq!(names[0], "ai:thinking");
+    assert!(names.contains(&"ai:thread".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+#[ignore]
+async fn real_draw() {
+    let riddler = Riddler {
+        id: BUILTIN_RIDDLER_ID.into(),
+        name: "Riddled".into(),
+        description: String::new(),
+        how_it_thinks: String::new(),
+        tone: Tone::Plain,
+        frequency: Frequency::Matters,
+        builtin: true,
+    };
+    let out = run_claude(ClaudeRequest {
+        model: "haiku".into(),
+        system_prompt: prompts::system_prompt(AiTask::Draw, &riddler, "", "", false),
+        schema: prompts::schema(AiTask::Draw, false),
+        payload: prompts::draw_payload(
+            "Plants",
+            "Plants\nPhotosynthesis turns light, water and CO2 into sugar and oxygen.",
+            "Show light, water and CO2 going into a chloroplast, and sugar and oxygen coming out.",
+        ),
+        web: false,
+        timeout: Duration::from_secs(180),
+        cancel: None,
+        bin: None,
+    })
+    .await
+    .unwrap();
+    let raw = out["svg"].as_str().unwrap();
+    println!("RAW:\n{raw}\n");
+    let clean = svg::sanitize(raw).unwrap();
+    println!("SANITIZED:\n{clean}");
+    assert!(clean.contains("data-step"));
+}
+
+#[tokio::test]
+#[ignore]
+async fn real_answer_with_web_sources() {
+    let db = Db::open_in_memory().unwrap();
+    let mut s = db.get_settings().unwrap();
+    s.read_model = "haiku".into();
+    s.learn_about_you = false;
+    db.save_settings(&s).unwrap();
+    let note = db.create_note(Some("Rust")).unwrap();
+    db.update_note_meta(&note.meta.id, &NoteMetaPatch { web_on: Some(true), ..Default::default() }).unwrap();
+    let text = "Duragon, what is the latest stable Rust version?";
+    let doc = json!({"type":"doc","content":[
+        {"type":"title","content":[{"type":"text","text":"Rust"}]},
+        {"type":"paragraph","content":[{"type":"text","text":text}]}]});
+    db.save_note(&note.meta.id, "Rust", &doc, &format!("Rust\n{text}")).unwrap();
+    let cap = Arc::new(Capture::default());
+    let ai = Ai::new(db, cap.clone());
+    ai.answer(&note.meta.id, text).await.unwrap();
+    let t = &ai.db.list_threads(&note.meta.id).unwrap()[0];
+    println!("{}\nSOURCES: {:#?}", t.messages[0].text, t.messages[0].sources);
+    assert!(!t.messages[0].sources.is_empty());
+}
