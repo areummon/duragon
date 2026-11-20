@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X } from 'lucide-svelte';
+  import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
   import { BUILTIN_RIDDLER_ID, type Frequency, type Tone } from '../../api/types';
   import { RIDDLER_PRESETS } from '../../api/presets';

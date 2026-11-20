@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { ArrowUp, Pin, X } from 'lucide-svelte';
+  import ArrowUp from 'lucide-svelte/icons/arrow-up';
+  import Pin from 'lucide-svelte/icons/pin';
+  import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
   import { app } from '../state/app.svelte';
   import { chat, chatAsText, clearChat, loadChat, send, visibleChat } from '../state/chat.svelte';

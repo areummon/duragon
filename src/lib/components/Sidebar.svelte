@@ -1,8 +1,14 @@
 <script lang="ts">
-  import {
-    ChevronDown, ChevronRight, FileText, Folder as FolderIcon, FolderPlus, Library, MoreHorizontal, Plus, Search,
-    Settings as SettingsIcon,
-  } from 'lucide-svelte';
+  import ChevronDown from 'lucide-svelte/icons/chevron-down';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import FileText from 'lucide-svelte/icons/file-text';
+  import FolderIcon from 'lucide-svelte/icons/folder';
+  import FolderPlus from 'lucide-svelte/icons/folder-plus';
+  import Library from 'lucide-svelte/icons/library';
+  import MoreHorizontal from 'lucide-svelte/icons/more-horizontal';
+  import Plus from 'lucide-svelte/icons/plus';
+  import Search from 'lucide-svelte/icons/search';
+  import SettingsIcon from 'lucide-svelte/icons/settings';
   import type { Folder, NoteMeta } from '../api/types';
   import { app, deleteNote, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
   import { createFolder, deleteFolder, notes, renameFolder } from '../state/notes.svelte';

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { FileText, Plus } from 'lucide-svelte';
+  import FileText from 'lucide-svelte/icons/file-text';
+  import Plus from 'lucide-svelte/icons/plus';
   import { getBackend } from '../api/backend';
   import type { NoteMeta } from '../api/types';
   import { app, newNote, openNote } from '../state/app.svelte';

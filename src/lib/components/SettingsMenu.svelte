@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { Copy, Download, EyeOff, Sliders, Users } from 'lucide-svelte';
+  import Copy from 'lucide-svelte/icons/copy';
+  import Download from 'lucide-svelte/icons/download';
+  import EyeOff from 'lucide-svelte/icons/eye-off';
+  import Sliders from 'lucide-svelte/icons/sliders';
+  import Users from 'lucide-svelte/icons/users';
   import { copyNote, openCustomize, exportNote, toggleJustMyWords } from '../state/app.svelte';
   import { settings } from '../state/settings.svelte';
   import { kbd } from '../keys';

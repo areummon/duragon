@@ -9,7 +9,7 @@
   import { attachRiddle, type Riddle } from '../editor/riddle.svelte';
   import { chat } from '../state/chat.svelte';
   import { loadThreads, unloadThreads } from '../state/threads.svelte';
-  import { Pencil } from 'lucide-svelte';
+  import Pencil from 'lucide-svelte/icons/pencil';
   import { interruptSpeech } from '../state/voice.svelte';
   import { layout } from '../state/layout.svelte';
   import Margin from './Margin.svelte';

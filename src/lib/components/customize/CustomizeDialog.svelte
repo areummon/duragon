@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Search, X } from 'lucide-svelte';
+  import Search from 'lucide-svelte/icons/search';
+  import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
   import { pop, rise, veil } from '../../motion/transitions';
   import { app, type CustomizePage } from '../../state/app.svelte';

@@ -4,9 +4,11 @@ mod commands;
 
 use duragon_core::ai::{Ai, Events};
 use duragon_core::db::Db;
+use duragon_core::model::Appearance;
 use duragon_voice::Voice;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::window::Color;
+use tauri::{AppHandle, Emitter, Manager, Theme, WebviewWindowBuilder};
 
 struct TauriEvents(AppHandle);
 
@@ -16,6 +18,28 @@ impl Events for TauriEvents {
             eprintln!("duragon: could not emit {name}: {e}");
         }
     }
+}
+
+/// The page's --paper in each theme (src/styles/tokens.css), painted by the window before the page can.
+fn paper(dark: bool) -> Color {
+    if dark { Color(0x1a, 0x1a, 0x19, 0xff) } else { Color(0xf8, 0xf7, 0xf4, 0xff) }
+}
+
+/// Opens the main window in the note's colours, so nothing white shows while the page loads.
+fn open_window(app: &tauri::App, appearance: Appearance) -> tauri::Result<()> {
+    let config = &app.config().app.windows[0];
+    let mut builder = WebviewWindowBuilder::from_config(app.handle(), config)?;
+    if appearance != Appearance::System {
+        builder = builder.initialization_script(format!("document.documentElement.dataset.theme = '{}';", appearance.as_str()));
+    }
+    let window = builder.build()?;
+    let dark = match appearance {
+        Appearance::Dark => true,
+        Appearance::Light => false,
+        Appearance::System => window.theme()? == Theme::Dark,
+    };
+    window.set_background_color(Some(paper(dark)))?;
+    Ok(())
 }
 
 pub struct AppState {
@@ -38,6 +62,7 @@ fn main() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             let db = Db::open(&dir.join("duragon.db"))?;
+            open_window(app, db.get_settings().map(|s| s.appearance).unwrap_or(Appearance::System))?;
             let ai = Ai::new(db.clone(), Arc::new(TauriEvents(app.handle().clone())));
             let handle = app.handle().clone();
             let emit: duragon_voice::Emit = Arc::new(move |name, payload| {

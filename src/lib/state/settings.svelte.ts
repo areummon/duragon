@@ -32,7 +32,6 @@ function apply() {
 }
 
 dark.addEventListener('change', apply);
-apply();
 
 export async function loadSettings() {
   settings.value = { ...DEFAULTS, ...(await (await getBackend()).getSettings()) };

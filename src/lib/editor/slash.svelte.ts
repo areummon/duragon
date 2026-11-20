@@ -1,8 +1,15 @@
 import { Extension, type Editor, type Range } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import {
-  Heading1, Heading2, Heading3, Heading4, List, ListOrdered, Minus, SquareCode, TextQuote, Type,
-} from 'lucide-svelte';
+import Heading1 from 'lucide-svelte/icons/heading-1';
+import Heading2 from 'lucide-svelte/icons/heading-2';
+import Heading3 from 'lucide-svelte/icons/heading-3';
+import Heading4 from 'lucide-svelte/icons/heading-4';
+import List from 'lucide-svelte/icons/list';
+import ListOrdered from 'lucide-svelte/icons/list-ordered';
+import Minus from 'lucide-svelte/icons/minus';
+import SquareCode from 'lucide-svelte/icons/square-code';
+import TextQuote from 'lucide-svelte/icons/text-quote';
+import Type from 'lucide-svelte/icons/type';
 
 export interface SlashItem {
   id: string;

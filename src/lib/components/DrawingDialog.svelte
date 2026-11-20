@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X } from 'lucide-svelte';
+  import X from 'lucide-svelte/icons/x';
   import { lightbox } from '../state/layout.svelte';
   import { rise } from '../motion/transitions';
   import Drawing from './Drawing.svelte';

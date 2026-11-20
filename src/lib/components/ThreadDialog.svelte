@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X } from 'lucide-svelte';
+  import X from 'lucide-svelte/icons/x';
   import { rise } from '../motion/transitions';
   import { find, threads } from '../state/threads.svelte';
   import Thread from './Thread.svelte';

@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { Check, ChevronDown, Globe, Lightbulb, MessageCircle, Pencil, Plus, Share, Volume2 } from 'lucide-svelte';
+  import Check from 'lucide-svelte/icons/check';
+  import ChevronDown from 'lucide-svelte/icons/chevron-down';
+  import Globe from 'lucide-svelte/icons/globe';
+  import Lightbulb from 'lucide-svelte/icons/lightbulb';
+  import MessageCircle from 'lucide-svelte/icons/message-circle';
+  import Pencil from 'lucide-svelte/icons/pencil';
+  import Plus from 'lucide-svelte/icons/plus';
+  import Share from 'lucide-svelte/icons/share';
+  import Volume2 from 'lucide-svelte/icons/volume-2';
   import type { ReadingMode } from '../api/types';
   import { app, exportNote, exportPdf, newMindForNote, openCustomize, updateMeta } from '../state/app.svelte';
   import { notes } from '../state/notes.svelte';

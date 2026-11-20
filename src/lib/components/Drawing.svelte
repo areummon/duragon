@@ -1,6 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-svelte';
+  import ChevronLeft from 'lucide-svelte/icons/chevron-left';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
   import type { DrawingState } from '../api/types';
   import Blot from './Blot.svelte';
 

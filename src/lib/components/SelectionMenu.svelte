@@ -1,9 +1,19 @@
 <script lang="ts">
   import type { Editor } from '@tiptap/core';
-  import {
-    Bold, Code, Heading1, Heading2, Heading3, Heading4, Italic, List, ListOrdered, Quote,
-    SquareCode, Strikethrough, Type, Underline,
-  } from 'lucide-svelte';
+  import Bold from 'lucide-svelte/icons/bold';
+  import Code from 'lucide-svelte/icons/code';
+  import Heading1 from 'lucide-svelte/icons/heading-1';
+  import Heading2 from 'lucide-svelte/icons/heading-2';
+  import Heading3 from 'lucide-svelte/icons/heading-3';
+  import Heading4 from 'lucide-svelte/icons/heading-4';
+  import Italic from 'lucide-svelte/icons/italic';
+  import List from 'lucide-svelte/icons/list';
+  import ListOrdered from 'lucide-svelte/icons/list-ordered';
+  import Quote from 'lucide-svelte/icons/quote';
+  import SquareCode from 'lucide-svelte/icons/square-code';
+  import Strikethrough from 'lucide-svelte/icons/strikethrough';
+  import Type from 'lucide-svelte/icons/type';
+  import Underline from 'lucide-svelte/icons/underline';
   import { tick } from 'svelte';
   import { getBackend } from '../api/backend';
   import { TEXT_COLORS } from '../editor/textcolor';

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Globe } from 'lucide-svelte';
+  import Globe from 'lucide-svelte/icons/globe';
   import type { Source } from '../api/types';
 
   let { sources }: { sources: Source[] } = $props();

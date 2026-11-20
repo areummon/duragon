@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Check, Play } from 'lucide-svelte';
+  import Check from 'lucide-svelte/icons/check';
+  import Play from 'lucide-svelte/icons/play';
   import type { Settings } from '../../api/types';
   import { settings, updateSettings } from '../../state/settings.svelte';
   import { readAloud, voice } from '../../state/voice.svelte';

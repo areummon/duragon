@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { Ellipsis, Maximize2, Pin, Send, Volume2 } from 'lucide-svelte';
+  import Ellipsis from 'lucide-svelte/icons/ellipsis';
+  import Maximize2 from 'lucide-svelte/icons/maximize-2';
+  import Pin from 'lucide-svelte/icons/pin';
+  import Send from 'lucide-svelte/icons/send';
+  import Volume2 from 'lucide-svelte/icons/volume-2';
   import { readAloud, stopSpeaking, voice } from '../state/voice.svelte';
   import Sources from './Sources.svelte';
   import { tick } from 'svelte';
