@@ -5,11 +5,16 @@ import { notes, refreshNotes, removeMeta, upsertMeta } from './notes.svelte';
 import { loadSettings, settings, updateSettings } from './settings.svelte';
 
 export type CustomizePage = 'customize' | 'minds' | 'about' | 'voice' | 'help';
+/** `pinned` is the user's saved choice; `peek` came from hovering the left edge and is never saved. */
+export type SidebarState = 'closed' | 'pinned' | 'peek';
 
 export const app = $state({
   note: null as Note | null,
   ready: false,
-  sidebarOpen: false,
+  sidebar: 'closed' as SidebarState,
+  get sidebarOpen() {
+    return this.sidebar !== 'closed';
+  },
   paletteOpen: false,
   chatOpen: false,
   customizeOpen: false,
@@ -27,7 +32,7 @@ export function registerFlush(fn: (() => Promise<void>) | null) {
 
 export async function initApp() {
   await Promise.all([loadSettings(), refreshNotes()]);
-  app.sidebarOpen = settings.value.sidebarOpen;
+  app.sidebar = settings.value.sidebarOpen ? 'pinned' : 'closed';
   const first = notes.list[0];
   if (first) await openNote(first.id);
   else await newNote();
@@ -77,8 +82,15 @@ export async function moveNote(id: string, folderId: string | null) {
 }
 
 export function setSidebar(open: boolean) {
-  app.sidebarOpen = open;
-  void updateSettings({ sidebarOpen: open });
+  const saved = app.sidebar === 'pinned';
+  app.sidebar = open ? 'pinned' : 'closed';
+  if (open !== saved) void updateSettings({ sidebarOpen: open });
+}
+export function peekSidebar() {
+  if (app.sidebar === 'closed') app.sidebar = 'peek';
+}
+export function unpeekSidebar() {
+  if (app.sidebar === 'peek') app.sidebar = 'closed';
 }
 
 export function openCustomize(page: CustomizePage = 'customize') {
