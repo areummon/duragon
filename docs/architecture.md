@@ -159,7 +159,7 @@ Tasks, prompts and schemas live in `ai/prompts.rs`. Every prompt gets the Riddle
 
 | task | trigger | output schema | follow-up |
 |---|---|---|---|
-| read | pause in typing, mode = thinks | `{said, quote?, message?, draw?}` where quote is an exact substring of target | creates Thread(kind=question); if `draw` is a non-empty brief, run draw |
+| read | pause in typing, mode = thinks | `{said, kind?, quote?, message?, draw?}`; kind is `question` (default, quote is an exact substring of target) or `reply` (target is a request to the Mind, even unnamed) | creates Thread(kind=question) on the quote, or Thread(kind=reply, quote=the line) like answer; if `draw` is a non-empty brief, run draw |
 | answer | a paragraph starting with or addressing "Riddled," / the riddler's name, any mode | `{message, draw?}` | creates Thread(kind=reply, quote=the line) |
 | reply | user writes back in a thread | `{message, draw?}` | appends Message |
 | chat | chat panel | `{message, draw?}` | appends chat Message |

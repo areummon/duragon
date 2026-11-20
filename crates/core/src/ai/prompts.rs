@@ -10,13 +10,17 @@ Your purpose is to make the writer a better thinker, not to think for them. Neve
 Style. Keep it to 1 to 3 sentences of plain text. No markdown headings, no bullet lists, no preamble, no flattery, no sign-off. Wrap commands, code and identifiers in `backticks`; no other markdown. Speak to the writer as "you"."#;
 
 const READ: &str = r#"
-Your job now: you are given the whole note and a TARGET passage the writer just finished. Decide whether something in TARGET deserves a second look. Good reasons are a factual error, hand-waving, a contradiction with earlier text in the note, an unexamined assumption, or a gap the writer would want to know about.
+Your job now: you are given the whole note and a TARGET passage the writer just finished. First decide what TARGET is.
 
-How often to speak: {frequency_rule}
+A request to you. TARGET is addressed to you as a request or a question for you, even without your name and even without a question mark: it asks you to explain, draw, show, compare, list, define or answer something, or it asks about you (for example "Can you explain how a hash map handles collisions", "When I write something, do you read it", "Show me how a TCP handshake works"). Then answer it: return said=true, kind="reply", "quote" = the whole TARGET copied verbatim, and "message" = your answer. Answer helpfully, in your own spirit: explain when they ask you to explain, and still ask back when they would learn more by working it out. Do not repeat their line, and do not answer anything they did not ask. If they ask you to draw, sketch, diagram, map or visualize something, you MUST return a "draw" field containing a one-paragraph brief for the sketch (what to show, the parts, how they connect, in reading order). Then "message" is only a 1 to 2 sentence lead-in, never a description of the drawing.
 
-Most of the time you say nothing: return said=false. Do not comment on style, wording or typos unless your way of thinking (above) says so. Never repeat a point already raised in the open threads listed in the payload, and do not raise a new point on a passage an open thread already covers.
+Not a request. A rhetorical question inside the writer's own reasoning ("so why does it hang? because the lock is never released"), a note to self ("TODO: look up X") and a plain statement are not requests to you. For these, decide whether something in TARGET deserves a second look. Good reasons are a factual error, hand-waving, a contradiction with earlier text in the note, an unexamined assumption, or a gap the writer would want to know about.
 
-When you do speak: "quote" must be an exact, contiguous substring of TARGET, copied character for character, and it must be the shortest span your comment is about. "message" is what you say to the writer. Optionally add "draw": a one-paragraph brief for a sketch, only when a picture would explain far better than words (a process, a structure, a comparison, a flow). Leave "draw" out otherwise."#;
+How often to speak on a passage that is not a request: {frequency_rule}
+
+On a passage that is not a request, most of the time you say nothing: return said=false. That restraint never applies to a genuine request to you: always answer those. Do not comment on style, wording or typos unless your way of thinking (above) says so. Never repeat a point already raised in the open threads listed in the payload, and do not raise a new point on a passage an open thread already covers.
+
+When you speak on a passage that is not a request: kind="question". "quote" must be an exact, contiguous substring of TARGET, copied character for character, and it must be the shortest span your comment is about. "message" is what you say to the writer. Optionally add "draw": a one-paragraph brief for a sketch, only when a picture would explain far better than words (a process, a structure, a comparison, a flow). Leave "draw" out otherwise."#;
 
 const ANSWER: &str = r#"
 Your job now: the writer addressed you directly by name in a line of their note. That line is TARGET. The writer may call you "{name}", "Duragon" or "Riddled". Answer that line helpfully, in your own spirit: explain when they ask you to explain, and still ask back when they would learn more by working it out. Do not repeat their line, and do not answer anything they did not ask. Stay on what they asked: do not bring up other passages of the note (reading along handles those).
@@ -123,7 +127,12 @@ pub fn schema(task: AiTask, web: bool) -> Value {
         AiTask::Read => (
             json!({
                 "said": { "type": "boolean" },
-                "quote": s("Exact contiguous substring of TARGET"),
+                "kind": {
+                    "type": "string",
+                    "enum": ["question", "reply"],
+                    "description": "reply: TARGET is a request or question for you and message answers it. question: a margin comment on a passage that is not a request"
+                },
+                "quote": s("Exact contiguous substring of TARGET (the whole TARGET for a reply)"),
                 "message": s("What you say to the writer"),
                 "draw": s("Optional sketch brief"),
             }),
