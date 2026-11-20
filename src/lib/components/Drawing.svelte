@@ -157,7 +157,17 @@
   .drawing.margin { max-width: 320px; }
   .drawing.large { max-width: 480px; margin-inline: auto; }
   .drawing.dialog { max-width: 640px; margin-inline: auto; }
-  .canvas :global(svg) { display: block; width: 100%; height: auto; overflow: visible; }
+  .canvas :global(svg) {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    font-weight: 420;
+    font-variation-settings: 'opsz' 14;
+    letter-spacing: 0.004em;
+  }
+  /* A paper-coloured halo behind each label, so lines fade out just before they reach the words. */
+  .canvas :global(text) { paint-order: stroke; stroke: var(--paper) !important; stroke-width: 4px !important; stroke-linejoin: round; }
   .large .canvas :global(svg) { max-width: 384px; max-height: 440px; margin-inline: auto; }
   .canvas :global(g[data-step]) { will-change: opacity; }
   .player {
