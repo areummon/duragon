@@ -79,11 +79,19 @@
   tab-size: 2;
 }
 .code-block code { background: none; padding: 0; font: inherit; }
-.code-lang {
+.code-tools {
   position: absolute;
   top: 6px;
   right: 8px;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--dur-ui) var(--ease-ui);
+}
+.code-block:hover .code-tools, .code-block:focus-within .code-tools { opacity: 1; }
+.code-lang, .code-copy {
   padding: 2px 4px;
   border: 0;
   border-radius: 6px;
@@ -91,12 +99,11 @@
   color: var(--faint);
   font: inherit;
   font-size: 12px;
-  opacity: 0;
   cursor: var(--cursor-pointer);
-  transition: opacity var(--dur-ui) var(--ease-ui);
+  transition: color var(--dur-ui) var(--ease-ui);
 }
-.code-block:hover .code-lang, .code-block:focus-within .code-lang, .code-lang:focus { opacity: 1; }
-.code-lang:hover { color: var(--ink); }
+.code-copy { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; }
+.code-lang:hover, .code-copy:hover, .code-copy.copied { color: var(--ink); }
 
 .hljs-keyword, .hljs-selector-tag, .hljs-meta .hljs-keyword { color: var(--code-keyword); }
 .hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-variable { color: var(--code-string); }
@@ -123,7 +130,7 @@
 }
 
 @media print {
-  body::before, .bar, .sidebar, .hint, .handle, .row, .tell, .brief, .code-lang, .caret { display: none !important; }
+  body::before, .bar, .sidebar, .hint, .handle, .row, .tell, .brief, .code-tools, .code-copy, .caret { display: none !important; }
   .stage { transform: none !important; opacity: 1 !important; }
 }
 

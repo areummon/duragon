@@ -1,20 +1,22 @@
 <script lang="ts">
+  import { COPY_ICON, copyFrom } from '../copy';
   import { highlight, parseReply, renderTex } from '../rich';
 
-  interface Props { text: string; animate?: boolean }
-  let { text, animate = false }: Props = $props();
+  /** copyable: false where the reply sits inside a button, which cannot hold another. */
+  interface Props { text: string; animate?: boolean; copyable?: boolean }
+  let { text, animate = false, copyable = true }: Props = $props();
 
   type Token = { kind: 'space' | 'word' | 'code' | 'math'; text: string; order: number };
   type Piece =
     | { kind: 'para'; tokens: Token[] }
-    | { kind: 'code'; html: string; order: number }
+    | { kind: 'code'; html: string; code: string; order: number }
     | { kind: 'math'; html: string; order: number };
 
   // Words ink in one by one; inline code, a formula and a whole block each ink in as one token.
   const pieces = $derived.by(() => {
     let order = 0;
     return parseReply(text).map((b): Piece => {
-      if (b.kind === 'code') return { kind: 'code', html: highlight(b.code, b.lang), order: order++ };
+      if (b.kind === 'code') return { kind: 'code', html: highlight(b.code, b.lang), code: b.code, order: order++ };
       if (b.kind === 'math') return { kind: 'math', html: renderTex(b.tex, true), order: order++ };
       const tokens: Token[] = [];
       for (const x of b.inlines) {
@@ -30,6 +32,13 @@
   });
 
   const delay = (order: number) => (animate ? `calc(var(--delay-ink-word) * ${order})` : null);
+
+  // The reply may sit in a clickable thread, so the copy press must not reach it.
+  function copy(e: Event, code: string) {
+    e.stopPropagation();
+    e.preventDefault();
+    void copyFrom(e.currentTarget as HTMLElement, code);
+  }
 </script>
 
 <!-- Spans throughout, display:block where needed, so a reply stays valid inside the <p>, <span> and <button> that hold it. -->
@@ -41,8 +50,13 @@
             >{@html t.text}</span
           >{:else if animate}<span class="w" style:animation-delay={delay(t.order)}>{t.text}</span
           >{:else}{t.text}{/if}{/each}</span
-    >{:else if p.kind === 'code'}<span class="block code-block" class:in={animate} style:animation-delay={delay(p.order)}
-      ><code>{@html p.html}</code></span
+    >{:else if p.kind === 'code'}<span class="code-wrap" class:in={animate} style:animation-delay={delay(p.order)}
+      ><span class="block code-block"><code>{@html p.html}</code></span
+      >{#if copyable}<span class="code-tools"
+          ><span class="code-copy" role="button" tabindex="0" aria-label="Copy code" title="Copy"
+            onclick={(e) => copy(e, p.code)}
+            onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && copy(e, p.code)}>{@html COPY_ICON}</span
+        ></span>{/if}</span
     >{:else}<span class="block math-block" class:in={animate} style:animation-delay={delay(p.order)}
       >{@html p.html}</span
     >{/if}{/each}
@@ -69,6 +83,12 @@
     scrollbar-color: var(--rule) transparent;
   }
   .block:first-child { margin-top: 0.15em; }
+  /* The copy button sits on this wrapper, outside the block's horizontal scroll. */
+  .code-wrap { position: relative; display: block; margin: 0.5em 0; }
+  .code-wrap .block { margin: 0; }
+  .code-wrap:first-child { margin-top: 0.15em; }
+  .code-wrap:hover .code-tools, .code-wrap:focus-within .code-tools { opacity: 1; }
+  .code-tools { top: 4px; right: 4px; border-radius: 6px; background: var(--code); }
   .code-block {
     padding: 10px 12px;
     border-radius: 8px;
