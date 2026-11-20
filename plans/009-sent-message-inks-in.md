@@ -1,6 +1,6 @@
 # 009 — Your sent chat message settles in
 
-- **Status**: TODO
+- **Status**: DONE (6a532bf)
 - **Commit**: 10c3e97
 - **Severity**: LOW
 - **Category**: Missed opportunities (spatial consistency)

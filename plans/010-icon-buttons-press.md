@@ -1,6 +1,6 @@
 # 010 — Icon buttons answer a press
 
-- **Status**: TODO
+- **Status**: DONE (bd7e364)
 - **Commit**: 10c3e97
 - **Severity**: LOW
 - **Category**: Missed opportunities (feedback)

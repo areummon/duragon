@@ -32,11 +32,11 @@ Written at commit 10c3e97, from an opportunity sweep and an accessibility audit.
 | # | Plan | Severity | Status |
 | --- | --- | --- | --- |
 | 006 | [Reduced motion keeps fades, drops movement](006-reduced-motion-keeps-fades.md) | MEDIUM | DONE |
-| 007 | [The chat's Copy button confirms](007-chat-copy-confirms.md) | MEDIUM | TODO |
-| 008 | [Thread and drawing dialogs open like the others](008-dialogs-pop-like-customize.md) | LOW | TODO |
-| 009 | [Your sent chat message settles in](009-sent-message-inks-in.md) | LOW | TODO |
-| 010 | [Icon buttons answer a press](010-icon-buttons-press.md) | LOW | TODO |
-| 011 | [Sidebar menus fade between their views](011-menu-views-fade.md) | LOW | TODO |
+| 007 | [The chat's Copy button confirms](007-chat-copy-confirms.md) | MEDIUM | DONE (2fc4659) |
+| 008 | [Thread and drawing dialogs open like the others](008-dialogs-pop-like-customize.md) | LOW | DONE (f72b87b) |
+| 009 | [Your sent chat message settles in](009-sent-message-inks-in.md) | LOW | DONE (6a532bf) |
+| 010 | [Icon buttons answer a press](010-icon-buttons-press.md) | LOW | DONE (bd7e364) |
+| 011 | [Sidebar menus fade between their views](011-menu-views-fade.md) | LOW | DONE (0402945) |
 
 ## Order and dependencies
 

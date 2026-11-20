@@ -1,6 +1,6 @@
 # 007 — The chat's Copy button confirms
 
-- **Status**: TODO
+- **Status**: DONE (2fc4659)
 - **Commit**: 10c3e97
 - **Severity**: MEDIUM
 - **Category**: Missed opportunities (feedback)

@@ -1,6 +1,6 @@
 # 008 — Thread and drawing dialogs open like the others
 
-- **Status**: TODO
+- **Status**: DONE (f72b87b)
 - **Commit**: 10c3e97
 - **Severity**: LOW
 - **Category**: Cohesion & tokens

@@ -1,6 +1,6 @@
 # 011 — Sidebar menus fade between their views
 
-- **Status**: TODO
+- **Status**: DONE (0402945)
 - **Commit**: 10c3e97
 - **Severity**: LOW
 - **Category**: Missed opportunities (preventing a jarring change)
