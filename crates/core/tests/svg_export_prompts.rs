@@ -108,7 +108,7 @@ fn riddler() -> Riddler {
     Riddler {
         id: "r".into(),
         name: "Skeptic".into(),
-        description: "d".into(),
+        description: "Asks for the evidence.".into(),
         how_it_thinks: "Always ask what would prove it wrong.".into(),
         tone: Tone::Blunt,
         frequency: Frequency::Often,
@@ -122,6 +122,7 @@ fn system_prompts_carry_riddler_brief_and_about_you() {
         let p = system_prompt(task, &riddler(), "Prep for an interview", "A biology student", false);
         assert!(p.contains("\"Skeptic\""), "{task:?}");
         assert!(p.contains("Always ask what would prove it wrong."));
+        assert!(p.contains("\"Asks for the evidence.\""), "{task:?}");
         assert!(p.contains("direct, no softening"));
         assert!(p.contains("Prep for an interview"));
         assert!(p.contains("A biology student"));

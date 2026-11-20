@@ -148,11 +148,11 @@ pub fn system_prompt(task: AiTask, riddler: &Riddler, brief: &str, about_you: &s
     }
     let mut p = CORE.replace("{name}", &riddler.name);
     p.push_str("\n\nHow you think:\n");
-    if riddler.how_it_thinks.trim().is_empty() {
-        p.push_str("Thinks alongside the writer. Notices what they have not noticed yet.");
-    } else {
-        p.push_str(riddler.how_it_thinks.trim());
+    if !riddler.description.trim().is_empty() {
+        // Written to the writer, so its "you" is them. Quoted, since a user's own description need not be a sentence.
+        p.push_str(&format!("The writer picked you by this description, and you live up to it (its \"you\" is the writer): \"{}\"\n", riddler.description.trim()));
     }
+    p.push_str(riddler.how_it_thinks.trim());
     p.push_str("\n\nYour tone. ");
     p.push_str(tone_rule(riddler.tone));
     if !brief.trim().is_empty() {

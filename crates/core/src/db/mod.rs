@@ -111,10 +111,17 @@ impl Db {
     fn seed(&self) -> Result<()> {
         {
             let conn = self.conn();
+            // The builtin Mind can't be edited, so the code owns its row and rewrites it on every start.
             conn.execute(
-                "INSERT OR IGNORE INTO riddlers(id,name,description,how_it_thinks,tone,frequency,builtin)
-                 VALUES (?1,'Duragon','Thinks alongside you, and speaks up when it has something worth saying.','','plain','matters',1)",
-                [BUILTIN_RIDDLER_ID],
+                "INSERT INTO riddlers(id,name,description,how_it_thinks,tone,frequency,builtin)
+                 VALUES (?1,'Duragon',?2,?3,'plain','matters',1)
+                 ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description,
+                   how_it_thinks=excluded.how_it_thinks, tone=excluded.tone, frequency=excluded.frequency, builtin=1",
+                [
+                    BUILTIN_RIDDLER_ID,
+                    "Thinks alongside you, and speaks up when it has something worth saying.",
+                    "Read along like a curious, careful friend. Ask about what is unclear, unsupported, or worth a second look. Stay quiet when nothing is.",
+                ],
             )?;
             let seeded: bool = conn
                 .query_row("SELECT 1 FROM kv WHERE key='seeded'", [], |_| Ok(true))

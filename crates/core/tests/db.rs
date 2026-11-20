@@ -15,6 +15,7 @@ fn migrations_are_idempotent_and_seed_once() {
     assert_eq!(riddlers.len(), 1);
     assert_eq!(riddlers[0].id, BUILTIN_RIDDLER_ID);
     assert!(riddlers[0].builtin);
+    assert!(riddlers[0].how_it_thinks.contains("curious, careful friend"));
     assert_eq!(riddlers[0].tone, Tone::Plain);
     assert_eq!(riddlers[0].frequency, Frequency::Matters);
 }
@@ -256,4 +257,14 @@ fn a_stored_sonnet_drawing_model_moves_to_opus_once() {
     db.save_settings(&s).unwrap();
     drop(db);
     assert_eq!(Db::open(&path).unwrap().get_settings().unwrap().draw_model, "sonnet");
+}
+
+#[test]
+fn an_older_database_gets_the_builtin_minds_way_of_thinking() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("d.db");
+    drop(Db::open(&path).unwrap());
+    rusqlite::Connection::open(&path).unwrap().execute("UPDATE riddlers SET how_it_thinks='' WHERE builtin=1", []).unwrap();
+    let b = Db::open(&path).unwrap().get_riddler(BUILTIN_RIDDLER_ID).unwrap();
+    assert!(b.how_it_thinks.contains("curious, careful friend"));
 }
