@@ -56,7 +56,7 @@
     margin-top: 0;
     margin-right: 2px;
     color: var(--graphite);
-    transition: opacity var(--dur-ui) var(--ease-ui);
+    transition: opacity var(--dur-ui) var(--ease-ui), transform 160ms var(--ease-step);
   }
   .hamburger:hover { opacity: 0.7; }
   .swap {
@@ -94,11 +94,13 @@
   .chat:hover { opacity: 0.75; }
   .chat[aria-pressed='true'] { background: var(--riddle-wash); }
   .chat.away { opacity: 0; transform: scale(0.9); pointer-events: none; }
+  .hamburger:active, .chat:active { transform: scale(0.97); }
 
   @media (prefers-reduced-motion: reduce) {
     .swap { transform: none; transition: opacity 200ms var(--ease-ui); }
     .chat { transition: opacity 200ms var(--ease-ui), background-color var(--dur-ui) var(--ease-ui); }
     .chat.away { transform: none; }
     .brand { transition: border-color 200ms var(--ease-ui), background-color 200ms var(--ease-ui); }
+    .hamburger:active, .chat:active { transform: none; }
   }
 </style>

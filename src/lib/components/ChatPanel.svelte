@@ -139,7 +139,7 @@
   .t { padding: 4px 8px; font-size: 13px; line-height: 1.2; transition: color var(--dur-ui) var(--ease-ui); }
   .t:hover, .i:hover, .i[aria-pressed='true'] { color: var(--ink); }
   .t.done { color: var(--ink); }
-  .i { display: grid; place-items: center; width: 28px; height: 28px; transition: color var(--dur-ui) var(--ease-ui); }
+  .i { display: grid; place-items: center; width: 28px; height: 28px; transition: color var(--dur-ui) var(--ease-ui), transform 160ms var(--ease-step); }
 
   .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 26px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
   .empty { font-family: var(--font-voice); font-size: 16.5px; line-height: 1.55; color: var(--riddle); }
@@ -176,12 +176,14 @@
     border-radius: 50%;
     background: var(--ink);
     color: var(--paper);
-    transition: opacity var(--dur-ui) var(--ease-ui);
+    transition: opacity var(--dur-ui) var(--ease-ui), transform 160ms var(--ease-step);
   }
   .go:disabled { opacity: 0.3; cursor: default; }
+  .i:active, .go:active:not(:disabled) { transform: scale(0.97); }
 
   @media (prefers-reduced-motion: reduce) {
     .panel { transition: opacity var(--dur-drawer) var(--ease-drawer), visibility 0s linear var(--dur-drawer); }
     .panel.open { transition-delay: 0s; }
+    .i:active, .go:active:not(:disabled) { transform: none; }
   }
 </style>
