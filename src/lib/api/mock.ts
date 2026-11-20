@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS: Settings = {
   learnAboutYou: true,
   readModel: 'sonnet',
   chatModel: 'sonnet',
-  drawModel: 'sonnet',
+  drawModel: 'opus',
   sidebarOpen: false,
 };
 

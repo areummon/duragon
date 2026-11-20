@@ -234,3 +234,26 @@ fn riddlers_custom_crud_and_builtin_protection() {
     b.name = "x".into();
     assert!(db.save_riddler(&b).is_err());
 }
+
+#[test]
+fn a_stored_sonnet_drawing_model_moves_to_opus_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("d.db");
+    let db = Db::open(&path).unwrap();
+    let mut s = db.get_settings().unwrap();
+    (s.draw_model, s.read_model) = ("sonnet".into(), "sonnet".into());
+    db.save_settings(&s).unwrap();
+    drop(db);
+    // As if the database predates the move to Opus.
+    rusqlite::Connection::open(&path).unwrap().pragma_update(None, "user_version", 2).unwrap();
+
+    let db = Db::open(&path).unwrap();
+    let s = db.get_settings().unwrap();
+    assert_eq!((s.draw_model.as_str(), s.read_model.as_str()), ("opus", "sonnet"));
+
+    let mut s = s;
+    s.draw_model = "sonnet".into();
+    db.save_settings(&s).unwrap();
+    drop(db);
+    assert_eq!(Db::open(&path).unwrap().get_settings().unwrap().draw_model, "sonnet");
+}

@@ -167,7 +167,7 @@ impl Default for Settings {
             learn_about_you: true,
             read_model: "sonnet".into(),
             chat_model: "sonnet".into(),
-            draw_model: "sonnet".into(),
+            draw_model: "opus".into(),
             sidebar_open: false,
         }
     }
