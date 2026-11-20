@@ -44,6 +44,15 @@ fn sanitizer_strips_dangerous_content() {
 }
 
 #[test]
+fn sanitizer_keeps_only_the_renderer_arrow_marker() {
+    let svg = r##"<svg viewBox="0 0 320 100"><path d="M0 0 L9 9" marker-end="url(#arrow)"/><path d="M1 1" marker-start="url(http://x/#a)" marker-end="url(#other)"/></svg>"##;
+    let out = sanitize(svg).unwrap();
+    assert!(out.contains(r##"d="M0 0 L9 9" marker-end="url(#arrow)""##), "{out}");
+    assert!(!out.contains("http://x") && !out.contains("#other"), "{out}");
+    assert_eq!(sanitize(&out).unwrap(), out);
+}
+
+#[test]
 fn sanitizer_rejects_non_svg() {
     assert!(sanitize("<div>hi</div>").is_err());
     assert!(sanitize("not xml").is_err());

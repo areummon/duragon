@@ -50,9 +50,8 @@ function plainOf(doc: unknown): string {
 export function sampleDrawing(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 170" style="fill:none;stroke-linecap:round;stroke-linejoin:round">
 <g data-step="1" data-caption="Light comes in">
-<path d="M20 30 Q40 52 62 74" stroke="var(--ink)" stroke-width="1.6"/>
+<path d="M20 30 Q40 52 62 74" stroke="var(--ink)" stroke-width="1.3" marker-end="url(#arrow)"/>
 <path d="M30 20 Q52 44 74 66" stroke="var(--ink)" stroke-width="1.6"/>
-<path d="M62 74 L52 72 M62 74 L63 63" stroke="var(--ink)" stroke-width="1.6"/>
 <text x="10" y="14" font-size="12" fill="var(--graphite)" style="font-family:var(--font-sans)">sunlight</text>
 </g>
 <g data-step="2" data-caption="The chloroplast catches it">
@@ -61,8 +60,7 @@ export function sampleDrawing(): string {
 <text x="124" y="156" font-size="14" fill="var(--ink)" style="font-family:var(--font-voice)">chloroplast</text>
 </g>
 <g data-step="3" data-caption="Sugar and oxygen come out">
-<path d="M214 98 Q250 94 288 98" stroke="var(--ink)" stroke-width="1.6"/>
-<path d="M288 98 L278 92 M288 98 L278 105" stroke="var(--ink)" stroke-width="1.6"/>
+<path d="M214 98 Q250 94 288 98" stroke="var(--ink)" stroke-width="1.3" marker-end="url(#arrow)"/>
 <text x="232" y="86" font-size="12" fill="var(--graphite)" style="font-family:var(--font-sans)">sugar + O2</text>
 </g>
 </svg>`;

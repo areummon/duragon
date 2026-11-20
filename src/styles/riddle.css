@@ -2,7 +2,7 @@
   text-decoration: underline 1px transparent;
   text-underline-offset: 4px;
   border-radius: 2px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: background-color var(--dur-quote), text-decoration-color var(--dur-quote), box-shadow var(--dur-quote);
 }
 .riddle-anchor[data-state='open'] {
@@ -49,7 +49,7 @@
   color: var(--riddle);
   opacity: 0.6;
   vertical-align: -2px;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   animation: ui-fade var(--dur-ink-in) ease-out both;
   transition: opacity var(--dur-ui) var(--ease-ui);
 }

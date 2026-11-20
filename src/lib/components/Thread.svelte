@@ -262,7 +262,7 @@
     animation: tether-draw var(--dur-tether-2) var(--ease-tether) var(--delay-tether-2) both;
   }
 
-  .first { display: block; width: 100%; text-align: inherit; cursor: pointer; }
+  .first { display: block; width: 100%; text-align: inherit; cursor: var(--cursor-pointer); }
   .replies { display: block; margin-top: 2px; font-family: var(--font-sans); font-size: 12.5px; line-height: 1.4; color: var(--faint); }
   .art { margin-top: 14px; }
   .left .art :global(figure) { margin-left: auto; }
@@ -303,7 +303,7 @@
   .dialog .scroll { max-height: none; }
   .msg + .msg { margin-top: 16px; }
   .msg.you p { font-family: var(--font-sans); font-size: 15px; line-height: 1.55; color: var(--graphite); white-space: pre-wrap; }
-  .close { cursor: pointer; }
+  .close { cursor: var(--cursor-pointer); }
   .close:focus-visible { outline: none; text-decoration: underline dotted var(--riddle-line); }
   .speak {
     display: inline-grid;

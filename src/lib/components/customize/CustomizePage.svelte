@@ -276,7 +276,7 @@
   .speedhead { display: flex; justify-content: space-between; align-items: baseline; }
   .speedhead h4 { margin-bottom: 8px; }
   .val { font-size: 13px; color: var(--graphite); font-variant-numeric: tabular-nums; }
-  .range { width: 100%; margin: 4px 0 0; height: 20px; background: transparent; appearance: none; cursor: pointer; }
+  .range { width: 100%; margin: 4px 0 0; height: 20px; background: transparent; appearance: none; cursor: var(--cursor-pointer); }
   .range::-webkit-slider-runnable-track { height: 2px; border-radius: 1px; background: linear-gradient(to right, var(--ink) var(--fill), var(--rule) var(--fill)); }
   .range::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; margin-top: -7px; border-radius: 50%; background: var(--paper); border: 1.5px solid var(--ink); }
   .range::-moz-range-track { height: 2px; background: var(--rule); }

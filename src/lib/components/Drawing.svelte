@@ -16,7 +16,32 @@
 
   const STEP_MS = 1300;
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const DRAWABLE = 'path, line, polyline';
+  const DRAWABLE = 'path, line, polyline, polygon, rect, circle, ellipse';
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const PAD = 12;
+  const arrowId = `arrow-${Math.random().toString(36).slice(2, 9)}`;
+
+  /** Gives the drawing its arrowhead and trims the empty space above and below what was drawn. */
+  function frame(svg: SVGSVGElement) {
+    const arrows = svg.querySelectorAll('[marker-end], [marker-start]');
+    if (arrows.length) {
+      const marker = document.createElementNS(SVG_NS, 'marker');
+      for (const [k, v] of Object.entries({ id: arrowId, viewBox: '0 0 8 8', refX: '6', refY: '4', markerWidth: '6', markerHeight: '6', orient: 'auto-start-reverse' })) marker.setAttribute(k, v);
+      const head = document.createElementNS(SVG_NS, 'path');
+      head.setAttribute('d', 'M 1 1 L 6 4 L 1 7');
+      head.setAttribute('style', 'fill:none;stroke:var(--ink);stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round');
+      marker.append(head);
+      const defs = document.createElementNS(SVG_NS, 'defs');
+      defs.append(marker);
+      svg.prepend(defs);
+      for (const el of arrows)
+        for (const attr of ['marker-end', 'marker-start'])
+          if (el.getAttribute(attr) === 'url(#arrow)') el.setAttribute(attr, `url(#${arrowId})`);
+    }
+    const box = svg.getBBox();
+    const view = svg.viewBox.baseVal;
+    if (box.height > 0 && view.width > 0) svg.setAttribute('viewBox', `${view.x} ${box.y - PAD} ${view.width} ${box.height + PAD * 2}`);
+  }
 
   let host = $state<HTMLElement>();
   let steps: SVGGElement[] = [];
@@ -79,7 +104,9 @@
     if (!host || status !== 'done' || !svg) return;
     const el = host;
     untrack(() => {
-      steps = [...el.querySelectorAll<SVGGElement>('g[data-step]')];
+      const svgEl = el.querySelector('svg');
+      if (svgEl) frame(svgEl);
+      steps =[...el.querySelectorAll<SVGGElement>('g[data-step]')];
       captions = steps.map((g) => g.getAttribute('data-caption') ?? '');
       if (steps.length === 0) return;
       shown = 0;

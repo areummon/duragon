@@ -59,7 +59,7 @@
     animation: settle var(--dur-settle) var(--ease-settle) both;
   }
   .blot { position: absolute; left: -2px; top: calc((1lh - 17px) / 2); display: flex; }
-  .text { display: block; width: 100%; padding-right: 32px; text-align: left; cursor: pointer; white-space: pre-wrap; }
+  .text { display: block; width: 100%; padding-right: 32px; text-align: left; cursor: var(--cursor-pointer); white-space: pre-wrap; }
   .replies {
     display: block;
     margin-top: 6px;

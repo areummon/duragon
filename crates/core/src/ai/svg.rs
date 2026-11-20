@@ -9,10 +9,12 @@ const ATTRIBUTES: &[&str] = &[
     "viewBox", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "width", "height",
     "d", "points", "transform", "text-anchor", "dominant-baseline", "style", "data-step",
     "data-caption", "font-size", "stroke-width", "stroke-dasharray", "opacity", "fill", "stroke",
-    "stroke-linecap", "stroke-linejoin", "font-family", "font-weight", "font-style",
+    "stroke-linecap", "stroke-linejoin", "font-family", "font-weight", "font-style", "marker-start",
+    "marker-end",
 ];
 
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
+const ARROW: &str = "url(#arrow)";
 
 fn escape(s: &str, out: &mut String) {
     for c in s.chars() {
@@ -60,6 +62,12 @@ fn write(node: Node, out: &mut String, root: bool) {
         }
         let value = if a.name() == "style" {
             clean_style(a.value())
+        } else if a.name().starts_with("marker-") {
+            // The only marker is the arrowhead the renderer supplies; any other reference is dropped.
+            if a.value() != ARROW {
+                continue;
+            }
+            ARROW.to_string()
         } else if unsafe_value(a.value()) {
             continue;
         } else {

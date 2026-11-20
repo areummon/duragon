@@ -86,7 +86,7 @@
   font: inherit;
   font-size: 12px;
   opacity: 0;
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
   transition: opacity var(--dur-ui) var(--ease-ui);
 }
 .code-block:hover .code-lang, .code-block:focus-within .code-lang, .code-lang:focus { opacity: 1; }
