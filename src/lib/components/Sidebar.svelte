@@ -4,7 +4,7 @@
     Settings as SettingsIcon,
   } from 'lucide-svelte';
   import type { Folder, NoteMeta } from '../api/types';
-  import { app, deleteNote, moveNote, newNote, openNote, setSidebar } from '../state/app.svelte';
+  import { app, deleteNote, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
   import { createFolder, deleteFolder, notes, renameFolder } from '../state/notes.svelte';
   import { kbd } from '../keys';
   import { unfold } from '../motion/transitions';
@@ -48,13 +48,27 @@
     } else await createFolder(name || 'New folder');
   }
 
+  const busy = () =>
+    noteMenu !== null || folderMenu !== null || settingsOpen || editing !== null ||
+    app.paletteOpen || app.customizeOpen || app.mindEditor !== null;
+
+  // Leaving towards the window's left edge keeps a peek open, as does any menu or dialog in use.
+  function leave(e: MouseEvent) {
+    if (e.clientX > 40 && !busy()) unpeekSidebar();
+  }
+
   const focusInput = (node: HTMLInputElement) => {
     node.focus();
     node.select();
   };
 </script>
 
-<nav class="sidebar" class:open={app.sidebarOpen} inert={!app.sidebarOpen} aria-label="Notes">
+<div class="edge" aria-hidden="true" onmouseenter={peekSidebar}></div>
+{#if app.sidebarOpen}
+  <div class="scrim" role="presentation" onclick={() => setSidebar(false)} onmouseenter={leave}></div>
+{/if}
+
+<nav class="sidebar" class:open={app.sidebarOpen} inert={!app.sidebarOpen} aria-label="Notes" onmouseleave={leave}>
   <div class="top">
     <button class="row action" onclick={() => (app.paletteOpen = true)}>
       <Search size={15} strokeWidth={1.5} /><span>Find or start a note</span><span class="kbd">{kbd('K')}</span>
@@ -205,11 +219,22 @@
     flex-direction: column;
     padding: 79px 12px 12px;
     background: var(--paper);
-    transform: translateX(-100%);
+    max-width: 78vw;
+    opacity: 0;
+    transform: translateX(-24px);
     visibility: hidden;
-    transition: transform 320ms var(--ease-step), visibility 0s linear 320ms;
+    transition:
+      transform var(--dur-drawer) var(--ease-drawer),
+      opacity var(--dur-drawer) var(--ease-drawer),
+      visibility 0s linear var(--dur-drawer);
   }
-  .sidebar.open { transform: none; visibility: visible; transition-delay: 0s; }
+  .sidebar.open { opacity: 1; transform: none; visibility: visible; transition-delay: 0s; }
+
+  .edge { display: none; position: fixed; inset: 0 auto 0 0; width: 8px; z-index: 30; }
+  @media (min-width: 768px) {
+    .edge { display: block; }
+  }
+  .scrim { position: fixed; inset: 0 0 0 min(288px, 78vw); z-index: 9; }
 
   .top { display: flex; flex-direction: column; gap: 8px; }
   .row {
