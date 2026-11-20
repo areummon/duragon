@@ -53,10 +53,25 @@ function mergeMessage(t: Thread, m: Message) {
   else t.messages.push(m);
 }
 
+/** Freshness plays the arrival once (ink-in, blot splat, drawing strokes); a view mounted later shows it settled. */
+const INK_DRY_MS = 3400;
+const INK_WORD_MS = 19;
+const DRAW_MS = 8000;
+
+function expire(set: Record<string, true>, id: string, ms: number) {
+  window.setTimeout(() => delete set[id], ms);
+}
+
 function noteMessage(m: Message, before: Message | undefined) {
   if (m.author !== 'riddled') return;
-  if (!before) threads.freshText[m.id] = true;
-  if (m.drawing === 'done' && before?.drawing !== 'done') threads.freshDraw[m.id] = true;
+  if (!before) {
+    threads.freshText[m.id] = true;
+    expire(threads.freshText, m.id, Math.max(INK_DRY_MS, m.text.split(/\s+/).length * INK_WORD_MS + 640) + 200);
+  }
+  if (m.drawing === 'done' && before?.drawing !== 'done') {
+    threads.freshDraw[m.id] = true;
+    expire(threads.freshDraw, m.id, DRAW_MS);
+  }
 }
 
 function dropThinking(match: (t: Thinking) => boolean) {
@@ -160,6 +175,15 @@ export async function togglePin(id: string) {
   if (!t) return;
   t.pinned = !t.pinned;
   await (await getBackend()).setThreadPinned(id, t.pinned);
+}
+
+/** An answer under its line becomes a margin question about that line. */
+export async function moveToMargin(id: string) {
+  const t = find(id);
+  if (!t) return;
+  t.kind = 'question';
+  if (threads.openId === id) threads.openId = null;
+  await (await getBackend()).setThreadKind(id, 'question');
 }
 
 export async function reply(id: string, text: string) {

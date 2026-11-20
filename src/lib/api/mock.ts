@@ -4,7 +4,7 @@ import {
   BUILTIN_RIDDLER_ID,
   type AiTask, type BackendEvents, type ExportFormat, type Folder, type Message,
   type Note, type NoteMeta, type NoteMetaPatch, type Riddler, type Settings,
-  type Thread, type ThreadStatus, type VoiceOption, type VoiceStatus,
+  type Thread, type ThreadKind, type ThreadStatus, type VoiceOption, type VoiceStatus,
 } from './types';
 
 const QUOTE = 'Photosynthesis happens in the mitochondria.';
@@ -284,6 +284,10 @@ export class MockBackend implements Backend {
   async setThreadStatus(id: string, status: ThreadStatus) {
     const t = this.threads.get(id);
     if (t) t.status = status;
+  }
+  async setThreadKind(id: string, kind: ThreadKind) {
+    const t = this.threads.get(id);
+    if (t) t.kind = kind;
   }
   async setThreadPinned(id: string, pinned: boolean) {
     const t = this.threads.get(id);

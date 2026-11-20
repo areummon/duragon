@@ -30,7 +30,7 @@
   --dur-step: 450ms;
   --dur-ui: 150ms;
   --dur-ink-in: 240ms;
-  --dur-unfold: 360ms;
+  --dur-unfold: 340ms;
   --dur-pencil: 900ms;
   --dur-quiet-mark: 2400ms;
   --dur-breathe: 2200ms;
@@ -101,8 +101,8 @@
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes unfold {
-  from { clip-path: inset(0 0 100% 0); }
-  to { clip-path: inset(0 0 0 0); }
+  from { clip-path: inset(0 0 100% 0); opacity: 0.4; }
+  to { clip-path: inset(0); opacity: 1; }
 }
 @keyframes pencil-draw {
   to { stroke-dashoffset: 0; }

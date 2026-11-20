@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import type { Backend, Unsubscribe } from './backend';
 import type {
   BackendEvents, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
-  Riddler, Settings, Thread, ThreadStatus, VoiceOption, VoiceStatus,
+  Riddler, Settings, Thread, ThreadKind, ThreadStatus, VoiceOption, VoiceStatus,
 } from './types';
 
 export class TauriBackend implements Backend {
@@ -27,6 +27,7 @@ export class TauriBackend implements Backend {
     invoke<void>('set_thread_status', { id, status });
   setThreadPinned = (id: string, pinned: boolean) =>
     invoke<void>('set_thread_pinned', { id, pinned });
+  setThreadKind = (id: string, kind: ThreadKind) => invoke<void>('set_thread_kind', { id, kind });
   threadToNote = (id: string) => invoke<Note>('thread_to_note', { id });
   listChat = (noteId: string) => invoke<Message[]>('list_chat', { noteId });
 

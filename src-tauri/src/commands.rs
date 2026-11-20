@@ -83,6 +83,11 @@ pub async fn set_thread_status(state: State<'_, AppState>, id: String, status: T
 }
 
 #[tauri::command]
+pub async fn set_thread_kind(state: State<'_, AppState>, id: String, kind: ThreadKind) -> Res<()> {
+    s(state.db.set_thread_kind(&id, kind))
+}
+
+#[tauri::command]
 pub async fn set_thread_pinned(state: State<'_, AppState>, id: String, pinned: bool) -> Res<()> {
     s(state.db.set_thread_pinned(&id, pinned))
 }
@@ -241,7 +246,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
     tauri::generate_handler![
         list_notes, search_notes, get_note, create_note, save_note, update_note_meta, delete_note,
         list_folders, create_folder, rename_folder, delete_folder,
-        list_threads, set_thread_status, set_thread_pinned, thread_to_note, list_chat,
+        list_threads, set_thread_status, set_thread_pinned, set_thread_kind, thread_to_note, list_chat,
         get_settings, save_settings, list_riddlers, save_riddler, delete_riddler,
         ai_read, ai_answer, ai_reply, ai_chat, ai_ask, ai_visualize, ai_cancel_read, export_note,
         voice_status, voice_install, list_voices, listen_start, listen_stop, speak, stop_speaking,

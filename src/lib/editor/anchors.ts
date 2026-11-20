@@ -88,7 +88,7 @@ function build(doc: PMNode, input: AnchorInput, h: AnchorHandlers): AnchorState 
             const m = h.mountCard(t.id);
             cleanups.set(m.dom, m.destroy);
             return m.dom;
-          }, { side: 1, key: `card-${t.id}`, ignoreSelection: true, destroy: (n) => cleanups.get(n as HTMLElement)?.() }),
+          }, { side: 1, key: `card-${t.id}`, ignoreSelection: true, stopEvent: () => true, destroy: (n) => cleanups.get(n as HTMLElement)?.() }),
         );
       }
     } else if (t.kind === 'reply') {
@@ -97,7 +97,7 @@ function build(doc: PMNode, input: AnchorInput, h: AnchorHandlers): AnchorState 
           const m = h.mountReply(t.id);
           cleanups.set(m.dom, m.destroy);
           return m.dom;
-        }, { side: 1, key: `reply-${t.id}`, ignoreSelection: true, destroy: (n) => cleanups.get(n as HTMLElement)?.() }),
+        }, { side: 1, key: `reply-${t.id}`, ignoreSelection: true, stopEvent: () => true, destroy: (n) => cleanups.get(n as HTMLElement)?.() }),
       );
     }
   }
@@ -126,7 +126,7 @@ export function anchorPlugin(h: AnchorHandlers) {
       handleDOMEvents: {
         click(_view, e) {
           const el = (e.target as HTMLElement).closest<HTMLElement>('[data-thread]');
-          if (!el) return false;
+          if (!el || el.dataset.kind === 'reply') return false;
           h.onOpen(el.dataset.thread!);
           return false;
         },

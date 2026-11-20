@@ -28,7 +28,7 @@
     const marks = useMarks();
     const all = visibleThreads();
     if (marks) return [];
-    const shown = all.filter((t) => t.kind === 'question' || t.id === threads.openId);
+    const shown = all.filter((t) => t.kind === 'question');
     const order = [...shown].filter((t) => t.kind === 'question').sort((a, b) => a.createdAt - b.createdAt);
     const sideOf = (t: ThreadModel): 'left' | 'right' =>
       settings.value.questionPlacement === 'both' && !marks && t.kind === 'question' && order.indexOf(t) % 2 === 1 ? 'left' : 'right';

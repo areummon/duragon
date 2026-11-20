@@ -1,6 +1,6 @@
 import type {
   BackendEvents, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
-  Riddler, Settings, Thread, ThreadStatus, VoiceOption, VoiceStatus,
+  Riddler, Settings, Thread, ThreadKind, ThreadStatus, VoiceOption, VoiceStatus,
 } from './types';
 
 export type Unsubscribe = () => void;
@@ -22,6 +22,7 @@ export interface Backend {
   listThreads(noteId: string): Promise<Thread[]>;
   setThreadStatus(id: string, status: ThreadStatus): Promise<void>;
   setThreadPinned(id: string, pinned: boolean): Promise<void>;
+  setThreadKind(id: string, kind: ThreadKind): Promise<void>;
   threadToNote(id: string): Promise<Note>;
   listChat(noteId: string): Promise<Message[]>;
 

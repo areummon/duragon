@@ -37,6 +37,7 @@ nix develop -c cargo tauri build --no-bundle
 
 - Write. With "Thinks with you" on (the lightbulb above the title), Duragon reads each paragraph after you pause and speaks up in the margin only when it matters. Switch a note to "When you ask" to keep it quiet.
 - Start a line with `Duragon,` to ask something. Ask it to draw and the sketch appears under the line.
+- Click an answer under a line to write back to it right there. Its ⋯ menu can move it to the margin.
 - Select words for the margin menu: formatting, colours, Riddle this (Ctrl+Enter), Ask Duragon, Visualize.
 - Ctrl+J opens the chat about the whole note. Ctrl+K finds or creates notes. Ctrl+, opens Customize (reading, voice, look, models, Minds, About you).
 - Minds are custom reviewers (Staff engineer, Editor, Skeptic, …). Create them in Customize → Minds and pick one per note from the row above the title.

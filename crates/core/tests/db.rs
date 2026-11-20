@@ -161,9 +161,11 @@ fn threads_messages_and_open_question_flag() {
     let done = db.set_message_drawing(&m.id, DrawingState::Done, Some("<svg/>")).unwrap();
     assert_eq!((done.drawing, done.svg.as_deref()), (DrawingState::Done, Some("<svg/>")));
     db.set_thread_pinned(&t.id, true).unwrap();
+    db.set_thread_kind(&t.id, ThreadKind::Reply).unwrap();
     db.set_thread_status(&t.id, ThreadStatus::Resolved).unwrap();
     let t = db.get_thread(&t.id).unwrap();
     assert!(t.pinned);
+    assert_eq!(t.kind, ThreadKind::Reply);
     assert_eq!(t.status, ThreadStatus::Resolved);
     assert!(!db.get_note(&n.meta.id).unwrap().meta.has_open_question);
     let v = serde_json::to_value(&t).unwrap();

@@ -159,6 +159,12 @@ impl Db {
         Ok(())
     }
 
+    pub fn set_thread_kind(&self, id: &str, kind: ThreadKind) -> Result<()> {
+        self.conn()
+            .execute("UPDATE threads SET kind=?2 WHERE id=?1", params![id, kind.as_str()])?;
+        Ok(())
+    }
+
     /// "Make a note": the quote as a blockquote, then each message prefixed by its author.
     pub fn thread_to_note(&self, id: &str) -> Result<Note> {
         let thread = self.get_thread(id)?;
