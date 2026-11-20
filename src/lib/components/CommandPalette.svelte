@@ -3,7 +3,6 @@
   import { getBackend } from '../api/backend';
   import type { NoteMeta } from '../api/types';
   import { app, newNote, openNote } from '../state/app.svelte';
-  import { rise } from '../motion/transitions';
 
   let query = $state('');
   let results = $state<NoteMeta[]>([]);
@@ -58,8 +57,8 @@
   }
 </script>
 
-<div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:rise|global={{ y: 0, duration: 160 }}>
-  <div class="box" transition:rise|global={{ y: 0, scale: 0.97, duration: 160 }}>
+<div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()}>
+  <div class="box">
     <input
       bind:this={input}
       bind:value={query}

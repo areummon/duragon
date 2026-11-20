@@ -15,7 +15,7 @@
   <span class="mark"><Blot size={14} seed="duragon" /></span>
   <span class="wordmark">duragon.</span>
   </div>
-  <button class="chat" aria-pressed={app.chatOpen} title={kbd('J')} onclick={toggleChat}>
+  <button class="chat" class:away={app.chatOpen} tabindex={app.chatOpen ? -1 : 0} aria-pressed={app.chatOpen} title={kbd('J')} onclick={toggleChat}>
     <Blot size={13} />
     Chat
   </button>
@@ -88,8 +88,9 @@
     border-radius: 999px;
     font-size: 14px;
     color: var(--ink);
-    transition: opacity var(--dur-ui) var(--ease-ui), background-color var(--dur-ui) var(--ease-ui);
+    transition: opacity 200ms var(--ease-ui), transform 200ms var(--ease-ui), background-color var(--dur-ui) var(--ease-ui);
   }
   .chat:hover { opacity: 0.75; }
   .chat[aria-pressed='true'] { background: var(--riddle-wash); }
+  .chat.away { opacity: 0; transform: scale(0.9); pointer-events: none; }
 </style>

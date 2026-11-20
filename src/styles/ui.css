@@ -22,9 +22,9 @@
   border-radius: 7px;
   text-align: left;
   color: var(--ink);
-  transition: background-color var(--dur-ui) var(--ease-ui);
+  transition: background-color 100ms var(--ease-ui);
 }
-.menu-item:hover, .menu-item:focus-visible { background: var(--riddle-wash); outline: none; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--shelf); outline: none; }
 .menu-item .kbd { margin-left: auto; padding-left: 16px; font-size: 12px; color: var(--faint); }
 .menu-item svg { flex: none; color: var(--graphite); }
 .menu-sep { height: 1px; margin: 4px 6px; background: var(--rule); }

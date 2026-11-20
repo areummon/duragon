@@ -28,7 +28,7 @@
   });
 
   $effect(() => {
-    if (open) window.setTimeout(() => input?.focus(), 320);
+    if (open) window.setTimeout(() => input?.focus(), 380);
   });
 
   $effect(() => {
@@ -111,11 +111,11 @@
     background: var(--paper);
     border-left: 1px solid var(--rule);
     transform: translateX(100%);
-    transition: transform 320ms var(--ease-step);
+    opacity: 0;
     visibility: hidden;
+    transition: transform var(--dur-drawer) var(--ease-drawer), opacity var(--dur-drawer) var(--ease-drawer), visibility 0s linear var(--dur-drawer);
   }
-  .panel.open { transform: none; visibility: visible; }
-  .panel:not(.open) { transition: transform 320ms var(--ease-step), visibility 0s linear 320ms; }
+  .panel.open { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
 
   header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 20px 10px 24px; }
   .who { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

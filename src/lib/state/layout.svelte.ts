@@ -5,7 +5,7 @@ export const MARGIN_GAP = 40;
 export const MARGIN_MAX = 360;
 const MIN_COLUMN = 220;
 
-export const layout = $state({ vw: window.innerWidth, scrolled: false });
+export const layout = $state({ vw: window.innerWidth, scrolled: false, resizing: false });
 export const selectionUi = $state<{ pin: Range | null }>({ pin: null });
 
 window.addEventListener('resize', () => (layout.vw = window.innerWidth));

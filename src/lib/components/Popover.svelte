@@ -55,7 +55,7 @@
     style:top={at ? `${at.y}px` : undefined}
     style:min-width={width ? `${width}px` : undefined}
     use:dismiss
-    transition:rise={{ y: up ? -4 : 4 }}
+    transition:rise={{ y: up ? 2 : -2, duration: 200 }}
   >
     {@render children()}
   </div>

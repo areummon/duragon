@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Thread as ThreadModel } from '../api/types';
-  import { MARGIN_GAP, marginWidth, useMarks } from '../state/layout.svelte';
+  import { MARGIN_GAP, layout, marginWidth, useMarks } from '../state/layout.svelte';
   import { settings } from '../state/settings.svelte';
   import { voice } from '../state/voice.svelte';
   import { geometry, threads, visibleThreads } from '../state/threads.svelte';
@@ -87,7 +87,7 @@
 </script>
 
 {#if placed.length}
-  <div class="margins" style:--mw="{width}px" style:--gap="{MARGIN_GAP}px">
+  <div class="margins" class:resizing={layout.resizing} style:--mw="{width}px" style:--gap="{MARGIN_GAP}px">
     {#if target}
       {#key `${target.id}:${target.faint}`}
         <Tether sx={target.sx} sy={target.sy} ex={target.ex} ey={target.ey} faint={target.faint} />
@@ -120,4 +120,5 @@
   .slot.left { right: calc(100% + var(--gap)); }
   .slot.orphan { opacity: 0.5; }
   .slot.dim { opacity: 0.4; }
+  .margins.resizing .slot { transition: none; }
 </style>

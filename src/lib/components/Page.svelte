@@ -11,6 +11,7 @@
   import { loadThreads, unloadThreads } from '../state/threads.svelte';
   import { Pencil } from 'lucide-svelte';
   import { interruptSpeech } from '../state/voice.svelte';
+  import { layout } from '../state/layout.svelte';
   import Margin from './Margin.svelte';
   import ReadingPencil from './ReadingPencil.svelte';
   import SelectionMenu from './SelectionMenu.svelte';
@@ -20,6 +21,7 @@
   let api = $state.raw<EditorApi | null>(null);
   let page = $state<HTMLElement>();
   let riddle = $state.raw<Riddle | null>(null);
+  let dragging = $state<{ side: -1 | 1; width: number } | null>(null);
   const noteId = $derived(app.note?.id);
 
   $effect(() => {
@@ -53,17 +55,22 @@
       if (e.button !== 0) return;
       const el = e.currentTarget as HTMLElement;
       el.setPointerCapture(e.pointerId);
+      layout.resizing = true;
       const startX = e.clientX;
       const start = page!.getBoundingClientRect().width;
       let width = start;
+      dragging = { side, width: start };
       const move = (m: PointerEvent) => {
         width = Math.round(Math.min(PAGE_WIDTH_MAX, Math.max(PAGE_WIDTH_MIN, start + side * 2 * (m.clientX - startX))));
         previewPageWidth(width);
+        dragging = { side, width };
       };
       const up = () => {
         el.removeEventListener('pointermove', move);
         el.removeEventListener('pointerup', up);
         el.removeEventListener('pointercancel', up);
+        layout.resizing = false;
+        dragging = null;
         void updateSettings({ pageWidth: width === PAGE_WIDTH_DEFAULT ? null : width });
       };
       el.addEventListener('pointermove', move);
@@ -74,10 +81,27 @@
   const reset = () => updateSettings({ pageWidth: null });
 </script>
 
-<main class="stage" class:shifted={app.sidebarOpen} class:dim={app.chatOpen && !chat.pinned}>
+<main class="stage" class:aside={app.chatOpen && !app.sidebarOpen && layout.vw >= 1100} class:shifted={app.sidebarOpen} class:dim={app.chatOpen && !chat.pinned}>
   <div class="page" bind:this={page}>
-    <div class="handle left" role="separator" aria-orientation="vertical" aria-label="Page width" title="Drag to change page width, double-click to reset" onpointerdown={drag(-1)} ondblclick={reset}></div>
-    <div class="handle right" role="separator" aria-orientation="vertical" aria-label="Page width" title="Drag to change page width, double-click to reset" onpointerdown={drag(1)} ondblclick={reset}></div>
+    {#each [-1, 1] as const as side (side)}
+      <div
+        class="handle"
+        class:left={side === -1}
+        class:right={side === 1}
+        class:active={dragging?.side === side}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Page width: drag to change, double-click to reset"
+        aria-valuenow={dragging?.width ?? settings.value.pageWidth ?? PAGE_WIDTH_DEFAULT}
+        aria-valuemin={PAGE_WIDTH_MIN}
+        aria-valuemax={PAGE_WIDTH_MAX}
+        onpointerdown={drag(side)}
+        ondblclick={reset}
+      >
+        <span class="line" aria-hidden="true"></span>
+        {#if dragging?.side === side}<span class="readout" aria-hidden="true">{dragging.width}px</span>{/if}
+      </div>
+    {/each}
 
     {#if app.note}
       <NoteHeaderRow />
@@ -108,7 +132,8 @@
     min-height: 100vh;
     transition: transform var(--dur-drawer) var(--ease-drawer), opacity var(--dur-drawer) var(--ease-drawer);
   }
-  .stage.dim { opacity: 0.6; }
+  .stage.dim { opacity: 0.5; }
+  .stage.aside { transform: translateX(-210px); }
   .stage.shifted { transform: translateX(288px); opacity: 0.6; }
   .page {
     position: relative;
@@ -118,26 +143,44 @@
   }
   .handle {
     position: absolute;
-    top: 63px;
-    width: 14px;
-    height: 24px;
-    cursor: ew-resize;
+    top: 61px;
+    z-index: 20;
+    display: flex;
+    justify-content: center;
+    width: 24px;
+    height: 28px;
+    cursor: col-resize;
     touch-action: none;
+    user-select: none;
   }
-  .handle.left { left: -7px; }
-  .handle.right { right: -7px; }
-  .handle::after {
-    content: '';
+  .handle.left { left: -12px; }
+  .handle.right { right: -12px; }
+  .line {
+    margin-top: 4px;
+    width: 2px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--rule);
+    transition: background-color var(--dur-ui) var(--ease-ui);
+  }
+  .handle:hover .line { background: var(--graphite); }
+  .handle.active .line { background: var(--ink); }
+  .readout {
     position: absolute;
-    top: 6px;
-    left: 6px;
-    width: 1px;
-    height: 12px;
-    background: var(--faint);
-    opacity: 0.7;
-    transition: opacity var(--dur-ui) var(--ease-ui);
+    top: 0;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 11.5px;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
   }
-  .handle:hover::after { opacity: 1; }
+  .handle.right .readout { right: 24px; }
+  .handle.left .readout { left: 24px; }
+  @media (pointer: coarse) { .handle { display: none; } }
 
   .brief {
     display: flex;

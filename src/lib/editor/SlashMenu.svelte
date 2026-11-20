@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Editor } from '@tiptap/core';
-  import { rise } from '../motion/transitions';
   import { runSlash, slash, slashMatches } from './slash.svelte';
 
   let { editor }: { editor: Editor } = $props();
@@ -14,7 +13,6 @@
     aria-label="Commands"
     style:left="{slash.x}px"
     style:top="{slash.y}px"
-    transition:rise={{ y: 4, duration: 140 }}
   >
     {#each items as item, i (item.id)}
       {@const Icon = item.icon}
