@@ -9,11 +9,18 @@ import { settings } from '../state/settings.svelte';
 import { app } from '../state/app.svelte';
 import { collapseOnType, geometry, open, threads, visibleThreads, type Geometry } from '../state/threads.svelte';
 import { anchorKey, anchorPlugin, type AnchorInput } from './anchors';
+import { measureLines } from './pencil';
 import { current } from './current';
 
 const PACE = { regular: 900, slow: 1800 } as const;
 const MIN_TARGET = 12;
-const ASKING = ['read', 'answer', 'ask', 'visualize'];
+/** New anchors fade their underline in while the pencil fades out. */
+const FRESH_MS = 900;
+/** Questions and requests are worth reading even when short: the read answers them inline. */
+const MIN_REQUEST = 6;
+const REQUEST = /^(?:draw|sketch|explain|show|tell|describe|compare|list|summari[sz]e|visuali[sz]e|what|why|how|who|when|where|can|could|should|is|are|do|does)\b/i;
+
+const isRequest = (line: string) => line.endsWith('?') || REQUEST.test(line);
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -60,7 +67,6 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
   });
   editor.registerPlugin(plugin);
 
-
   function measure() {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
@@ -75,13 +81,19 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
           next[t.id] = null;
           continue;
         }
-        const a = view.coordsAtPos(r.from, 1);
-        const b = view.coordsAtPos(r.to, -1);
-        const wraps = b.top - a.top > 6;
+        const lines = measureLines(view, r, page);
+        if (!lines.length) {
+          next[t.id] = null;
+          continue;
+        }
+        const first = lines[0];
+        const last = lines[lines.length - 1];
         next[t.id] = {
-          top: a.top - box.top,
-          endX: (wraps ? box.width : b.right - box.left),
-          endY: (wraps ? (a.top + a.bottom) / 2 : (b.top + b.bottom) / 2) - box.top,
+          top: view.coordsAtPos(r.from, 1).top - box.top,
+          startX: first.x1,
+          startY: first.mid,
+          endX: Math.max(...lines.map((l) => l.x2)),
+          endY: last.mid,
         };
       }
       if (JSON.stringify(next) !== JSON.stringify(geometry.byId)) geometry.byId = next;
@@ -97,10 +109,10 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
   const stop = $effect.root(() => {
     $effect(() => {
       const input: AnchorInput = {
-        threads: visibleThreads().map((t) => ({ id: t.id, quote: t.quote, kind: t.kind })),
+        threads: visibleThreads().map((t) => ({ id: t.id, quote: t.quote, kind: t.kind, status: t.status })),
         openId: threads.openId,
         hoverId: threads.hoverId,
-        reading: threads.thinking.filter((t) => ASKING.includes(t.task)).map((t) => t.target),
+        fresh: visibleThreads().filter((t) => performance.now() - (threads.arrivedAt[t.id] ?? -Infinity) < FRESH_MS).map((t) => t.id),
         marks: useMarks(),
         hidden: settings.value.justMyWords,
         pin: selectionUi.pin,
@@ -157,7 +169,8 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
       for (const line of lines) if (isAddressed(line) && !answered.has(line)) void answer(line);
       if (app.note.mode !== 'thinks') return;
       const target = [...lines].reverse().find((t) => !isAddressed(t));
-      if (!target || target.length < MIN_TARGET || lastRead.has(target)) return;
+      if (!target || lastRead.has(target)) return;
+      if (target.length < (isRequest(target) ? MIN_REQUEST : MIN_TARGET)) return;
       if (threads.list.some((t) => t.status === 'open' && target.includes(t.quote))) return;
       lastRead.add(target);
       readTarget = target;

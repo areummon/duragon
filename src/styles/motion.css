@@ -7,8 +7,10 @@
   --ease-drip: cubic-bezier(0.5, 0, 0.8, 0.6);
   --ease-step: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-ui: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-drawer: cubic-bezier(0.16, 1, 0.3, 1);
 
   --dur-settle: 200ms;
+  --dur-drawer: 380ms;
   --dur-tether: 560ms;
   --dur-tether-2: 700ms;
   --delay-tether: 140ms;
@@ -107,7 +109,7 @@
 }
 @keyframes quiet-mark {
   0% { opacity: 0; transform: translateX(-4px); }
-  15%, 70% { opacity: 0.8; transform: translateX(0); }
+  15%, 70% { opacity: 1; transform: translateX(0); }
   100% { opacity: 0; transform: translateX(0); }
 }
 @keyframes reading-breathe {

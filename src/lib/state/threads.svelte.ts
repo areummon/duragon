@@ -12,7 +12,10 @@ export interface Thinking {
 export interface Geometry {
   /** Top of the quote's first line, relative to the page. */
   top: number;
-  /** Where the quote ends: x relative to the page, y of that line's middle. */
+  /** Where the quote starts: left of its first line, y of that line's middle. */
+  startX: number;
+  startY: number;
+  /** Where the quote ends: right of its widest line, y of its last line's middle. */
   endX: number;
   endY: number;
 }
@@ -29,12 +32,16 @@ export const threads = $state({
   openId: null as string | null,
   hoverId: null as string | null,
   fullId: null as string | null,
+  /** Reads that came back with nothing to add, until their mark has played. */
+  quiet: [] as { id: number; target: string }[],
+  /** When each thread arrived this session (performance.now()), for its entrance. */
+  arrivedAt: {} as Record<string, number>,
 });
 
 /** Quote positions in the page, filled by the editor glue. null means the quote is gone. */
 export const geometry = $state<{ byId: Record<string, Geometry | null>; pageWidth: number }>({ byId: {}, pageWidth: 690 });
 
-const ASKING: AiTask[] = ['read', 'answer', 'ask', 'visualize'];
+export const ASKING: AiTask[] = ['read', 'answer', 'ask', 'visualize'];
 let unsubscribe: (() => void)[] = [];
 let seq = 0;
 
@@ -63,6 +70,8 @@ export async function loadThreads(noteId: string) {
   threads.noteId = noteId;
   threads.openId = threads.hoverId = threads.fullId = null;
   threads.thinking = [];
+  threads.quiet = [];
+  threads.arrivedAt = {};
   threads.replying = {};
   threads.freshText = {};
   threads.freshDraw = {};
@@ -79,7 +88,10 @@ export async function loadThreads(noteId: string) {
       const before = i >= 0 ? threads.list[i] : undefined;
       for (const m of t.messages) noteMessage(m, before?.messages.find((x) => x.id === m.id));
       if (i >= 0) threads.list[i] = t;
-      else threads.list.push(t);
+      else {
+        threads.list.push(t);
+        threads.arrivedAt[t.id] = performance.now();
+      }
       dropThinking((x) => ASKING.includes(x.task));
       refreshOpenFlag();
     }),
@@ -95,7 +107,9 @@ export async function loadThreads(noteId: string) {
       }
     }),
     be.on('ai:quiet', (p) => {
-      if (p.noteId === noteId) dropThinking((x) => x.target === p.target);
+      if (p.noteId !== noteId) return;
+      dropThinking((x) => x.target === p.target);
+      threads.quiet.push({ id: ++seq, target: p.target });
     }),
     be.on('ai:error', (p) => {
       if (p.noteId !== noteId) return;

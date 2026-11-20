@@ -12,6 +12,7 @@
   import { Pencil } from 'lucide-svelte';
   import { interruptSpeech } from '../state/voice.svelte';
   import Margin from './Margin.svelte';
+  import ReadingPencil from './ReadingPencil.svelte';
   import SelectionMenu from './SelectionMenu.svelte';
   import NoteHeaderRow from './NoteHeaderRow.svelte';
   import TellCard from './TellCard.svelte';
@@ -96,6 +97,7 @@
     {/if}
     {#if api && page}
       <Margin />
+      <ReadingPencil editor={api.editor} {page} />
       <SelectionMenu editor={api.editor} {page} />
     {/if}
   </div>
@@ -104,7 +106,7 @@
 <style>
   .stage {
     min-height: 100vh;
-    transition: transform 320ms var(--ease-step), opacity 320ms var(--ease-step);
+    transition: transform var(--dur-drawer) var(--ease-drawer), opacity var(--dur-drawer) var(--ease-drawer);
   }
   .stage.dim { opacity: 0.6; }
   .stage.shifted { transform: translateX(288px); opacity: 0.6; }
