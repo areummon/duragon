@@ -4,14 +4,14 @@
   import { app } from '../state/app.svelte';
   import { riddlerName } from '../state/riddler';
   import {
-    PAGE_WIDTH_DEFAULT, PAGE_WIDTH_MAX, PAGE_WIDTH_MIN, previewPageWidth, settings, updateSettings,
+    PAGE_WIDTH_DEFAULT, PAGE_WIDTH_MAX, PAGE_WIDTH_MIN, updateSettings,
   } from '../state/settings.svelte';
   import { attachRiddle, type Riddle } from '../editor/riddle.svelte';
   import { chat } from '../state/chat.svelte';
   import { loadThreads, unloadThreads } from '../state/threads.svelte';
   import Pencil from 'lucide-svelte/icons/pencil';
   import { interruptSpeech } from '../state/voice.svelte';
-  import { layout } from '../state/layout.svelte';
+  import { layout, pageWidth } from '../state/layout.svelte';
   import Margin from './Margin.svelte';
   import ReadingPencil from './ReadingPencil.svelte';
   import SelectionMenu from './SelectionMenu.svelte';
@@ -21,7 +21,7 @@
   let api = $state.raw<EditorApi | null>(null);
   let page = $state<HTMLElement>();
   let riddle = $state.raw<Riddle | null>(null);
-  let dragging = $state<{ side: -1 | 1; width: number } | null>(null);
+  let dragSide = $state<-1 | 1 | null>(null);
   const noteId = $derived(app.note?.id);
 
   $effect(() => {
@@ -55,25 +55,24 @@
       if (e.button !== 0) return;
       const el = e.currentTarget as HTMLElement;
       el.setPointerCapture(e.pointerId);
-      layout.resizing = true;
       document.documentElement.classList.add('col-resizing');
       const startX = e.clientX;
       const start = page!.getBoundingClientRect().width;
-      let width = start;
-      dragging = { side, width: start };
+      let width = Math.round(start);
+      dragSide = side;
+      layout.dragWidth = width;
       const move = (m: PointerEvent) => {
         width = Math.round(Math.min(PAGE_WIDTH_MAX, Math.max(PAGE_WIDTH_MIN, start + side * 2 * (m.clientX - startX))));
-        previewPageWidth(width);
-        dragging = { side, width };
+        layout.dragWidth = width;
       };
       const up = () => {
         el.removeEventListener('pointermove', move);
         el.removeEventListener('pointerup', up);
         el.removeEventListener('pointercancel', up);
-        layout.resizing = false;
         document.documentElement.classList.remove('col-resizing');
-        dragging = null;
         void updateSettings({ pageWidth: width === PAGE_WIDTH_DEFAULT ? null : width });
+        layout.dragWidth = null;
+        dragSide = null;
       };
       el.addEventListener('pointermove', move);
       el.addEventListener('pointerup', up);
@@ -84,24 +83,25 @@
 </script>
 
 <main class="stage" class:aside={app.chatOpen && !app.sidebarOpen && layout.vw >= 1100} class:shifted={app.sidebarOpen} class:dim={app.chatOpen && !chat.pinned}>
-  <div class="page" bind:this={page}>
+  <!-- Set on the page itself: a width variable on the root restyles the whole document, every sketch included, on each drag step. -->
+  <div class="page" bind:this={page} style:width="min({pageWidth()}px, calc(100vw - 48px))">
     {#each [-1, 1] as const as side (side)}
       <div
         class="handle"
         class:left={side === -1}
         class:right={side === 1}
-        class:active={dragging?.side === side}
+        class:active={dragSide === side}
         role="separator"
         aria-orientation="vertical"
         aria-label="Page width: drag to change, double-click to reset"
-        aria-valuenow={dragging?.width ?? settings.value.pageWidth ?? PAGE_WIDTH_DEFAULT}
+        aria-valuenow={pageWidth()}
         aria-valuemin={PAGE_WIDTH_MIN}
         aria-valuemax={PAGE_WIDTH_MAX}
         onpointerdown={drag(side)}
         ondblclick={reset}
       >
         <span class="line" aria-hidden="true"></span>
-        {#if dragging?.side === side}<span class="readout" aria-hidden="true">{dragging.width}px</span>{/if}
+        {#if dragSide === side}<span class="readout" aria-hidden="true">{layout.dragWidth}px</span>{/if}
       </div>
     {/each}
 
@@ -139,7 +139,6 @@
   .stage.shifted { transform: translateX(288px); opacity: 0.6; }
   .page {
     position: relative;
-    width: min(var(--page-width), calc(100vw - 48px));
     margin: 0 auto;
     padding-top: 106px;
   }

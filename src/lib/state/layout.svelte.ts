@@ -5,15 +5,18 @@ export const MARGIN_GAP = 40;
 export const MARGIN_MAX = 360;
 const MIN_COLUMN = 220;
 
-export const layout = $state({ vw: window.innerWidth, scrolled: false, resizing: false });
+/** `dragWidth` is the page width while a handle is held; the setting is saved only on release. */
+export const layout = $state({ vw: window.innerWidth, scrolled: false, dragWidth: null as number | null });
 export const selectionUi = $state<{ pin: Range | null }>({ pin: null });
 
 window.addEventListener('resize', () => (layout.vw = window.innerWidth));
 window.addEventListener('scroll', () => (layout.scrolled = window.scrollY > 40), { passive: true });
 
+export const pageWidth = () => layout.dragWidth ?? settings.value.pageWidth ?? PAGE_WIDTH_DEFAULT;
+
 /** Width the margin columns can take, or 0 when the window is too narrow. */
 export function marginWidth(): number {
-  const page = Math.min(settings.value.pageWidth ?? PAGE_WIDTH_DEFAULT, layout.vw - 48);
+  const page = Math.min(pageWidth(), layout.vw - 48);
   const free = (layout.vw - page) / 2 - MARGIN_GAP - 24;
   return free < MIN_COLUMN ? 0 : Math.min(MARGIN_MAX, free);
 }

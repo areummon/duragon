@@ -72,7 +72,6 @@
   --font-serif: 'Newsreader Variable', Georgia, serif;
   --font-voice: var(--font-serif);
   --note-size: 16px;
-  --page-width: 690px;
 }
 
 [data-lettering='notes'] {

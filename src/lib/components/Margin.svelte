@@ -87,7 +87,7 @@
 </script>
 
 {#if placed.length}
-  <div class="margins" class:resizing={layout.resizing} style:--mw="{width}px" style:--gap="{MARGIN_GAP}px">
+  <div class="margins" class:resizing={layout.dragWidth !== null} style:--mw="{width}px" style:--gap="{MARGIN_GAP}px">
     {#if target}
       {#key `${target.id}:${target.faint}`}
         <Tether sx={target.sx} sy={target.sy} ex={target.ex} ey={target.ey} faint={target.faint} />
