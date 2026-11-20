@@ -19,7 +19,6 @@
           shellHook = ''
             export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:$XDG_DATA_DIRS"
             export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules"
-            export WEBKIT_DISABLE_DMABUF_RENDERER=1
           '';
         };
       });
