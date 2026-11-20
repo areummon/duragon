@@ -39,7 +39,8 @@ struct ReadOut {
     kind: ThreadKind,
     quote: Option<String>,
     message: Option<String>,
-    draw: Option<String>,
+    #[serde(default)]
+    drawing: bool,
     #[serde(default)]
     sources: Vec<Source>,
 }
@@ -50,16 +51,11 @@ fn question_kind() -> ThreadKind {
 
 #[derive(Deserialize)]
 struct SayOut {
-    #[serde(default)]
     message: String,
-    draw: Option<String>,
+    #[serde(default)]
+    drawing: bool,
     #[serde(default)]
     sources: Vec<Source>,
-}
-
-/// An answer is words, a sketch, or both: a request to draw is answered by the sketch alone.
-fn says_nothing(message: &str, draw: Option<&str>) -> bool {
-    message.trim().is_empty() && draw.is_none_or(|d| d.trim().is_empty())
 }
 
 #[derive(Deserialize)]
@@ -202,7 +198,8 @@ impl Ai {
         }
     }
 
-    /// Persists Riddled's message, announces it, and chains a drawing when there is a brief.
+    /// Persists Riddled's message, announces it, and chains a drawing of it when asked: as in Riddled,
+    /// the message shown beside a sketch is the brief it was drawn from.
     /// `announce_thread` emits `ai:thread` (new thread) instead of `ai:message`.
     async fn deliver(
         &self,
@@ -210,11 +207,10 @@ impl Ai {
         thread: Option<&Thread>,
         announce_thread: bool,
         text: &str,
-        draw: Option<String>,
+        drawing: bool,
         sources: &[Source],
     ) -> Result<()> {
-        let brief = draw.map(|d| d.trim().to_string()).filter(|d| !d.is_empty());
-        let state = if brief.is_some() { DrawingState::Pending } else { DrawingState::None };
+        let state = if drawing { DrawingState::Pending } else { DrawingState::None };
         let sources = clean_sources(sources);
         let msg = self.db.add_message_with_sources(
             &ctx.note.meta.id,
@@ -228,16 +224,16 @@ impl Ai {
             Some(t) if announce_thread => self.emit("ai:thread", &self.db.get_thread(&t.id)?),
             _ => self.emit("ai:message", &msg),
         }
-        if let Some(brief) = brief {
-            self.draw(ctx, &msg, &brief).await?;
+        if drawing {
+            self.draw(ctx, &msg).await?;
         }
         Ok(())
     }
 
-    async fn draw(&self, ctx: &Ctx, msg: &Message, brief: &str) -> Result<()> {
+    async fn draw(&self, ctx: &Ctx, msg: &Message) -> Result<()> {
         let note_id = &ctx.note.meta.id;
-        self.thinking(note_id, brief, AiTask::Draw);
-        let payload = prompts::draw_payload(&ctx.note.meta.title, &plain_of(&ctx.note), brief);
+        self.thinking(note_id, &msg.text, AiTask::Draw);
+        let payload = prompts::draw_payload(&ctx.note.meta.title, &plain_of(&ctx.note), &msg.text);
         let result = match run_claude(self.request(ctx, AiTask::Draw, payload)).await {
             Ok(v) => serde_json::from_value::<DrawOut>(v)
                 .map_err(|e| format!("unexpected draw output: {e}"))
@@ -280,13 +276,13 @@ impl Ai {
             ThreadKind::Reply => Some(target.trim_end().to_string()),
             ThreadKind::Question => out.quote.as_deref().and_then(|q| resolve_quote(target, q)),
         };
-        let message = out.message.unwrap_or_default();
-        let (true, Some(quote), false) = (out.said, quote, says_nothing(&message, out.draw.as_deref())) else {
+        let message = out.message.as_deref().map(str::trim).filter(|m| !m.is_empty());
+        let (true, Some(quote), Some(message)) = (out.said, quote, message) else {
             self.events.emit("ai:quiet", json!({ "noteId": note_id, "target": target }));
             return Ok(());
         };
         let thread = self.db.create_thread(note_id, out.kind, &quote)?;
-        self.deliver(&ctx, Some(&thread), true, &message, out.draw, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), true, message, out.drawing, &out.sources).await?;
         if out.kind == ThreadKind::Reply {
             self.spawn_learn(&ctx, target);
         }
@@ -307,12 +303,12 @@ impl Ai {
         let Some(out) = self.call::<SayOut>(&ctx, AiTask::Answer, payload).await else {
             return Ok(());
         };
-        if says_nothing(&out.message, out.draw.as_deref()) {
+        if out.message.trim().is_empty() {
             self.error(note_id, AiTask::Answer, "empty answer");
             return Ok(());
         }
         let thread = self.db.create_thread(note_id, ThreadKind::Reply, target.trim_end())?;
-        self.deliver(&ctx, Some(&thread), true, &out.message, out.draw, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources).await?;
         self.spawn_learn(&ctx, target);
         Ok(())
     }
@@ -333,11 +329,11 @@ impl Ai {
         let Some(out) = self.call::<SayOut>(&ctx, AiTask::Reply, payload).await else {
             return Ok(());
         };
-        if says_nothing(&out.message, out.draw.as_deref()) {
+        if out.message.trim().is_empty() {
             self.error(&note_id, AiTask::Reply, "empty reply");
             return Ok(());
         }
-        self.deliver(&ctx, Some(&thread), false, &out.message, out.draw, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), false, &out.message, out.drawing, &out.sources).await?;
         self.spawn_learn(&ctx, text);
         Ok(())
     }
@@ -357,11 +353,11 @@ impl Ai {
         let Some(out) = self.call::<SayOut>(&ctx, AiTask::Chat, payload).await else {
             return Ok(());
         };
-        if says_nothing(&out.message, out.draw.as_deref()) {
+        if out.message.trim().is_empty() {
             self.error(note_id, AiTask::Chat, "empty reply");
             return Ok(());
         }
-        self.deliver(&ctx, None, false, &out.message, out.draw, &out.sources).await?;
+        self.deliver(&ctx, None, false, &out.message, out.drawing, &out.sources).await?;
         self.spawn_learn(&ctx, text);
         Ok(())
     }
@@ -441,9 +437,9 @@ fn plain_of(note: &Note) -> String {
 #[derive(Deserialize)]
 struct AskOut {
     quote: String,
-    #[serde(default)]
     message: String,
-    draw: Option<String>,
+    #[serde(default)]
+    drawing: bool,
     #[serde(default)]
     sources: Vec<Source>,
 }
@@ -465,7 +461,7 @@ impl Ai {
         let Some(out) = self.call::<AskOut>(&ctx, AiTask::Ask, payload).await else {
             return Ok(());
         };
-        if says_nothing(&out.message, out.draw.as_deref()) {
+        if out.message.trim().is_empty() {
             self.error(note_id, AiTask::Ask, "empty answer");
             return Ok(());
         }
@@ -474,7 +470,7 @@ impl Ai {
         if let Some(q) = question {
             self.db.add_message(note_id, Some(&thread.id), Author::You, q, DrawingState::None)?;
         }
-        self.deliver(&ctx, Some(&thread), true, &out.message, out.draw, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources).await?;
         if let Some(q) = question {
             self.spawn_learn(&ctx, q);
         }
@@ -488,11 +484,11 @@ impl Ai {
         let Some(out) = self.call::<SayOut>(&ctx, AiTask::Visualize, payload).await else {
             return Ok(());
         };
-        let Some(brief) = out.draw.filter(|d| !d.trim().is_empty()) else {
+        if out.message.trim().is_empty() {
             self.error(note_id, AiTask::Visualize, "no drawing brief returned");
             return Ok(());
-        };
+        }
         let thread = self.db.create_thread(note_id, ThreadKind::Question, target.trim())?;
-        self.deliver(&ctx, Some(&thread), true, "", Some(brief), &[]).await
+        self.deliver(&ctx, Some(&thread), true, &out.message, true, &[]).await
     }
 }

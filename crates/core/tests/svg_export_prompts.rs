@@ -135,14 +135,16 @@ fn system_prompts_carry_riddler_brief_and_about_you() {
 }
 
 #[test]
-fn every_task_the_writer_can_ask_to_draw_in_answers_with_the_sketch_alone() {
-    for task in [AiTask::Read, AiTask::Answer, AiTask::Reply, AiTask::Chat, AiTask::Ask] {
+fn the_sentence_beside_a_sketch_is_its_brief_in_every_task() {
+    for task in [AiTask::Read, AiTask::Answer, AiTask::Reply, AiTask::Chat, AiTask::Ask, AiTask::Visualize] {
         let p = system_prompt(task, &riddler(), "", "", false);
-        assert!(p.contains("MUST return a \"draw\"") && p.contains("The sketch is the whole answer"), "{task:?}");
-        assert!(!p.contains("{asked_to_draw}"), "{task:?}");
+        assert!(p.contains("is the brief the sketch is drawn from"), "{task:?}");
+        assert!(!p.contains("{asked_to_draw}") && !p.contains("{sketch_brief}"), "{task:?}");
     }
-    let s = prompts::schema(AiTask::Visualize, false);
-    assert_eq!((s["required"].clone(), s["properties"].get("message")), (serde_json::json!(["draw"]), None));
+    for task in [AiTask::Read, AiTask::Answer, AiTask::Reply, AiTask::Chat, AiTask::Ask] {
+        assert_eq!(prompts::schema(task, false)["properties"]["drawing"]["type"], "boolean", "{task:?}");
+    }
+    assert_eq!(prompts::schema(AiTask::Visualize, false)["required"], serde_json::json!(["message"]));
 }
 
 #[test]

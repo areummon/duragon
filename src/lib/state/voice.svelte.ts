@@ -41,7 +41,7 @@ export async function initVoice() {
   });
 
   const autoSpeak = (noteId: string, id: string, author: string, text: string) => {
-    if (author !== 'riddled' || !text.trim() || spoken.has(id)) return;
+    if (author !== 'riddled' || spoken.has(id)) return;
     spoken.add(id);
     if (app.note?.id === noteId && app.note.voiceOn) void readAloud(id, text);
   };

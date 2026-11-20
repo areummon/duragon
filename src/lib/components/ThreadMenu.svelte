@@ -1,10 +1,10 @@
 <script lang="ts" module>
-  export type ThreadAction = 'reply' | 'full' | 'resolve' | 'copy' | 'speak' | 'note' | 'margin' | 'dismiss';
+  export type ThreadAction = 'full' | 'resolve' | 'copy' | 'speak' | 'note' | 'margin' | 'dismiss';
 </script>
 
 <script lang="ts">
   import type { Thread } from '../api/types';
-  import { makeNote, moveToMargin, open, setStatus, threads, threadText } from '../state/threads.svelte';
+  import { makeNote, moveToMargin, setStatus, threads, threadText } from '../state/threads.svelte';
   import { readAloud, stopSpeaking, voice } from '../state/voice.svelte';
 
   interface Props {
@@ -16,14 +16,10 @@
   }
   let { thread, actions, onclose, onleave = (s) => void setStatus(thread.id, s) }: Props = $props();
 
-  const last = $derived([...thread.messages].reverse().find((m) => m.author === 'riddled' && m.text.trim()));
+  const last = $derived([...thread.messages].reverse().find((m) => m.author === 'riddled'));
   const playing = $derived(voice.playing && !!last && voice.speakingId === last.id);
-  const worded = $derived(thread.messages.some((m) => m.text.trim()));
-  /** A sketch on its own has nothing to copy, read aloud or turn into a note. */
-  const usable = (a: ThreadAction) => (a === 'speak' ? !!last : a === 'copy' || a === 'note' ? worded : true);
 
   const LABEL: Record<ThreadAction, () => string> = {
-    reply: () => 'Write back',
     full: () => 'Open full screen',
     resolve: () => 'Resolve',
     copy: () => 'Copy',
@@ -33,7 +29,6 @@
     dismiss: () => 'Dismiss',
   };
   const RUN: Record<ThreadAction, () => void> = {
-    reply: () => open(thread.id),
     full: () => (threads.fullId = thread.id),
     resolve: () => onleave('resolved'),
     copy: () => void navigator.clipboard?.writeText(threadText(thread)),
@@ -54,7 +49,7 @@
 </script>
 
 <div class="popover menu" role="menu">
-  {#each actions.filter(usable) as a (a)}
+  {#each actions as a (a)}
     <button class="menu-item" role="menuitem" onclick={() => run(a)}>{LABEL[a]()}</button>
   {/each}
 </div>

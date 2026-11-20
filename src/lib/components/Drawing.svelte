@@ -18,7 +18,7 @@
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const DRAWABLE = 'path, line, polyline, polygon, rect, circle, ellipse';
   const SVG_NS = 'http://www.w3.org/2000/svg';
-  const PAD = 12;
+  const PAD = 6;
   const uid = Math.random().toString(36).slice(2, 9);
   /** The arrowheads a drawing may name, by the colour of the line they finish. */
   const HEADS: Record<string, string> = { arrow: 'var(--ink)', 'arrow-quiet': 'var(--graphite)' };
@@ -153,9 +153,9 @@
 {/if}
 
 <style>
-  .drawing { margin: 0; width: 100%; }
+  /* Sketches keep the serif lettering whichever lettering the notes use, as in Riddled. */
+  .drawing { margin: 0; width: 100%; --font-voice: var(--font-serif); }
   .drawing.margin { max-width: 320px; }
-  .drawing.large { max-width: 480px; margin-inline: auto; }
   .drawing.dialog { max-width: 640px; margin-inline: auto; }
   .canvas :global(svg) {
     display: block;
@@ -168,7 +168,7 @@
   }
   /* A paper-coloured halo behind each label, so lines fade out just before they reach the words. */
   .canvas :global(text) { paint-order: stroke; stroke: var(--paper) !important; stroke-width: 4px !important; stroke-linejoin: round; }
-  .large .canvas :global(svg) { max-width: 384px; max-height: 440px; margin-inline: auto; }
+  .large .canvas :global(svg) { max-height: 440px; }
   .canvas :global(g[data-step]) { will-change: opacity; }
   .player {
     display: flex;
@@ -199,9 +199,9 @@
   .larger {
     font-family: var(--font-sans);
     display: block;
-    margin-top: 14px;
+    margin-top: 4px;
     font-size: 12.5px;
-    line-height: 1;
+    line-height: 1.55;
     color: var(--faint);
     transition: color var(--dur-ui) var(--ease-ui);
   }

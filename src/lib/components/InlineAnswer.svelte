@@ -16,10 +16,7 @@
   const isOpen = $derived(threads.openId === id);
   const fresh = $derived(!!thread && thread.messages.some((x) => threads.freshText[x.id]));
   const thinking = $derived(threads.thinking.some((t) => t.task === 'answer' && t.target === thread?.quote));
-  const worded = $derived(!!m?.text.trim());
   const ACTIONS: ThreadAction[] = ['copy', 'speak', 'note', 'margin', 'dismiss'];
-  /** Words open the thread when pressed; a sketch on its own opens it from the menu. */
-  const actions = $derived<ThreadAction[]>(worded ? ACTIONS : ['reply', ...ACTIONS]);
   let menu = $state(false);
 </script>
 
@@ -29,19 +26,17 @@
     {#if isOpen}
       <Thread {thread} variant="inline" />
     {:else if m}
-      {#if worded || replies > 0}
-        <button class="text" onclick={() => open(id)}>
-          {#if worded}<InkText text={m.text} animate={!!threads.freshText[m.id]} />{/if}
-          {#if replies > 0}<span class="replies">{replies} {replies === 1 ? 'reply' : 'replies'}</span>{/if}
-        </button>
-      {/if}
+      <button class="text" onclick={() => open(id)}>
+        <InkText text={m.text} animate={!!threads.freshText[m.id]} />
+        {#if replies > 0}<span class="replies">{replies} {replies === 1 ? 'reply' : 'replies'}</span>{/if}
+      </button>
       <Sources sources={m.sources} />
       {#if m.drawing !== 'none'}
-        <div class="art" class:alone={!worded && replies === 0}><Drawing status={m.drawing} svg={m.svg} fresh={!!threads.freshDraw[m.id]} size="large" onLarger={() => enlarge(m.svg)} /></div>
+        <div class="art"><Drawing status={m.drawing} svg={m.svg} fresh={!!threads.freshDraw[m.id]} size="large" onLarger={() => enlarge(m.svg)} /></div>
       {/if}
       <span class="options" class:shown={menu}>
         <button class="icon" aria-label="Thread options" aria-haspopup="menu" aria-expanded={menu} onclick={(e) => { e.stopPropagation(); menu = !menu; }}><Ellipsis size={16} strokeWidth={1.6} /></button>
-        {#if menu}<ThreadMenu {thread} {actions} onclose={() => (menu = false)} />{/if}
+        {#if menu}<ThreadMenu {thread} actions={ACTIONS} onclose={() => (menu = false)} />{/if}
       </span>
     {:else if thinking}
       <Blot size={15} seed="thinking" waiting />
@@ -75,8 +70,7 @@
     transition: color var(--dur-ui) var(--ease-ui);
   }
   .answer:hover .replies { color: var(--graphite); }
-  .art { margin-top: 18px; display: flex; justify-content: center; }
-  .art.alone { margin-top: 0; }
+  .art { padding-right: 32px; }
   .options {
     position: absolute;
     top: -1px;
