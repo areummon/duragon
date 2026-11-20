@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import EditorView, { type EditorApi } from '../editor/Editor.svelte';
   import { app } from '../state/app.svelte';
   import { riddlerName } from '../state/riddler';
@@ -11,6 +12,7 @@
   import { Pencil } from 'lucide-svelte';
   import { interruptSpeech } from '../state/voice.svelte';
   import Margin from './Margin.svelte';
+  import ReadingPencil from './ReadingPencil.svelte';
   import SelectionMenu from './SelectionMenu.svelte';
   import NoteHeaderRow from './NoteHeaderRow.svelte';
   import TellCard from './TellCard.svelte';
@@ -18,17 +20,20 @@
   let api = $state.raw<EditorApi | null>(null);
   let page = $state<HTMLElement>();
   let riddle = $state.raw<Riddle | null>(null);
+  const noteId = $derived(app.note?.id);
 
   $effect(() => {
-    const id = app.note?.id;
+    const id = noteId;
     if (!id) return;
     void loadThreads(id);
     return unloadThreads;
   });
 
   $effect(() => {
-    if (!api || !page || !app.note) return;
-    const r = attachRiddle(api.editor, page, app.note.id);
+    if (!api || !page) return;
+    const id = untrack(() => noteId);
+    if (!id) return;
+    const r = attachRiddle(api.editor, page, id);
     riddle = r;
     return () => {
       r.detach();
@@ -81,19 +86,18 @@
       {:else if app.note.brief}
         <button class="brief" onclick={() => (app.tellOpen = true)} title="Edit what {riddlerName()} keeps in mind"><span class="label"><Pencil size={13} strokeWidth={1.5} />Tell {riddlerName()}</span><span class="text">{app.note.brief}</span></button>
       {/if}
-      {#key app.note.id}
-        <div class="title-gap" class:has-meta={app.tellOpen || app.note.brief}></div>
-        <EditorView
-          note={app.note}
-          onReady={(a) => (api = a)}
-          onEdit={() => { riddle?.onEdit(); interruptSpeech(); }}
-          onBlocksChanged={(t) => riddle?.onBlocksChanged(t)}
-          changeDelay={() => riddle?.delay() ?? 900}
-        />
-      {/key}
+      <div class="title-gap" class:has-meta={app.tellOpen || app.note.brief}></div>
+      <EditorView
+        note={app.note}
+        onReady={(a) => (api = a)}
+        onEdit={() => { riddle?.onEdit(); interruptSpeech(); }}
+        onBlocksChanged={(t) => riddle?.onBlocksChanged(t)}
+        changeDelay={() => riddle?.delay() ?? 900}
+      />
     {/if}
     {#if api && page}
       <Margin />
+      <ReadingPencil editor={api.editor} {page} />
       <SelectionMenu editor={api.editor} {page} />
     {/if}
   </div>
@@ -102,7 +106,7 @@
 <style>
   .stage {
     min-height: 100vh;
-    transition: transform 320ms var(--ease-step), opacity 320ms var(--ease-step);
+    transition: transform var(--dur-drawer) var(--ease-drawer), opacity var(--dur-drawer) var(--ease-drawer);
   }
   .stage.dim { opacity: 0.6; }
   .stage.shifted { transform: translateX(288px); opacity: 0.6; }

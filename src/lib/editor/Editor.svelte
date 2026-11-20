@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { untrack } from 'svelte';
   import { getBackend } from '../api/backend';
   import type { Note } from '../api/types';
   import { registerFlush } from '../state/app.svelte';
@@ -31,52 +31,53 @@
 
   const SAVE_DEBOUNCE = 600;
   let element: HTMLDivElement;
-  let timer: number | undefined;
-  let changeTimer: number | undefined;
-  let dirty = false;
-  let lastBlocks: string[] = [];
   let editor = $state.raw<TipTapEditor>();
-  // svelte-ignore state_referenced_locally
-  const noteId = note.id;
+  const noteId = $derived(note.id);
 
-  async function save() {
-    window.clearTimeout(timer);
-    timer = undefined;
-    if (!editor || !dirty) return;
-    dirty = false;
-    const doc = editor.getJSON();
-    const meta = await (await getBackend()).saveNote(noteId, docTitle(doc), doc, plainText(doc));
-    upsertMeta(meta);
+  async function persist(id: string, json: ReturnType<TipTapEditor['getJSON']>) {
+    upsertMeta(await (await getBackend()).saveNote(id, docTitle(json), json, plainText(json)));
   }
 
-  function changed(current: string[]): string[] {
-    const before = new Map<string, number>();
-    lastBlocks.forEach((t) => before.set(t, (before.get(t) ?? 0) + 1));
+  /** Blocks of `current` (title excluded) that were not in `before`, counting duplicates. */
+  function changed(before: string[], current: string[]): string[] {
+    const left = new Map<string, number>();
+    before.forEach((t) => left.set(t, (left.get(t) ?? 0) + 1));
     return current.slice(1).filter((t) => {
-      const n = before.get(t) ?? 0;
+      const n = left.get(t) ?? 0;
       if (n > 0) {
-        before.set(t, n - 1);
+        left.set(t, n - 1);
         return false;
       }
       return t.trim() !== '';
     });
   }
 
-  function flushChanges() {
-    if (!editor) return;
-    const current = blockTexts(editor.getJSON());
-    const diff = changed(current);
-    lastBlocks = current.slice(1);
-    if (diff.length) onBlocksChanged?.(diff);
-  }
+  function mount(n: Note) {
+    const id = n.id;
+    const doc = normalizeDoc(n.doc, n.title);
+    let timer: number | undefined;
+    let changeTimer: number | undefined;
+    let dirty = false;
+    let lastBlocks = blockTexts(doc).slice(1);
 
-  onMount(() => {
-    const doc = normalizeDoc(note.doc, note.title);
-    lastBlocks = blockTexts(doc).slice(1);
-    editor = createEditor({
+    const save = async () => {
+      window.clearTimeout(timer);
+      if (!dirty) return;
+      dirty = false;
+      await persist(id, ed.getJSON());
+    };
+
+    const flushChanges = () => {
+      const current = blockTexts(ed.getJSON());
+      const diff = changed(lastBlocks, current);
+      lastBlocks = current.slice(1);
+      if (diff.length) onBlocksChanged?.(diff);
+    };
+
+    const ed = createEditor({
       element,
       content: doc,
-      autofocus: focusTitle || !note.title ? 'start' : 'end',
+      autofocus: focusTitle || !n.title ? 'start' : 'end',
       onUpdate: () => {
         dirty = true;
         onEdit?.();
@@ -86,15 +87,27 @@
         changeTimer = window.setTimeout(flushChanges, changeDelay());
       },
     });
+    editor = ed;
     registerFlush(save);
-    onReady?.({ editor, findQuote: (quote) => findQuote(editor!.state.doc, quote) });
+    onReady?.({ editor: ed, findQuote: (quote) => findQuote(ed.state.doc, quote) });
+
     return () => {
-      registerFlush(null);
+      window.clearTimeout(timer);
       window.clearTimeout(changeTimer);
+      registerFlush(null);
       onReady?.(null);
-      void save();
-      editor?.destroy();
+      const last = dirty ? ed.getJSON() : null;
+      ed.destroy();
+      editor = undefined;
+      if (last) void persist(id, last);
     };
+  }
+
+  // One element for the editor's whole life, one TipTap instance per note. Unmounting a focused
+  // editor fires blur during Svelte's teardown, and TipTap's listeners then write dying state.
+  $effect(() => {
+    void noteId;
+    return untrack(() => mount(note));
   });
 </script>
 

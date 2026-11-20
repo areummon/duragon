@@ -70,6 +70,7 @@ export function sampleDrawing(): string {
 
 const hash = (s: string) => [...s].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
 const DRAW = /draw|sketch|diagram|picture|visuali[sz]e|show me/i;
+const REQUEST = /^(?:draw|sketch|explain|show|tell|describe|compare|list|summari[sz]e|visuali[sz]e|what|why|how|who|when|where|can|could|should|is|are|do|does)\b/i;
 const QUESTIONS = [
   'What makes you sure about that? Is there a case where it would not hold?',
   'Who is this for, and what would they need to already know?',
@@ -358,9 +359,15 @@ export class MockBackend implements Backend {
     return (s.length >= 12 ? s : target).slice(0, 90).trim();
   }
 
+  private answerText(topic: string) {
+    return `Here is how I would put it: ${topic.replace(/[.?!]+$/, '')} comes down to a few moving parts that depend on each other. Tell me where that does not fit what you had in mind.`;
+  }
+
+  /** Like the real read pass: questions and requests get an inline reply, other prose a margin question or nothing. */
   async aiRead(noteId: string, target: string) {
     this.think(noteId, target, 'read');
-    this.schedule(noteId, this.wait(), () => {
+    this.schedule(noteId, 1500 + Math.random() * 1500, () => {
+      if (target.endsWith('?') || REQUEST.test(target)) return this.openThread(noteId, 'reply', target, this.answerText(target), DRAW.test(target), target);
       if (hash(target) % 4 === 0) return this.emit('ai:quiet', { noteId, target });
       const q = QUESTIONS[hash(target) % QUESTIONS.length];
       this.openThread(noteId, 'question', this.firstSentence(target), q, DRAW.test(target), target);
@@ -370,7 +377,7 @@ export class MockBackend implements Backend {
     this.think(noteId, target, 'answer');
     this.schedule(noteId, this.wait(), () => {
       const topic = target.replace(/^\s*(hey\s+)?\w+\s*[,:]\s*/i, '');
-      this.openThread(noteId, 'reply', target, `Here is how I would put it: ${topic.replace(/[.?!]+$/, '')} comes down to a few moving parts that depend on each other. Tell me where that does not fit what you had in mind.`, DRAW.test(target), topic);
+      this.openThread(noteId, 'reply', target, this.answerText(topic), DRAW.test(target), topic);
     });
   }
   async aiAsk(noteId: string, target: string, question: string | null) {

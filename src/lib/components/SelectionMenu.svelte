@@ -60,11 +60,12 @@
       version++;
     };
     const onSel = () => sync();
-    editor.on('selectionUpdate', onSel);
-    editor.on('transaction', onTx);
+    const ed = editor;
+    ed.on('selectionUpdate', onSel);
+    ed.on('transaction', onTx);
     const down = (e: MouseEvent) => {
       if (menuEl?.contains(e.target as Node)) return;
-      if (editor.view.dom.contains(e.target as Node)) pointer = true;
+      if (ed.view.dom.contains(e.target as Node)) pointer = true;
       else if (sel) hide();
     };
     const up = () => {
@@ -82,8 +83,8 @@
     window.addEventListener('mouseup', up);
     window.addEventListener('keydown', key);
     return () => {
-      editor.off('selectionUpdate', onSel);
-      editor.off('transaction', onTx);
+      ed.off('selectionUpdate', onSel);
+      ed.off('transaction', onTx);
       window.removeEventListener('mousedown', down);
       window.removeEventListener('mouseup', up);
       window.removeEventListener('keydown', key);
