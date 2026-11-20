@@ -4,6 +4,12 @@
 
   let { editor }: { editor: Editor } = $props();
   const items = $derived(slashMatches(slash.query));
+
+  /** The page stage slides with a transform when chat or the sidebar opens, which would re-anchor a fixed menu. */
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return { destroy: () => node.remove() };
+  }
 </script>
 
 {#if slash.open}
@@ -11,6 +17,7 @@
     class="menu"
     role="listbox"
     aria-label="Commands"
+    use:portal
     style:left="{slash.x}px"
     style:top="{slash.y}px"
   >
