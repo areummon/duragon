@@ -255,7 +255,7 @@
   .action span:first-of-type { flex: 1; text-align: left; }
   .kbd, .count { margin-left: auto; font-size: 12px; color: var(--faint); letter-spacing: 0.02em; }
 
-  .list { flex: 1; min-height: 0; overflow-y: auto; margin-top: 27px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: none; }
+  .list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-top: 27px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: none; }
   .gap { height: 14px; flex: none; }
   .note, .folder { position: relative; padding: 0; gap: 0; }
   .note .open, .folder .open {

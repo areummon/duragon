@@ -8,11 +8,15 @@ import { TextColor } from './textcolor';
 import { SlashCommands } from './slash.svelte';
 import { NoteDocument, Title } from './title';
 
+/** Transaction meta for edits the app makes on the writer's behalf; they save but do not count as typing. */
+export const QUIET = 'duragon-quiet';
+
 export interface EditorOptions {
   element: HTMLElement;
   content: unknown;
   autofocus: 'start' | 'end' | false;
-  onUpdate: (editor: Editor) => void;
+  /** quiet: the change was made for the writer (a line opened below an answer), not by them. */
+  onUpdate: (editor: Editor, quiet: boolean) => void;
 }
 
 interface PlaceholderProps {
@@ -52,6 +56,6 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),
     ],
     editorProps: { attributes: { class: 'note-body', spellcheck: 'true', 'aria-label': 'Note' } },
-    onUpdate: ({ editor }) => onUpdate(editor),
+    onUpdate: ({ editor, transaction }) => onUpdate(editor, transaction.getMeta(QUIET) === true),
   });
 }

@@ -122,7 +122,7 @@
   .main { position: relative; flex: 1; min-width: 0; }
   .x { position: absolute; top: 24px; right: 22px; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; color: var(--graphite); }
   .x:hover { color: var(--ink); }
-  .scroll { height: 100%; overflow-y: auto; padding: 36px 52px 36px 36px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
+  .scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 36px 52px 36px 36px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
   h2 { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; }
   .page { margin-top: 20px; }
   .search {

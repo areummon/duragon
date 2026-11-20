@@ -11,6 +11,8 @@ import { collapseOnType, geometry, open, threads, visibleThreads, type Geometry 
 import { anchorKey, anchorPlugin, type AnchorInput } from './anchors';
 import { measureLines } from './pencil';
 import { current } from './current';
+import { QUIET } from './create';
+import { TextSelection } from '@tiptap/pm/state';
 
 const PACE = { regular: 900, slow: 1800 } as const;
 const MIN_TARGET = 12;
@@ -18,6 +20,10 @@ const MIN_TARGET = 12;
 const FRESH_MS = 900;
 /** Questions and requests are worth reading even when short: the read answers them inline. */
 const MIN_REQUEST = 6;
+/** An answer that arrived this recently gets a line opened below it; older ones, and answers loaded with the note, do not. */
+const JUST_ARRIVED_MS = 4000;
+/** Answers whose line has been opened, kept across re-attaching the editor so it happens once. */
+const placed = new Set<string>();
 const REQUEST = /^(?:draw|sketch|explain|show|tell|describe|compare|list|summari[sz]e|visuali[sz]e|what|why|how|who|when|where|can|could|should|is|are|do|does)\b/i;
 
 const isRequest = (line: string) => line.endsWith('?') || REQUEST.test(line);
@@ -101,6 +107,25 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     });
   }
 
+  /**
+   * An answer sits below the line that asked for it. Writing continues below the answer: a request on the last line gets
+   * an empty line after it, and a caret still resting at the end of the request moves down to that line.
+   */
+  function lineAfter(quoteEnd: number) {
+    const { state } = view;
+    const block = state.doc.resolve(quoteEnd - 1);
+    const start = block.before(1);
+    const end = block.after(1);
+    const next = state.doc.nodeAt(end);
+    const tr = state.tr;
+    if (!next) tr.insert(end, state.schema.nodes.paragraph.create());
+    const below = tr.doc.nodeAt(end);
+    const sel = state.selection;
+    const resting = sel.empty && sel.from > start && sel.from === end - 1;
+    if (resting && below?.isTextblock && below.content.size === 0) tr.setSelection(TextSelection.create(tr.doc, end + 1));
+    if (tr.docChanged || tr.selectionSet) view.dispatch(tr.setMeta('addToHistory', false).setMeta(QUIET, true));
+  }
+
   const ro = new ResizeObserver(measure);
   ro.observe(view.dom);
   ro.observe(page);
@@ -119,7 +144,16 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
       };
       void layout.vw;
       if (view.isDestroyed) return;
-      untrack(() => view.dispatch(view.state.tr.setMeta(anchorKey, input)));
+      untrack(() => {
+        view.dispatch(view.state.tr.setMeta(anchorKey, input));
+        for (const t of input.threads) {
+          const age = performance.now() - (threads.arrivedAt[t.id] ?? -Infinity);
+          if (t.kind !== 'reply' || placed.has(t.id) || age > JUST_ARRIVED_MS) continue;
+          placed.add(t.id);
+          const r = anchorKey.getState(view.state)?.ranges.get(t.id);
+          if (r) lineAfter(r.to);
+        }
+      });
       measure();
     });
   });

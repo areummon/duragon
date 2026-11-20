@@ -78,9 +78,9 @@
       element,
       content: doc,
       autofocus: focusTitle || !n.title ? 'start' : 'end',
-      onUpdate: () => {
+      onUpdate: (_, quiet) => {
         dirty = true;
-        onEdit?.();
+        if (!quiet) onEdit?.();
         window.clearTimeout(timer);
         timer = window.setTimeout(() => void save(), SAVE_DEBOUNCE);
         window.clearTimeout(changeTimer);

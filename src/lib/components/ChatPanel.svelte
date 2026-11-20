@@ -126,7 +126,7 @@
   .t:hover, .i:hover, .i[aria-pressed='true'] { color: var(--ink); }
   .i { display: grid; place-items: center; width: 28px; height: 28px; transition: color var(--dur-ui) var(--ease-ui); }
 
-  .scroll { flex: 1; overflow-y: auto; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 26px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
+  .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 26px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
   .empty { font-family: var(--font-voice); font-size: 16.5px; line-height: 1.55; color: var(--riddle); }
   .chips { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: -8px; }
   .chips button {
