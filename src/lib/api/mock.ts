@@ -76,6 +76,15 @@ const QUESTIONS = [
   'What happens at the edges here, when the input is empty or enormous?',
 ];
 const CHAT_ANSWER = `The part I would look at again is the claim that the whole process happens in one place. Reading the note as a whole, it treats two separate jobs as one.\n\nThe first job is capturing something from outside. The second is turning it into something the rest of the system can use. They happen in different places, and the note only names one of them.\n\nA good next step is to write one sentence for each job, then see whether the note still reads the same.`;
+/** Asked about a formula or code, the mock answers with every kind of rich content a reply can carry. */
+const RICH = /formula|code/i;
+const RICH_ANSWER = [
+  'The area grows with the square of the radius, $A = \\pi r^2$, so doubling $r$ quadruples it. Summed over thin rings it is',
+  '$$A = \\int_0^r 2\\pi s\\,ds = \\pi r^2$$',
+  'In code, `area(r)` is one line:',
+  '```python\nimport math\n\ndef area(r: float) -> float:\n    return math.pi * r ** 2  # square of the radius\n```',
+  'What happens to $A$ when $r$ is negative?',
+].join('\n\n');
 
 export function cellDrawing(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 210" style="fill:none;stroke-linecap:round;stroke-linejoin:round">
@@ -365,6 +374,7 @@ export class MockBackend implements Backend {
   }
 
   private answerText(topic: string) {
+    if (RICH.test(topic)) return RICH_ANSWER;
     return `Here is how I would put it: ${topic.replace(/[.?!]+$/, '')} comes down to a few moving parts that depend on each other. Tell me where that does not fit what you had in mind.`;
   }
 
@@ -374,7 +384,7 @@ export class MockBackend implements Backend {
     this.schedule(noteId, 1500 + Math.random() * 1500, () => {
       if (target.endsWith('?') || REQUEST.test(target)) return this.openThread(noteId, 'reply', target, this.answerText(target), DRAW.test(target), target);
       if (hash(target) % 4 === 0) return this.emit('ai:quiet', { noteId, target });
-      const q = QUESTIONS[hash(target) % QUESTIONS.length];
+      const q = RICH.test(target) ? RICH_ANSWER : QUESTIONS[hash(target) % QUESTIONS.length];
       this.openThread(noteId, 'question', this.firstSentence(target), q, DRAW.test(target), target);
     });
   }
@@ -407,7 +417,7 @@ export class MockBackend implements Backend {
     this.think(th.noteId, text, 'reply');
     this.schedule(threadId, this.wait(), () => {
       const draws = DRAW.test(text);
-      const m = this.msg(th.noteId, threadId, draws ? 'Let me show that as a picture. Watch the order of the steps, because the order is the point.' : 'That makes sense. What would change your mind?', draws ? 'pending' : 'none');
+      const m = this.msg(th.noteId, threadId, draws ? 'Let me show that as a picture. Watch the order of the steps, because the order is the point.' : RICH.test(text) ? RICH_ANSWER : 'That makes sense. What would change your mind?', draws ? 'pending' : 'none');
       th.messages.push(m);
       this.emit('ai:message', { ...m });
       if (draws) this.finishDrawing(threadId, m, text);
@@ -420,7 +430,7 @@ export class MockBackend implements Backend {
     this.think(noteId, text, 'chat');
     this.schedule(`${noteId}:chat`, this.wait() + 500, () => {
       const draws = DRAW.test(text);
-      const m = this.msg(noteId, null, CHAT_ANSWER, draws ? 'pending' : 'none');
+      const m = this.msg(noteId, null, RICH.test(text) ? RICH_ANSWER : CHAT_ANSWER, draws ? 'pending' : 'none');
       list.push(m);
       this.emit('ai:message', { ...m });
       if (draws) this.finishDrawing(`${noteId}:chat`, m, text);

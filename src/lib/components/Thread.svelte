@@ -179,7 +179,7 @@
         {#each thread.messages as m, i (m.id)}
           <div class="msg {m.author}">
             {#if m.author === 'you'}
-              <p>{m.text}</p>
+              <p><InkText text={m.text} /></p>
             {:else}
               <p>
                 {#if inline && i === 0}

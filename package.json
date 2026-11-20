@@ -30,6 +30,7 @@
     "@tiptap/extension-placeholder": "3.34.0",
     "@tiptap/pm": "3.34.0",
     "@tiptap/starter-kit": "3.34.0",
+    "katex": "0.16.22",
     "lowlight": "3.3.0",
     "lucide-svelte": "1.0.1"
   }

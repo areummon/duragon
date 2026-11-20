@@ -45,7 +45,6 @@
     void send(text);
   }
 
-  const paragraphs = (t: string) => t.split(/\n{2,}/).filter(Boolean);
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && open && !e.defaultPrevented && (app.chatOpen = false)} />
@@ -79,10 +78,10 @@
     {:else}
       {#each messages as m (m.id)}
         {#if m.author === 'you'}
-          <div class="you">{m.text}</div>
+          <div class="you"><InkText text={m.text} /></div>
         {:else}
           <div class="riddled">
-            {#each paragraphs(m.text) as p, i (i)}<p><InkText text={p} animate={!!chat.fresh[m.id]} /></p>{/each}
+            <InkText text={m.text} animate={!!chat.fresh[m.id]} />
             {#if m.drawing !== 'none'}
               <div class="art"><Drawing status={m.drawing} svg={m.svg} fresh={!!chat.fresh[`d${m.id}`]} size="large" onLarger={() => enlarge(m.svg)} /></div>
             {/if}
@@ -143,8 +142,7 @@
   .chips button:hover { color: var(--ink); background: var(--riddle-wash); }
 
   .you { align-self: flex-end; max-width: 85%; padding: 8px 14px; border-radius: 16px; background: var(--shelf); font-size: 14px; line-height: 1.5; }
-  .riddled { font-family: var(--font-voice); font-size: 16.5px; line-height: 1.55; color: var(--riddle); }
-  .riddled p + p { margin-top: 1.1em; }
+  .riddled { font-family: var(--font-voice); font-size: 16.5px; line-height: 1.55; color: var(--riddle); --ink-para-gap: 1.1em; }
   .art { margin-top: 18px; }
   .wait { display: flex; }
 

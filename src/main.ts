@@ -1,5 +1,6 @@
 import '@fontsource-variable/instrument-sans';
 import '@fontsource-variable/newsreader';
+import 'katex/dist/katex.min.css';
 import './styles/tokens.css';
 import './styles/motion.css';
 import './styles/base.css';

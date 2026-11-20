@@ -1,7 +1,6 @@
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import { common, createLowlight } from 'lowlight';
+import { lowlight } from '../rich';
 
-export const lowlight = createLowlight(common);
 const LANGUAGES = lowlight.listLanguages().sort();
 
 /** Code block with a language picker in its top-right corner, visible on hover or focus. */
