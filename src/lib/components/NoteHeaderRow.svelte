@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, ChevronDown, Globe, Lightbulb, MessageCircle, Pencil, Plus, Share, Volume2 } from 'lucide-svelte';
   import type { ReadingMode } from '../api/types';
-  import { app, exportNote, exportPdf, openMindEditor, updateMeta } from '../state/app.svelte';
+  import { app, exportNote, exportPdf, newMindForNote, updateMeta } from '../state/app.svelte';
   import { notes } from '../state/notes.svelte';
   import { riddlerName } from '../state/riddler';
   import { layout } from '../state/layout.svelte';
@@ -47,7 +47,7 @@
         </button>
       {/each}
       <div class="menu-sep"></div>
-      <button class="menu-item" role="menuitem" onclick={() => { close(); openMindEditor(null); }}>
+      <button class="menu-item" role="menuitem" onclick={() => { close(); newMindForNote(); }}>
         <Plus size={15} strokeWidth={1.5} />New Mind…
       </button>
     </Popover>

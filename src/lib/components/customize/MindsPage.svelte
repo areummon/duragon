@@ -9,7 +9,7 @@
 
 <div class="head">
   <p class="intro">Minds that read your notes, each with its own way of asking. Pick one for any note from the line above its title.</p>
-  <button class="new" onclick={() => (app.mindEditor = { id: null })}>New Mind</button>
+  <button class="new" onclick={() => (app.mindEditor = { id: null, assign: false })}>New Mind</button>
 </div>
 
 <div class="list">

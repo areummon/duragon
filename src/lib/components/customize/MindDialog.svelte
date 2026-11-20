@@ -57,6 +57,7 @@
   async function save() {
     if (!valid || busy) return;
     busy = true;
+    const assign = app.mindEditor?.id === null && app.mindEditor.assign;
     try {
       const saved = await saveMind({
         id: editing?.id ?? crypto.randomUUID(),
@@ -68,6 +69,7 @@
         builtin: false,
       });
       close();
+      if (assign) await updateMeta({ riddlerId: saved.id });
       showToast(`${saved.name} is ready.`);
     } finally {
       busy = false;
