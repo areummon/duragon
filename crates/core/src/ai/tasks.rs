@@ -6,7 +6,6 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use super::budget::{fit, Section, Stage};
 use super::notes_mcp::{NotesSearch, NotesTool};
@@ -251,6 +250,23 @@ impl Ai {
         }
     }
 
+    /// Runs a bookkeeping task no one waits on. It cannot be cancelled, and any failure yields `None` silently.
+    async fn background<T: DeserializeOwned>(&self, task: AiTask, settings: &Settings, payload: String) -> Option<T> {
+        let spec = task.spec();
+        let req = ClaudeRequest {
+            model: spec.model.of(settings).to_string(),
+            system_prompt: prompts::system_prompt(task, &fallback_riddler(), "", "", false),
+            schema: prompts::schema(task, false),
+            payload,
+            web: false,
+            timeout: spec.timeout,
+            cancel: None,
+            bin: self.bin.clone(),
+            notes: None,
+        };
+        serde_json::from_value(run_claude(req).await.ok()?).ok()
+    }
+
     /// Persists Riddled's message, announces it, and chains a drawing of it when asked: as in Riddled,
     /// the message shown beside a sketch is the brief it was drawn from.
     /// `announce_thread` emits `ai:thread` (new thread) instead of `ai:message`.
@@ -291,19 +307,12 @@ impl Ai {
         let note_id = &ctx.note.meta.id;
         self.thinking(note_id, &msg.text, AiTask::Draw);
         let payload = prompts::draw_payload(&ctx.note.meta.title, &blocks_of(&ctx.note), &msg.text);
-        let (payload, _) = fit(&payload, AiTask::Draw.spec().budget);
-        let result = match run_claude(self.request(ctx, AiTask::Draw, payload)).await {
-            Ok(v) => serde_json::from_value::<DrawOut>(v)
-                .map_err(|e| format!("unexpected draw output: {e}"))
-                .and_then(|o| svg::sanitize(&o.svg)),
-            Err(e) => Err(e.to_string()),
-        };
-        let updated = match result {
-            Ok(clean) => self.db.set_message_drawing(&msg.id, DrawingState::Done, Some(&clean))?,
-            Err(m) => {
-                self.error(note_id, AiTask::Draw, &m);
-                self.db.set_message_drawing(&msg.id, DrawingState::Failed, None)?
-            }
+        let clean = self.call::<DrawOut>(ctx, AiTask::Draw, payload).await.and_then(|(out, _)| {
+            svg::sanitize(&out.svg).map_err(|m| self.error(note_id, AiTask::Draw, &m)).ok()
+        });
+        let updated = match clean {
+            Some(svg) => self.db.set_message_drawing(&msg.id, DrawingState::Done, Some(&svg))?,
+            None => self.db.set_message_drawing(&msg.id, DrawingState::Failed, None)?,
         };
         self.emit("ai:message", &updated);
         Ok(())
@@ -455,19 +464,10 @@ impl Ai {
         }
         let fold = &pending[..SUMMARIZE_FOLD];
         let ctx = self.ctx(note_id)?;
-        let req = ClaudeRequest {
-            model: ctx.settings.read_model.clone(),
-            system_prompt: prompts::system_prompt(AiTask::Summarize, &ctx.riddler, "", "", false),
-            schema: prompts::schema(AiTask::Summarize, false),
-            payload: prompts::summarize_payload(&prev.text, fold, &ctx.riddler.name),
-            web: false,
-            timeout: Duration::from_secs(120),
-            cancel: None,
-            bin: self.bin.clone(),
-            notes: None,
+        let payload = prompts::summarize_payload(&prev.text, fold, &ctx.riddler.name);
+        let Some(out) = self.background::<SummaryOut>(AiTask::Summarize, &ctx.settings, payload).await else {
+            return Ok(false);
         };
-        let Ok(v) = run_claude(req).await else { return Ok(false) };
-        let Ok(out) = serde_json::from_value::<SummaryOut>(v) else { return Ok(false) };
         let text: String = out.summary.trim().chars().take(SUMMARY_MAX_CHARS).collect();
         if text.is_empty() {
             return Ok(false);
@@ -498,19 +498,10 @@ impl Ai {
         if !settings.learn_about_you {
             return Ok(());
         }
-        let req = ClaudeRequest {
-            model: settings.read_model.clone(),
-            system_prompt: prompts::system_prompt(AiTask::Learn, &fallback_riddler(), "", "", false),
-            schema: prompts::schema(AiTask::Learn, false),
-            payload: prompts::learn_payload(&settings.about_you, latest),
-            web: false,
-            timeout: Duration::from_secs(120),
-            cancel: None,
-            bin: self.bin.clone(),
-            notes: None,
+        let payload = prompts::learn_payload(&settings.about_you, latest);
+        let Some(out) = self.background::<LearnOut>(AiTask::Learn, &settings, payload).await else {
+            return Ok(());
         };
-        let Ok(v) = run_claude(req).await else { return Ok(()) };
-        let Ok(out) = serde_json::from_value::<LearnOut>(v) else { return Ok(()) };
         let Some(about) = out.about_you.filter(|a| out.changed && !a.trim().is_empty()) else {
             return Ok(());
         };
