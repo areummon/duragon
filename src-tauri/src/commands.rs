@@ -109,7 +109,7 @@ pub async fn list_chat(state: State<'_, AppState>, note_id: String) -> Res<Vec<M
 
 #[tauri::command]
 pub async fn clear_chat(state: State<'_, AppState>, note_id: String) -> Res<()> {
-    s(state.db.clear_chat(&note_id))
+    s(state.ai.clear_chat(&note_id))
 }
 
 #[tauri::command]
@@ -118,8 +118,8 @@ pub async fn get_chat_summary(state: State<'_, AppState>, note_id: String) -> Re
 }
 
 #[tauri::command]
-pub async fn save_chat_summary(state: State<'_, AppState>, note_id: String, text: String) -> Res<()> {
-    s(state.db.set_chat_summary_text(&note_id, &text))
+pub async fn save_chat_summary(state: State<'_, AppState>, note_id: String, base: String, text: String) -> Res<bool> {
+    s(state.db.edit_chat_summary(&note_id, &base, &text))
 }
 
 #[tauri::command]
@@ -201,7 +201,7 @@ pub async fn ai_visualize(state: State<'_, AppState>, note_id: String, target: S
 
 #[tauri::command]
 pub fn ai_cancel_read(note_id: String) {
-    duragon_core::ai::cancel_read(&note_id);
+    duragon_core::ai::cancel(&note_id, AiTask::Read);
 }
 
 #[tauri::command]

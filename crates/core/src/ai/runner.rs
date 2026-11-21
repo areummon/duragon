@@ -59,9 +59,9 @@ pub struct ClaudeRequest {
 static REGISTRY: LazyLock<Mutex<HashMap<CancelKey, Arc<Notify>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// Kills the in-flight read for a note, if any.
-pub fn cancel_read(note_id: &str) {
-    let key = CancelKey { note_id: note_id.to_string(), task: AiTask::Read };
+/// Kills the note's in-flight call for `task`, if any.
+pub fn cancel(note_id: &str, task: AiTask) {
+    let key = CancelKey { note_id: note_id.to_string(), task };
     let token = REGISTRY.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
     if let Some(t) = token {
         t.notify_one();

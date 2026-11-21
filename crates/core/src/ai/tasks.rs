@@ -8,10 +8,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use super::budget::{budget_tokens, fit, Section};
+use super::budget::{budget_tokens, fit, Section, Stage};
 use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
-use super::runner::{run_claude, AiError, CancelKey, ClaudeRequest};
+use super::runner::{cancel, run_claude, AiError, CancelKey, ClaudeRequest};
 use super::svg;
 use crate::db::Db;
 use crate::model::*;
@@ -86,8 +86,6 @@ const ABOUT_YOU_MAX: usize = 700;
 /// The chat summary folds `SUMMARIZE_FOLD` messages at a time once more than `SUMMARIZE_AFTER` are unsummarized.
 pub const SUMMARIZE_AFTER: usize = 16;
 pub const SUMMARIZE_FOLD: usize = 8;
-/// A hard stop past the prompt's ~180 words, since the summary is never cut from the chat payload.
-const SUMMARY_MAX: usize = 2_000;
 
 #[derive(Deserialize)]
 struct SummaryOut {
@@ -234,11 +232,12 @@ impl Ai {
         }
     }
 
-    /// Runs one task on its payload cut to the task's budget, and says whether it was cut.
+    /// Runs one task on its payload cut to the task's budget, and says whether the note itself was cut.
     /// Emits `ai:error` and returns `None` on failure; cancellation is silent.
     async fn call<T: DeserializeOwned>(&self, ctx: &Ctx, task: AiTask, payload: Vec<Section>) -> Option<(T, bool)> {
         let note_id = &ctx.note.meta.id;
-        let (payload, trimmed) = fit(&payload, budget_tokens(task));
+        let (payload, cut) = fit(&payload, budget_tokens(task));
+        let trimmed = cut.contains(&Stage::DistantNote);
         let out = match run_claude(self.request(ctx, task, payload)).await {
             Ok(v) => v,
             Err(AiError::Cancelled) => return None,
@@ -433,6 +432,12 @@ impl Ai {
         Ok(())
     }
 
+    /// Deletes the side chat, cancelling a reply still on its way so it never lands in the cleared chat.
+    pub fn clear_chat(&self, note_id: &str) -> Result<()> {
+        cancel(note_id, AiTask::Chat);
+        self.db.clear_chat(note_id)
+    }
+
     fn spawn_summarize(&self, note_id: &str) {
         let ai = self.clone();
         let note_id = note_id.to_string();
@@ -467,7 +472,7 @@ impl Ai {
         };
         let Ok(v) = run_claude(req).await else { return Ok(false) };
         let Ok(out) = serde_json::from_value::<SummaryOut>(v) else { return Ok(false) };
-        let text: String = out.summary.trim().chars().take(SUMMARY_MAX).collect();
+        let text: String = out.summary.trim().chars().take(SUMMARY_MAX_CHARS).collect();
         if text.is_empty() {
             return Ok(false);
         }

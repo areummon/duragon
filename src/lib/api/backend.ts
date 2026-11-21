@@ -26,10 +26,12 @@ export interface Backend {
   setThreadKind(id: string, kind: ThreadKind): Promise<void>;
   threadToNote(id: string): Promise<Note>;
   listChat(noteId: string): Promise<Message[]>;
-  /** What the side chat remembers of its older messages, '' until it has folded any. */
+  /** Deletes the side chat and its summary, cancelling a reply still on its way. */
   clearChat(noteId: string): Promise<void>;
+  /** What the side chat remembers of its older messages, '' until it has folded any. */
   getChatSummary(noteId: string): Promise<string>;
-  saveChatSummary(noteId: string, text: string): Promise<void>;
+  /** Saves the writer's edit of `base`, the summary they last saw; false when it has changed since. */
+  saveChatSummary(noteId: string, base: string, text: string): Promise<boolean>;
 
   getSettings(): Promise<Settings>;
   saveSettings(settings: Settings): Promise<void>;

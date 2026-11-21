@@ -108,6 +108,10 @@ pub struct Message {
 }
 
 /// What the side chat remembers of its messages up to and including `through`, which are no longer sent verbatim.
+/// A hard stop past the prompt's ~180 words, for folded and edited summaries alike, since the summary is never cut
+/// from the chat payload.
+pub const SUMMARY_MAX_CHARS: usize = 2_000;
+
 /// Saved as one row, so the text and its watermark never disagree.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

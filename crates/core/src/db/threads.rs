@@ -207,11 +207,17 @@ impl Db {
         Ok(())
     }
 
-    /// The writer's own edit: the text changes, the watermark stays.
-    pub fn set_chat_summary_text(&self, note_id: &str, text: &str) -> Result<()> {
+    /// The writer's own edit of the summary they last saw, `base`: the text changes, the watermark stays. False when
+    /// the summary moved on since, so a stale draft never overwrites a fold.
+    pub fn edit_chat_summary(&self, note_id: &str, base: &str, text: &str) -> Result<bool> {
         let conn = self.conn();
-        let through = read_summary(&conn, note_id)?.through;
-        write_summary(&conn, note_id, &ChatSummary { text: text.into(), through })
+        let prev = read_summary(&conn, note_id)?;
+        if prev.text != base {
+            return Ok(false);
+        }
+        let text = text.chars().take(SUMMARY_MAX_CHARS).collect();
+        write_summary(&conn, note_id, &ChatSummary { text, through: prev.through })?;
+        Ok(true)
     }
 
     pub fn set_thread_status(&self, id: &str, status: ThreadStatus) -> Result<()> {

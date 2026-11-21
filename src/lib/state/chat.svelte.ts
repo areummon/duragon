@@ -62,9 +62,11 @@ export async function send(text: string) {
   await (await getBackend()).aiChat(chat.noteId, t, caretParagraph());
 }
 
-export async function saveSummary(noteId: string, text: string) {
-  if (chat.noteId === noteId) chat.summary = text;
-  await (await getBackend()).saveChatSummary(noteId, text);
+/** Saves the writer's edit of `base`. False when the summary moved on since; `chat.summary` then holds the new one. */
+export async function saveSummary(noteId: string, base: string, text: string) {
+  const saved = await (await getBackend()).saveChatSummary(noteId, base, text);
+  if (saved && chat.noteId === noteId) chat.summary = text;
+  return saved;
 }
 
 export async function clearChat() {
@@ -73,6 +75,7 @@ export async function clearChat() {
   chat.messages = [];
   chat.summary = '';
   chat.fresh = {};
+  chat.waiting = false;
   await (await getBackend()).clearChat(noteId);
 }
 

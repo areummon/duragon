@@ -1,6 +1,6 @@
 mod common;
 use common::fixture;
-use duragon_core::ai::{cancel_read, run_claude, AiError, CancelKey, ClaudeRequest};
+use duragon_core::ai::{cancel, run_claude, AiError, CancelKey, ClaudeRequest};
 use duragon_core::model::AiTask;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
@@ -62,7 +62,7 @@ async fn cancel_kills_the_child_promptly() {
     let started = Instant::now();
     let handle = tokio::spawn(run_claude(r));
     tokio::time::sleep(Duration::from_millis(300)).await;
-    cancel_read("cancel-note");
+    cancel("cancel-note", AiTask::Read);
     let res = handle.await.unwrap();
     assert!(matches!(res, Err(AiError::Cancelled)));
     assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());

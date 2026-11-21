@@ -1,27 +1,45 @@
 <script lang="ts">
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import { SUMMARY_MAX_CHARS } from '../api/limits';
   import { chat, saveSummary } from '../state/chat.svelte';
 
   let open = $state(false);
   let focused = $state(false);
   let draft = $state(chat.summary);
+  /** The stored summary the draft is an edit of. A fold that lands meanwhile makes the save fail instead of being lost. */
+  let base = chat.summary;
   let timer = 0;
+  let saving = Promise.resolve();
 
   $effect(() => {
     const s = chat.summary;
     if (!focused) draft = s;
   });
+  $effect(() => () => window.clearTimeout(timer));
 
+  const focus = () => {
+    focused = true;
+    base = chat.summary;
+  };
+  /** Saves run one at a time, so each is based on the text the one before it stored. */
+  const save = () => {
+    const noteId = chat.noteId;
+    const text = draft;
+    saving = saving.then(async () => {
+      if (!noteId || text === base) return;
+      if (await saveSummary(noteId, base, text)) base = text;
+      else draft = base = chat.summary;
+    });
+  };
   function input(e: Event) {
     draft = (e.currentTarget as HTMLTextAreaElement).value;
-    const noteId = chat.noteId;
     window.clearTimeout(timer);
-    if (noteId) timer = window.setTimeout(() => void saveSummary(noteId, draft), 300);
+    timer = window.setTimeout(save, 300);
   }
   const commit = () => {
     focused = false;
     window.clearTimeout(timer);
-    if (chat.noteId && draft !== chat.summary) void saveSummary(chat.noteId, draft);
+    save();
   };
 </script>
 
@@ -35,7 +53,8 @@
       <textarea
         value={draft}
         oninput={input}
-        onfocus={() => (focused = true)}
+        onfocus={focus}
+        maxlength={SUMMARY_MAX_CHARS}
         onblur={commit}
         rows="6"
         aria-label="Earlier in this chat"

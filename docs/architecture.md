@@ -57,7 +57,7 @@ interface Thread { id; noteId; kind: ThreadKind; quote: string; status: ThreadSt
 type DrawingState = 'none' | 'pending' | 'done' | 'failed';
 interface Message { id; noteId; threadId: string | null; author: 'you' | 'riddled'; text: string; drawing: DrawingState; svg: string | null;
   sources: Source[]; symbols: MathSymbol[]; trimmed: boolean; createdAt }
-// trimmed: the payload behind this message was cut to its budget (see "Payload budget")
+// trimmed: the note itself was cut to fit the payload budget (see "Payload budget"); cutting old chat messages or closed threads does not count
 // chat panel messages are Message rows with threadId = null and a noteId
 
 interface Riddler { id; name; description; howItThinks; tone: Tone; frequency: Frequency; builtin: boolean }
@@ -99,7 +99,7 @@ threads(id TEXT PK, note_id TEXT REFERENCES notes ON DELETE CASCADE, kind TEXT, 
 messages(id TEXT PK, note_id TEXT, thread_id TEXT NULL REFERENCES threads ON DELETE CASCADE, author TEXT,
          text TEXT, drawing TEXT, svg TEXT NULL, sources TEXT DEFAULT '[]', symbols TEXT DEFAULT '[]', trimmed INT DEFAULT 0, created_at INT)
          -- sources: [{url, title}] the Mind used on the web; symbols: [{tex, meaning}] for its formulas;
-         -- trimmed: 1 when the payload was cut to its budget
+         -- trimmed: 1 when the note itself was cut to fit the payload budget
 riddlers(id TEXT PK, name, description, how_it_thinks, tone, frequency, builtin INT)
 chat_summaries(note_id TEXT PK REFERENCES notes ON DELETE CASCADE, chat_summary TEXT DEFAULT '',
                chat_summarized_through TEXT NULL)   -- the side chat's summary and the id of the last message it covers
@@ -127,8 +127,8 @@ set_thread_status(id, status) / set_thread_pinned(id, pinned)
 thread_to_note(id) -> Note                    "Make a note"
 list_chat(noteId) -> Message[]
 get_chat_summary(noteId) -> string            '' until the chat has folded any messages
-save_chat_summary(noteId, text)               the writer's edit; the watermark stays
-clear_chat(noteId)                            deletes the side chat and its summary
+save_chat_summary(noteId, base, text) -> bool  the writer's edit of `base`; false when the summary moved on; the watermark stays
+clear_chat(noteId)                            cancels an in-flight chat reply, deletes the side chat and its summary
 
 get_settings() -> Settings / save_settings(Settings)
 list_riddlers() / save_riddler(Riddler) / delete_riddler(id)
@@ -206,7 +206,7 @@ A long side chat keeps a rolling summary per note (`chat_summaries`, model `Chat
 
 After a chat reply is delivered, never before, a background task (`Ai::summarize`, on the read model, like learn) checks the messages after the watermark. When there are more than 16 (`SUMMARIZE_AFTER`), it sends the summary so far and the oldest 8 (`SUMMARIZE_FOLD`) to the `summarize` task (`SUMMARIZE` prompt: at most about 180 words of plain text keeping decisions, conclusions, open questions and what the writer said they want). It saves the new text and the watermark (the 8th message's id) in one row, and only if the stored summary is still the one it read (`Db::fold_chat_summary`), so a run that races an edit or another run saves nothing. Then it emits `chat:summary`. One run per note at a time: a per-note claim in `Ai::summarizing`, released on drop. A failed run saves nothing and stays silent, so the next delivered reply retries.
 
-When a summary exists, the side chat shows a collapsed "Earlier in this chat" row at the top (`EarlierInChat.svelte`). Expanded, it is an editable textarea that saves 300 ms after typing stops and on blur (`save_chat_summary`, which keeps the watermark), and follows `chat:summary` while it is not focused. The panel's Clear calls `clear_chat`, which deletes the side chat's messages and its summary in one transaction; margin threads stay. A summary still running when the chat is cleared saves nothing, because the message its watermark points to is gone.
+When a summary exists, the side chat shows a collapsed "Earlier in this chat" row at the top (`EarlierInChat.svelte`). Expanded, it is an editable textarea that saves 300 ms after typing stops and on blur (`save_chat_summary`, which keeps the watermark and caps the text at 2,000 chars like a fold). Each save names the summary it edits, so a fold that lands while the box has focus refuses the stale draft instead of being overwritten, and the box then shows the fold. It follows `chat:summary` while it is not focused. The panel's Clear calls `clear_chat`, which cancels a chat reply still on its way (`Ai::clear_chat`) and deletes the side chat's messages and its summary in one transaction; margin threads stay. A summary still running when the chat is cleared saves nothing, because the message its watermark points to is gone.
 
 The read task never fires twice for the same unchanged target, and never when an open thread already quotes inside the target.
 

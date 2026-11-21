@@ -1,5 +1,6 @@
 import type { Backend, Unsubscribe } from './backend';
 import { BUILTIN_RIDDLER } from './presets';
+import { CHAT_BUDGET, SUMMARIZE_AFTER, SUMMARIZE_FOLD, SUMMARY_MAX_CHARS, TASK_BUDGET } from './limits';
 import {
   BUILTIN_RIDDLER_ID,
   type AiTask, type BackendEvents, type MathSymbol, type ExportFormat, type Folder, type Message,
@@ -123,10 +124,6 @@ function drawingFor(topic: string): string {
 }
 
 const now = () => Date.now();
-
-/** As in budget.rs: tokens are chars / 4, and a note past its task's budget is read around the target or cursor. */
-const TASK_BUDGET = 30_000;
-const CHAT_BUDGET = 80_000;
 
 const SOURCES = [
   { url: 'https://en.wikipedia.org/wiki/Photosynthesis', title: 'Photosynthesis, Wikipedia' },
@@ -339,23 +336,27 @@ export class MockBackend implements Backend {
     return structuredClone(this.chat.get(noteId) ?? []);
   }
   async clearChat(noteId: string) {
+    this.cancel(`${noteId}:chat`);
     this.chat.delete(noteId);
     this.summaries.delete(noteId);
   }
   async getChatSummary(noteId: string) {
     return this.summaries.get(noteId)?.text ?? '';
   }
-  async saveChatSummary(noteId: string, text: string) {
-    this.summaries.set(noteId, { text, through: this.summaries.get(noteId)?.through ?? null });
+  async saveChatSummary(noteId: string, base: string, text: string) {
+    const prev = this.summaries.get(noteId) ?? { text: '', through: null };
+    if (prev.text !== base) return false;
+    this.summaries.set(noteId, { text: text.slice(0, SUMMARY_MAX_CHARS), through: prev.through });
+    return true;
   }
 
-  /** Like Ai::summarize: past 16 unsummarized messages, the oldest 8 fold into the summary. */
+  /** Like Ai::summarize. */
   private foldChat(noteId: string) {
     const list = this.chat.get(noteId) ?? [];
     const prev = this.summaries.get(noteId) ?? { text: '', through: null };
     const pending = list.slice(list.findIndex((m) => m.id === prev.through) + 1);
-    if (pending.length <= 16) return;
-    const fold = pending.slice(0, 8);
+    if (pending.length <= SUMMARIZE_AFTER) return;
+    const fold = pending.slice(0, SUMMARIZE_FOLD);
     const asked = fold.filter((m) => m.author === 'you').map((m) => `“${m.text}”`).join(', ');
     const text = `${prev.text ? `${prev.text} ` : ''}The writer asked ${asked}, and the replies pointed at the claim that the whole process happens in one place.`;
     this.summaries.set(noteId, { text, through: fold[fold.length - 1].id });
@@ -489,8 +490,11 @@ export class MockBackend implements Backend {
     });
   }
   async aiCancelRead(noteId: string) {
-    this.timers.get(noteId)?.forEach(clearTimeout);
-    this.timers.delete(noteId);
+    this.cancel(noteId);
+  }
+  private cancel(key: string) {
+    this.timers.get(key)?.forEach(clearTimeout);
+    this.timers.delete(key);
   }
 
   private voice: VoiceStatus = { stt: 'missing', tts: 'missing', progress: 0, error: null, listening: false };

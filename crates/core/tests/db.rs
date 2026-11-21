@@ -341,7 +341,7 @@ fn chat_summary_edits_persist_and_keep_the_watermark() {
     let folded = ChatSummary { text: "Said hi.".into(), through: Some(m.id.clone()) };
     assert!(db.fold_chat_summary(&note, &ChatSummary::default(), &folded).unwrap());
     assert!(!db.fold_chat_summary(&note, &ChatSummary::default(), &folded).unwrap(), "only from the state it read");
-    db.set_chat_summary_text(&note, "Greeted me.").unwrap();
+    assert!(db.edit_chat_summary(&note, "Said hi.", "Greeted me.").unwrap());
     drop(db);
 
     let db = Db::open(&path).unwrap();
@@ -365,6 +365,6 @@ fn an_older_database_gains_chat_summaries() {
 
     let db = Db::open(&path).unwrap();
     assert_eq!(db.get_chat_summary(&note).unwrap(), ChatSummary::default());
-    db.set_chat_summary_text(&note, "Kept.").unwrap();
+    assert!(db.edit_chat_summary(&note, "", "Kept.").unwrap());
     assert_eq!(db.get_chat_summary(&note).unwrap().text, "Kept.");
 }

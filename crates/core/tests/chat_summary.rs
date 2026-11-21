@@ -123,7 +123,7 @@ async fn a_summary_never_overwrites_an_edit_made_while_it_ran() {
     let note = fx.note.clone();
     let run = tokio::spawn(async move { ai.summarize(&note).await.unwrap() });
     tokio::time::sleep(Duration::from_millis(100)).await;
-    fx.ai.db.set_chat_summary_text(&fx.note, "My own words.").unwrap();
+    assert!(fx.ai.db.edit_chat_summary(&fx.note, "", "My own words.").unwrap());
     assert!(!run.await.unwrap());
     assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap(), ChatSummary { text: "My own words.".into(), through: None });
 }
@@ -180,4 +180,55 @@ async fn a_summary_running_when_the_chat_is_cleared_saves_nothing() {
     fx.ai.db.clear_chat(&fx.note).unwrap();
     assert!(!run.await.unwrap());
     assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap(), ChatSummary::default());
+}
+
+#[tokio::test]
+async fn an_edit_based_on_a_summary_that_has_since_folded_is_refused() {
+    let fx = setup();
+    let chat = seed_chat(&fx, 20);
+    let folded = ChatSummary { text: "Folded through eight.".into(), through: Some(chat[7].id.clone()) };
+    assert!(fx.ai.db.fold_chat_summary(&fx.note, &ChatSummary::default(), &folded).unwrap());
+
+    assert!(!fx.ai.db.edit_chat_summary(&fx.note, "", "A draft from before the fold.").unwrap());
+    assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap(), folded, "the fold is kept");
+
+    assert!(fx.ai.db.edit_chat_summary(&fx.note, "Folded through eight.", "My edit.").unwrap());
+    assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap(), ChatSummary { text: "My edit.".into(), through: folded.through });
+}
+
+#[tokio::test]
+async fn an_edited_summary_is_capped_like_a_folded_one() {
+    let fx = setup();
+    let long = "x".repeat(SUMMARY_MAX_CHARS + 500);
+    assert!(fx.ai.db.edit_chat_summary(&fx.note, "", &long).unwrap());
+    assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap().text.chars().count(), SUMMARY_MAX_CHARS);
+}
+
+#[tokio::test]
+async fn a_long_chat_on_a_short_note_is_not_marked_as_a_trimmed_note() {
+    use duragon_core::ai::budget::CHAT_BUDGET;
+    let mut fx = setup();
+    let long = "word ".repeat(4_000);
+    for i in 0..(CHAT_BUDGET * 4 / long.len() + 4) {
+        let author = if i % 2 == 0 { Author::You } else { Author::Riddled };
+        fx.ai.db.add_message(&fx.note, None, author, &long, DrawingState::None).unwrap();
+    }
+    fx.ai.bin = Some(claude(fx.dir.path(), &json!({"message":"Sure."}), "0"));
+    fx.ai.chat(&fx.note, "And now?", "").await.unwrap();
+    let (_, m) = fx.cap.all().into_iter().find(|(n, _)| n == "ai:message").expect("replied");
+    assert_eq!(m["trimmed"], false, "only old messages were cut, not the note");
+}
+
+#[tokio::test]
+async fn clearing_the_chat_cancels_the_reply_on_its_way() {
+    let mut fx = setup();
+    fx.ai.bin = Some(claude(fx.dir.path(), &json!({"message":"An answer to a cleared question."}), "1"));
+    let ai = fx.ai.clone();
+    let note = fx.note.clone();
+    let run = tokio::spawn(async move { ai.chat(&note, "A question I then clear", "").await });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    fx.ai.clear_chat(&fx.note).unwrap();
+    tokio::time::timeout(Duration::from_millis(700), run).await.expect("cancelled, not waited out").unwrap().unwrap();
+    assert!(fx.ai.db.list_chat(&fx.note).unwrap().is_empty(), "nothing comes back");
+    assert!(!fx.cap.names().contains(&"ai:message".to_string()), "{:?}", fx.cap.names());
 }

@@ -26,8 +26,8 @@ fn thread(id: &str, quote: &str, status: ThreadStatus, texts: &[&str]) -> Thread
 }
 
 fn whole(sections: &[Section]) -> String {
-    let (text, trimmed) = fit(sections, usize::MAX / 8);
-    assert!(!trimmed);
+    let (text, cut) = fit(sections, usize::MAX / 8);
+    assert!(cut.is_empty());
     text
 }
 
@@ -63,9 +63,9 @@ fn under_budget_payloads_are_byte_identical_to_before() {
         ("visualize", visualize_payload("Plants", &blocks, "Second para.")),
     ];
     for (name, sections) in cases {
-        let (text, trimmed) = fit(&sections, 30_000);
+        let (text, cut) = fit(&sections, 30_000);
         assert_eq!(text, golden(name), "{name}");
-        assert!(!trimmed, "{name}");
+        assert!(cut.is_empty(), "{name}");
     }
 }
 
@@ -111,15 +111,15 @@ fn chat_sections() -> Vec<Section> {
 }
 
 /// The cut text at the budget `full - shave` tokens.
-fn cut(shave: usize) -> (String, bool) {
+fn cut(shave: usize) -> (String, std::collections::BTreeSet<Stage>) {
     let sections = chat_sections();
     fit(&sections, tokens(&whole(&sections)) - shave)
 }
 
 #[test]
 fn old_chat_messages_go_first_oldest_first() {
-    let (text, trimmed) = cut(200);
-    assert!(trimmed);
+    let (text, stages) = cut(200);
+    assert_eq!(stages.into_iter().collect::<Vec<_>>(), vec![Stage::OldMessages]);
     assert!(!text.contains("m0w0 "), "oldest message dropped");
     assert!(text.contains("m19w0 "), "newest older message kept");
     assert!(text.contains("[… "), "{text}");
@@ -148,8 +148,8 @@ fn closed_threads_shrink_then_go_before_the_note() {
 #[test]
 fn distant_note_goes_last_keeping_the_cursor_the_headings_and_counting_words() {
     let sections = chat_sections();
-    let (text, trimmed) = fit(&sections, 2_500);
-    assert!(trimmed);
+    let (text, cut) = fit(&sections, 2_500);
+    assert!(!cut.is_empty());
     assert!(tokens(&text) <= 2_500, "{}", tokens(&text));
     assert!(text.contains(&para(50, "p25w")), "cursor paragraph kept");
     assert!(text.contains("p24w0 ") && text.contains("p26w0 "), "its neighbours kept");
@@ -163,8 +163,8 @@ fn distant_note_goes_last_keeping_the_cursor_the_headings_and_counting_words() {
 
 #[test]
 fn never_cut_sections_survive_any_budget() {
-    let (text, trimmed) = fit(&chat_sections(), 1);
-    assert!(trimmed);
+    let (text, cut) = fit(&chat_sections(), 1);
+    assert!(!cut.is_empty());
     assert!(text.contains(&para(50, "p25w")));
     assert!(text.contains("THREADS IN THE NOTE:\n"));
     assert!(text.contains("[open] Thread on \"open quote\":\n  Duragon: open last\n"), "open threads only shrink");
@@ -176,8 +176,8 @@ fn a_single_huge_paragraph_shrinks_around_the_target() {
     let text = para(20_000, "w");
     let target = "w12000 w12001 w12002";
     let blocks = vec![Block { text: "Huge".into(), heading: true }, Block { text: text.clone(), heading: false }];
-    let (out, trimmed) = fit(&read_payload("Huge", &blocks, target, &[], "Duragon"), 2_000);
-    assert!(trimmed);
+    let (out, cut) = fit(&read_payload("Huge", &blocks, target, &[], "Duragon"), 2_000);
+    assert!(!cut.is_empty());
     assert!(tokens(&out) <= 2_000);
     assert!(out.contains("w11990 w11991") && out.contains(target));
     assert!(out.ends_with(&format!("TARGET (the passage just written):\n{target}\n")));
@@ -195,8 +195,9 @@ fn fit_cuts_by_step_order_and_merges_markers() {
         Section::keep("tail\n"),
     ];
     let full = format!("head\n{a}{b}{m}tail\n");
-    assert_eq!(fit(&s, tokens(&full)), (full.clone(), false));
-    let (one, _) = fit(&s, tokens(&full) - 1);
+    assert_eq!(fit(&s, tokens(&full)), (full.clone(), Default::default()));
+    let (one, cut) = fit(&s, tokens(&full) - 1);
+    assert_eq!(cut.into_iter().collect::<Vec<_>>(), vec![Stage::OldMessages], "only what gave way");
     assert_eq!(one, format!("head\n{a}{b}[… 1 earlier message omitted …]\ntail\n"));
     let (all, _) = fit(&s, 1);
     assert_eq!(all, "head\n[… 120 words omitted …]\n[… 1 earlier message omitted …]\ntail\n");

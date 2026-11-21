@@ -1,5 +1,7 @@
 //! Per-call context budget. A payload is a list of sections, each saying when it may give way;
 //! `fit` cuts them in that order until the text fits.
+use std::collections::BTreeSet;
+
 use crate::model::AiTask;
 
 /// Tunable. Payload only: the system prompt is not counted.
@@ -73,9 +75,9 @@ enum Cut {
 /// Room counted for each omission marker, more than any marker takes.
 const MARKER_CHARS: usize = 48;
 
-/// The sections' text cut to `budget_tokens`, and whether anything was cut. Under budget it is the plain concatenation.
+/// The sections' text cut to `budget_tokens`, and the stages that gave way. Under budget it is the plain concatenation.
 /// Sections that are never cut stay even when they alone are over budget.
-pub fn fit(sections: &[Section], budget_tokens: usize) -> (String, bool) {
+pub fn fit(sections: &[Section], budget_tokens: usize) -> (String, BTreeSet<Stage>) {
     let limit = budget_tokens.saturating_mul(4);
     let len = |i: usize, cut: Cut| match cut {
         Cut::Whole => sections[i].text.chars().count(),
@@ -95,8 +97,8 @@ pub fn fit(sections: &[Section], budget_tokens: usize) -> (String, bool) {
     }
     steps.sort_by_key(|(at, i, _)| (*at, *i));
     let unit = |i: usize| sections[i].drop.map(|(_, u)| u);
-    let mut trimmed = false;
-    for (_, i, cut) in steps {
+    let mut cut_stages = BTreeSet::new();
+    for (Step(stage, _), i, cut) in steps {
         if total <= limit {
             break;
         }
@@ -118,9 +120,9 @@ pub fn fit(sections: &[Section], budget_tokens: usize) -> (String, bool) {
             }
             _ => continue,
         }
-        trimmed = true;
+        cut_stages.insert(stage);
     }
-    (render(sections, &cuts), trimmed)
+    (render(sections, &cuts), cut_stages)
 }
 
 fn render(sections: &[Section], cuts: &[Cut]) -> String {
