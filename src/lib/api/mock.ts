@@ -2,7 +2,7 @@ import type { Backend, Unsubscribe } from './backend';
 import { BUILTIN_RIDDLER } from './presets';
 import {
   BUILTIN_RIDDLER_ID,
-  type AiTask, type BackendEvents, type ExportFormat, type Folder, type Message,
+  type AiTask, type BackendEvents, type MathSymbol, type ExportFormat, type Folder, type Message,
   type Note, type NoteMeta, type NoteMetaPatch, type Riddler, type Settings,
   type Thread, type ThreadKind, type ThreadStatus, type VoiceOption, type VoiceStatus,
 } from './types';
@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS: Settings = {
   aboutYou: '',
   learnAboutYou: true,
   searchMyNotes: false,
+  explainSymbols: false,
   readModel: 'sonnet',
   chatModel: 'sonnet',
   drawModel: 'opus',
@@ -86,6 +87,12 @@ const RICH_ANSWER = [
   '```python\nimport math\n\ndef area(r: float) -> float:\n    return math.pi * r ** 2  # square of the radius\n```',
   'What happens to $A$ when $r$ is negative?',
 ].join('\n\n');
+const RICH_SYMBOLS: MathSymbol[] = [
+  { tex: 'A', meaning: 'area of the circle' },
+  { tex: '\\pi', meaning: 'circumference over diameter, about 3.14' },
+  { tex: 'r', meaning: 'radius of the circle' },
+  { tex: 's', meaning: 'radius of one thin ring' },
+];
 
 export function cellDrawing(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 210" style="fill:none;stroke-linecap:round;stroke-linejoin:round">
@@ -202,6 +209,7 @@ export class MockBackend implements Backend {
           drawing: 'none',
           svg: null,
           sources: [],
+          symbols: [],
           createdAt: t,
         },
       ],
@@ -349,7 +357,8 @@ export class MockBackend implements Backend {
   private msg(noteId: string, threadId: string | null, text: string, drawing: Message['drawing'] = 'none'): Message {
     const web = this.notes.get(noteId)?.webOn ?? false;
     const sources = web ? SOURCES.slice(0, 1 + (hash(text) % 2)) : [];
-    return { id: uid(), noteId, threadId, author: 'riddled', text, drawing, svg: null, sources, createdAt: now() };
+    const symbols = this.settings.explainSymbols && text === RICH_ANSWER ? RICH_SYMBOLS : [];
+    return { id: uid(), noteId, threadId, author: 'riddled', text, drawing, svg: null, sources, symbols, createdAt: now() };
   }
 
   private think(noteId: string, target: string, task: AiTask) {
@@ -423,7 +432,7 @@ export class MockBackend implements Backend {
   async aiReply(threadId: string, text: string) {
     const th = this.threads.get(threadId);
     if (!th) throw new Error(`thread not found: ${threadId}`);
-    th.messages.push({ id: uid(), noteId: th.noteId, threadId, author: 'you', text, drawing: 'none', svg: null, sources: [], createdAt: now() });
+    th.messages.push({ id: uid(), noteId: th.noteId, threadId, author: 'you', text, drawing: 'none', svg: null, sources: [], symbols: [], createdAt: now() });
     this.think(th.noteId, text, 'reply');
     this.schedule(threadId, this.wait(), () => {
       const draws = DRAW.test(text);
@@ -435,7 +444,7 @@ export class MockBackend implements Backend {
   }
   async aiChat(noteId: string, text: string, _near?: string) {
     const list = this.chat.get(noteId) ?? [];
-    list.push({ id: uid(), noteId, threadId: null, author: 'you', text, drawing: 'none', svg: null, sources: [], createdAt: now() });
+    list.push({ id: uid(), noteId, threadId: null, author: 'you', text, drawing: 'none', svg: null, sources: [], symbols: [], createdAt: now() });
     this.chat.set(noteId, list);
     this.think(noteId, text, 'chat');
     this.schedule(`${noteId}:chat`, this.wait() + 500, () => {

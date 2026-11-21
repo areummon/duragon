@@ -43,7 +43,15 @@ export interface Message {
   svg: string | null;
   /** Pages the model looked at when Web was on; [] otherwise. */
   sources: Source[];
+  /** What each symbol in its formulas stands for, when explainSymbols was on; [] otherwise. */
+  symbols: MathSymbol[];
   createdAt: number;
+}
+
+/** `tex` is the symbol exactly as written in a formula of the message. */
+export interface MathSymbol {
+  tex: string;
+  meaning: string;
 }
 
 export interface Source {
@@ -90,6 +98,7 @@ export interface Settings {
   aboutYou: string;
   learnAboutYou: boolean;
   searchMyNotes: boolean;
+  explainSymbols: boolean;
   readModel: string;
   chatModel: string;
   drawModel: string;

@@ -186,3 +186,125 @@ export function highlight(code: string, lang: string): string {
   const tree: Root = lang && lowlight.registered(lang) ? lowlight.highlight(lang, code) : lowlight.highlightAuto(code);
   return hastHtml(tree.children as ElementContent[]);
 }
+
+/** TeX source as tokens: a control word with its trailing spaces, a control symbol, a brace, a space run or one character. */
+function texTokens(tex: string): string[] {
+  return tex.match(/\\[a-zA-Z]+\s*|\\.|\s+|[^]/gu) ?? [];
+}
+
+const bare = (t: string) => t.trimEnd();
+
+/** Commands whose braced argument is a name or words, never symbols. */
+const OPAQUE = new Set(['\\text', '\\textrm', '\\textit', '\\textbf', '\\textsf', '\\texttt', '\\mbox', '\\hbox',
+  '\\mathrm', '\\operatorname', '\\begin', '\\end', '\\color', '\\textcolor', '\\label', '\\htmlData']);
+
+/** Index after the braced group that opens at `i` (or after the single token there). */
+function skipGroup(toks: string[], i: number): number {
+  while (i < toks.length && (!toks[i].trim() || toks[i] === '*')) i++;
+  if (toks[i] !== '{') return i + 1;
+  for (let depth = 0; i < toks.length; i++) {
+    if (toks[i] === '{') depth++;
+    else if (toks[i] === '}' && --depth === 0) return i + 1;
+  }
+  return i;
+}
+
+/** A symbol's tokens without spaces or enclosing braces, with `{x}` around a single token read as `x`. */
+function symbolPattern(tex: string): string[] {
+  let t = texTokens(tex).map(bare).filter((x) => x);
+  while (t[0] === '{' && closes(t) === t.length - 1) t = t.slice(1, -1);
+  const out: string[] = [];
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === '{' && t[i + 2] === '}' && t[i + 1] !== '{' && t[i + 1] !== '}') {
+      out.push(t[i + 1]);
+      i += 2;
+    } else out.push(t[i]);
+  }
+  return out;
+}
+
+/** Index of the brace that closes the one at 0. */
+function closes(t: string[]): number {
+  let depth = 0;
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === '{') depth++;
+    else if (t[i] === '}' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** Where `pat` ends if it matches the formula at `i`, or -1. Spaces inside the match and `{x}` for `x` are allowed. */
+function matchAt(toks: string[], i: number, pat: string[]): number {
+  for (const p of pat) {
+    while (i < toks.length && !toks[i].trim()) i++;
+    if (bare(toks[i] ?? '') === p) i++;
+    else if (toks[i] === '{' && bare(toks[i + 1] ?? '') === p && toks[i + 2] === '}') i += 3;
+    else return -1;
+  }
+  return i;
+}
+
+/**
+ * The formula with each occurrence of a listed symbol wrapped as `{\htmlData{sym=<index>}{…}}`, matching whole tokens
+ * so `m` never matches inside `\mathrm` and `x` never inside `\exp`, longest symbol first. The outer braces keep the
+ * wrapped symbol a single argument, as in `x^n` or `\frac m v`.
+ */
+export function markSymbols(tex: string, symbols: string[]): string {
+  const pats = symbols
+    .map((s, index) => ({ index, pat: symbolPattern(s) }))
+    .filter((p) => p.pat.length && !p.pat.every((t) => t === '{' || t === '}'))
+    .sort((a, b) => b.pat.length - a.pat.length);
+  const toks = texTokens(tex);
+  let out = '';
+  for (let i = 0; i < toks.length; ) {
+    if (toks[i].trim()) {
+      const hit = pats.map((p) => ({ ...p, end: matchAt(toks, i, p.pat) })).find((p) => p.end > i);
+      if (hit) {
+        const body = toks.slice(i, hit.end).join('');
+        const space = body.length - body.trimEnd().length;
+        out += `{\\htmlData{sym=${hit.index}}{${body.trimEnd()}}}${body.slice(body.length - space)}`;
+        i = hit.end;
+        continue;
+      }
+      if (OPAQUE.has(bare(toks[i]))) {
+        const end = skipGroup(toks, i + 1);
+        out += toks.slice(i, end).join('');
+        i = end;
+        continue;
+      }
+    }
+    out += toks[i++];
+  }
+  return out;
+}
+
+const markedCache = new Map<string, string>();
+
+/**
+ * KaTeX HTML for a formula whose listed symbols carry `data-sym="<index>"`. HTML output only, and not hidden from
+ * assistive tech, since the symbols inside become buttons. Falls back to `renderTex` when the marked source fails.
+ */
+export function renderTexWithSymbols(tex: string, display: boolean, symbols: string[]): string {
+  const key = JSON.stringify([display, tex, symbols]);
+  let html = markedCache.get(key);
+  if (html === undefined) {
+    const marked = markSymbols(tex, symbols);
+    try {
+      html = marked === tex
+        ? renderTex(tex, display)
+        : katex
+            .renderToString(marked, {
+              displayMode: display,
+              throwOnError: true,
+              output: 'html',
+              trust: (c) => c.command === '\\htmlData',
+              strict: (code: string) => (code === 'htmlExtension' ? 'ignore' : 'warn'),
+            })
+            .replace('<span class="katex-html" aria-hidden="true">', '<span class="katex-html">');
+    } catch {
+      html = renderTex(tex, display);
+    }
+    markedCache.set(key, html);
+  }
+  return html;
+}

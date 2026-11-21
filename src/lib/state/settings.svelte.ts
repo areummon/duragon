@@ -6,7 +6,7 @@ const DEFAULTS: Settings = {
   webInNewNotes: false, voiceInNewNotes: false, voiceName: 'bm_george', speakingSpeed: 1,
   appearance: 'system', textSize: 'default', pageWidth: null, lettering: 'own',
   inkColour: 'ink', inkFromPointer: false, justMyWords: false, aboutYou: '',
-  learnAboutYou: true, searchMyNotes: false, readModel: 'sonnet', chatModel: 'sonnet', drawModel: 'opus',
+  learnAboutYou: true, searchMyNotes: false, explainSymbols: false, readModel: 'sonnet', chatModel: 'sonnet', drawModel: 'opus',
   sidebarOpen: false,
 };
 

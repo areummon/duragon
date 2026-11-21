@@ -7,12 +7,13 @@
   import { readAloud, stopSpeaking, voice } from '../state/voice.svelte';
   import Sources from './Sources.svelte';
   import { tick } from 'svelte';
-  import type { Message, Thread } from '../api/types';
+  import type { MathSymbol, Message, Thread } from '../api/types';
   import { open as openThread, reply, setStatus, threads, togglePin } from '../state/threads.svelte';
   import { enlarge } from '../state/layout.svelte';
   import Blot from './Blot.svelte';
   import Drawing from './Drawing.svelte';
   import InkText from './InkText.svelte';
+  import { askAboutSymbol } from '../symbolTip';
   import ThreadMenu, { type ThreadAction } from './ThreadMenu.svelte';
 
   interface Props {
@@ -51,6 +52,8 @@
     leaving = true;
     window.setTimeout(() => void setStatus(thread.id, status), 200);
   }
+
+  const ask = (s: MathSymbol) => void reply(thread.id, askAboutSymbol(s));
 
   function send() {
     const text = draft.trim();
@@ -186,9 +189,9 @@
                   <span class="close" role="button" tabindex="0" aria-label="Close this thread"
                     onclick={() => openThread(null)}
                     onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && openThread(null)}
-                  ><InkText text={m.text} animate={!!threads.freshText[m.id]} /></span>
+                  ><InkText text={m.text} animate={!!threads.freshText[m.id]} symbols={m.symbols} onask={ask} /></span>
                 {:else}
-                  <InkText text={m.text} animate={!!threads.freshText[m.id] || variant === 'card'} />
+                  <InkText text={m.text} animate={!!threads.freshText[m.id] || variant === 'card'} symbols={m.symbols} onask={ask} />
                 {/if}<button class="speak" aria-label={playingId === m.id ? 'Stop' : 'Read aloud'} title={playingId === m.id ? 'Stop' : 'Read aloud'} onclick={() => speak(m)}>{#if playingId === m.id}<span class="stop"></span>{:else}<Volume2 size={12} strokeWidth={1.7} />{/if}</button>
               </p>
               <Sources sources={m.sources} />
