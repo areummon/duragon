@@ -78,6 +78,7 @@ interface Settings {
   aboutYou: string;                    // <= 700 chars
   learnAboutYou: boolean;
   searchMyNotes: boolean;              // default false; side chat may search the other notes
+  explainSymbols: boolean;             // default false; the Mind says what each symbol in its formulas stands for
   readModel: string;                   // default 'sonnet'  (read-along, answers, replies)
   chatModel: string;                   // default 'sonnet'
   drawModel: string;                   // default 'sonnet'
@@ -94,7 +95,8 @@ notes_fts USING fts5(title, plain, content='notes', content_rowid='rowid')  + tr
 folders(id TEXT PK, name TEXT, created_at INT)
 threads(id TEXT PK, note_id TEXT REFERENCES notes ON DELETE CASCADE, kind TEXT, quote TEXT, status TEXT, pinned INT, created_at INT)
 messages(id TEXT PK, note_id TEXT, thread_id TEXT NULL REFERENCES threads ON DELETE CASCADE, author TEXT,
-         text TEXT, drawing TEXT, svg TEXT NULL, created_at INT)
+         text TEXT, drawing TEXT, svg TEXT NULL, sources TEXT DEFAULT '[]', symbols TEXT DEFAULT '[]', created_at INT)
+         -- sources: [{url, title}] the Mind used on the web; symbols: [{tex, meaning}] for its formulas
 riddlers(id TEXT PK, name, description, how_it_thinks, tone, frequency, builtin INT)
 kv(key TEXT PK, value TEXT)          -- settings JSON under key 'settings'
 ```
@@ -168,6 +170,8 @@ Tasks, prompts and schemas live in `ai/prompts.rs`. Every prompt gets the Riddle
 | chat | chat panel | `{message, draw?}` | appends chat Message |
 | draw | after any of the above with a brief | `{svg}` | fills the Message's svg, drawing=done |
 | learn | after reply/chat/answer when learnAboutYou | `{changed, aboutYou?}` | saves setting, emits about:updated |
+
+When `explainSymbols` is on, read, answer, reply, chat and ask (the tasks whose message the writer reads as prose) gain an optional `symbols: [{tex, meaning}]` in their schema, and their prompt gains a paragraph (`EXPLAIN_SYMBOLS`) asking for each distinct symbol and constant in the message's formulas, `tex` copied exactly as written and `meaning` a phrase of at most 8 words. When it is off, prompt and schema are unchanged. The backend trims the symbols, drops blank ones, duplicates and any whose `tex` is not in the message, keeps at most 16, and stores them on the Message. In an open thread or the side chat, `InkText` renders a formula with symbols through `renderTexWithSymbols` (`rich.ts`): `markSymbols` wraps each occurrence as `{\htmlData{sym=<i>}{…}}`, matching whole TeX tokens and skipping the arguments of `\text`, `\mathrm` and the like, and KaTeX trusts only `\htmlData`. Each symbol becomes a focusable button (`symbolTip.ts`): pointing at it with a fine pointer or focusing it shows its meaning in a tooltip, and a press writes back `Explain $<tex>$ in more detail: what does it represent here?` in the same thread or chat.
 
 The read task never fires twice for the same unchanged target, and never when an open thread already quotes inside the target.
 

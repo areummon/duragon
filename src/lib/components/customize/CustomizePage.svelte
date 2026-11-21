@@ -26,6 +26,7 @@
     place: 'where questions appear both margins right margin marks only',
     web: 'web search in new notes',
     notes: 'search my other notes in chat recall past earlier',
+    symbols: 'explain symbols in formulas math latex equation variable meaning',
     speak: 'new notes speak aloud voice',
     pick: 'voice george emma michael heart sample',
     speed: 'speaking speed slower faster',
@@ -40,7 +41,7 @@
     drawModel: 'drawing model',
   };
   const GROUPS: Record<keyof typeof SECTIONS, string[]> = {
-    reading: ['start', 'pace', 'place', 'web', 'notes'],
+    reading: ['start', 'pace', 'place', 'web', 'notes', 'symbols'],
     voice: ['speak', 'pick', 'speed'],
     look: ['appearance', 'size', 'width', 'lettering', 'colour', 'pointer'],
     models: ['readModel', 'chatModel', 'drawModel'],
@@ -118,6 +119,9 @@
     {/if}
     {#if on('reading', 'notes')}
       <div class="group"><SwitchRow title="Search my other notes in chat" desc="In the side chat, Duragon can look through your other notes when it helps, and says which one it used. The notes it opens are sent to Claude, like the note you’re in." on={s.searchMyNotes} onchange={(v) => set({ searchMyNotes: v })} /></div>
+    {/if}
+    {#if on('reading', 'symbols')}
+      <div class="group"><SwitchRow title="Explain symbols in formulas" desc="Point at a symbol in a formula Duragon writes to see what it stands for. Click it to ask for more." on={s.explainSymbols} onchange={(v) => set({ explainSymbols: v })} /></div>
     {/if}
   </section>
 {/if}
