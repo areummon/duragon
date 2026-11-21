@@ -68,7 +68,7 @@
 }
 
 :root {
-  --font-sans: 'Allo', system-ui, sans-serif;
+  --font-sans: 'Instrument Sans Variable', system-ui, sans-serif;
   --font-serif: 'Newsreader Variable', Georgia, serif;
   --font-voice: var(--font-serif);
   --note-size: 16px;
