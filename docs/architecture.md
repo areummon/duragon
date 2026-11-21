@@ -77,6 +77,7 @@ interface Settings {
   justMyWords: boolean;                // hide all Riddled marks
   aboutYou: string;                    // <= 700 chars
   learnAboutYou: boolean;
+  searchMyNotes: boolean;              // default false; side chat may search the other notes
   readModel: string;                   // default 'sonnet'  (read-along, answers, replies)
   chatModel: string;                   // default 'sonnet'
   drawModel: string;                   // default 'sonnet'
@@ -154,6 +155,8 @@ stdin: the task payload as text
 ```
 
 The result is the `structured_output` field of the JSON on stdout. The binary is `claude` on PATH, overridable with `DURAGON_CLAUDE_BIN` (tests point it at a fake script). Each child is tracked per (noteId, task) so `ai_cancel_read` can kill it. A non-zero exit or missing `structured_output` becomes `ai:error`.
+
+When `searchMyNotes` is on, chat calls (and only chat calls) also get a notes search tool. The app binary serves it as a small MCP server over stdio when started as `duragon --notes-mcp <db path> <open note id>` (`ai/notes_mcp.rs`; `main.rs` checks for this before Tauri starts). The runner passes it inline with `--mcp-config '{"mcpServers":{"notes":{...}}}'` and adds `mcp__notes__search_notes,mcp__notes__read_note` to `--allowedTools`, since print mode denies any tool that is not pre-approved. `search_notes {query}` returns up to 8 other notes ranked by FTS5, each with id, title, last-edited date and a snippet of `plain`. `read_note {id}` returns one note's title and plain text, cut at 8000 characters. Neither ever returns the open note. The chat prompt gains a paragraph telling the Mind when to use them and to name the note it drew on by title. The server opens its own connection to the same database; WAL lets it read while the app writes.
 
 Tasks, prompts and schemas live in `ai/prompts.rs`. Every prompt gets the Riddler (name, how it thinks, tone, frequency), the note brief, the About-you paragraph, the note title and plain text, and the open threads (so it doesn't repeat itself).
 

@@ -89,6 +89,7 @@ export interface Settings {
   justMyWords: boolean;
   aboutYou: string;
   learnAboutYou: boolean;
+  searchMyNotes: boolean;
   readModel: string;
   chatModel: string;
   drawModel: string;

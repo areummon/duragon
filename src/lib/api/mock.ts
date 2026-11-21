@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS: Settings = {
   justMyWords: false,
   aboutYou: '',
   learnAboutYou: true,
+  searchMyNotes: false,
   readModel: 'sonnet',
   chatModel: 'sonnet',
   drawModel: 'opus',
