@@ -58,6 +58,7 @@
     letter-spacing: 0;
     animation: settle var(--dur-settle) var(--ease-settle) both;
   }
+  .answer:has(:global([role='menu'])) { z-index: 1; }
   .blot { position: absolute; left: -2px; top: calc((1lh - 17px) / 2); display: flex; }
   .text { display: block; width: 100%; padding-right: 32px; text-align: left; cursor: var(--cursor-pointer); white-space: pre-wrap; }
   .replies {

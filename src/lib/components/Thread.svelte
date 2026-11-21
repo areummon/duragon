@@ -246,6 +246,7 @@
     animation: settle var(--dur-settle) var(--ease-settle) both;
     transition: opacity var(--dur-settle) var(--ease-settle), transform var(--dur-settle) var(--ease-settle);
   }
+  .thread:has(:global([role='menu'])) { z-index: 1; }
   .thread.leaving { opacity: 0; transform: translateY(4px); pointer-events: none; }
   .thread.margin.right { padding-left: 21px; text-align: left; }
   .thread.margin.left { padding-right: 21px; text-align: right; }

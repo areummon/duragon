@@ -120,6 +120,8 @@
   .slot.left { right: calc(100% + var(--gap)); }
   .slot.orphan { opacity: 0.5; }
   .slot.dim { opacity: 0.4; }
+  /* A thread's menu drops past its slot; later slots would paint over it and take its clicks. */
+  .slot:has(:global([role='menu'])) { z-index: 1; }
   .margins.resizing .slot { transition: none; }
 
   @media (prefers-reduced-motion: reduce) {
