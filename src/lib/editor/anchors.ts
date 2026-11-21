@@ -3,7 +3,7 @@ import type { ThreadStatus } from '../api/types';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { blotSvg } from '../ui/blot';
-import { findQuote, type Range } from './quote';
+import { indexText, locate, type Range } from './quote';
 
 export interface AnchorThread {
   id: string;
@@ -62,7 +62,15 @@ function anchorAttrs(t: AnchorThread, input: AnchorInput) {
 function build(doc: PMNode, input: AnchorInput, h: AnchorHandlers): AnchorState {
   const ranges = new Map<string, Range | null>();
   const decos: Decoration[] = [];
-  for (const t of input.threads) ranges.set(t.id, findQuote(doc, t.quote));
+  // One pass over the doc for every thread: this runs on each keystroke. Threads quoting the same words take their
+  // copies in order, so a line written twice and read twice anchors each answer to its own copy.
+  const index = input.threads.length ? indexText(doc) : null;
+  const seen = new Map<string, number>();
+  for (const t of input.threads) {
+    const nth = seen.get(t.quote) ?? 0;
+    seen.set(t.quote, nth + 1);
+    ranges.set(t.id, index && locate(index, t.quote, nth));
+  }
   if (input.hidden) return { input, deco: DecorationSet.empty, ranges };
 
   for (const t of input.threads) {
