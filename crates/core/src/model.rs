@@ -52,6 +52,15 @@ pub struct NoteMeta {
     pub has_open_question: bool,
 }
 
+/// A search hit in another note. `edited` is the local date it was last saved, `YYYY-MM-DD`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NoteHit {
+    pub id: String,
+    pub title: String,
+    pub edited: String,
+    pub snippet: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Note {

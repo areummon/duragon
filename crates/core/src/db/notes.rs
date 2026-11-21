@@ -71,6 +71,32 @@ impl Db {
         Ok(rows)
     }
 
+    /// Notes other than `exclude` matching `query`, best first, each with a short excerpt of its text.
+    pub fn search_other_notes(&self, query: &str, exclude: &str, limit: usize) -> Result<Vec<NoteHit>> {
+        let Some(q) = fts_query(query) else { return Ok(Vec::new()) };
+        let conn = self.conn();
+        let mut st = conn.prepare(
+            "SELECT n.id, n.title, date(n.updated_at / 1000, 'unixepoch', 'localtime'),
+               snippet(notes_fts, 1, '', '', '…', 24)
+             FROM notes_fts f JOIN notes n ON n.rowid=f.rowid
+             WHERE notes_fts MATCH ?1 AND n.id != ?2 ORDER BY rank LIMIT ?3",
+        )?;
+        let rows = st
+            .query_map(params![q, exclude, limit as i64], |r| {
+                Ok(NoteHit { id: r.get(0)?, title: r.get(1)?, edited: r.get(2)?, snippet: r.get(3)? })
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(rows)
+    }
+
+    /// Title and plain text of a note, or `None` when there is no such note.
+    pub fn note_text(&self, id: &str) -> Result<Option<(String, String)>> {
+        Ok(self
+            .conn()
+            .query_row("SELECT title, plain FROM notes WHERE id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()?)
+    }
+
     pub fn get_note(&self, id: &str) -> Result<Note> {
         self.conn()
             .query_row(

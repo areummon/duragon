@@ -1,4 +1,5 @@
 //! Claude runner, prompts, task orchestration.
+pub mod notes_mcp;
 pub mod prompts;
 pub mod runner;
 pub mod svg;
