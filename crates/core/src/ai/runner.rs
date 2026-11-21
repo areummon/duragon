@@ -10,6 +10,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::sync::Notify;
 
+use super::notes_mcp::{NotesTool, TOOL_NAMES};
 use crate::model::AiTask;
 
 #[derive(Debug)]
@@ -51,6 +52,8 @@ pub struct ClaudeRequest {
     pub cancel: Option<CancelKey>,
     /// Overrides `DURAGON_CLAUDE_BIN` / `claude`.
     pub bin: Option<PathBuf>,
+    /// Lets the call search the writer's other notes.
+    pub notes: Option<NotesTool>,
 }
 
 static REGISTRY: LazyLock<Mutex<HashMap<CancelKey, Arc<Notify>>>> =
@@ -112,9 +115,19 @@ fn args(req: &ClaudeRequest) -> Vec<String> {
     ]
     .map(String::from)
     .into();
+    let mut allowed: Vec<&str> = Vec::new();
     if req.web {
+        allowed.extend(["WebSearch", "WebFetch"]);
+    }
+    if let Some(notes) = &req.notes {
+        a.push("--mcp-config".into());
+        a.push(notes.mcp_config());
+        allowed.extend(TOOL_NAMES);
+    }
+    // Print mode has no one to ask, so a tool that is not pre-approved is denied.
+    if !allowed.is_empty() {
         a.push("--allowedTools".into());
-        a.push("WebSearch,WebFetch".into());
+        a.push(allowed.join(","));
     }
     a
 }

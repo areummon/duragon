@@ -127,7 +127,10 @@ fn search(db: &Db, exclude: &str, query: &str) -> Result<String, String> {
     if hits.is_empty() {
         return Ok(format!("No other notes matched \"{query}\"."));
     }
-    let mut out = format!("{} other notes matched:", hits.len());
+    let mut out = match hits.len() {
+        1 => "1 other note matched:".to_string(),
+        n => format!("{n} other notes matched:"),
+    };
     for h in hits {
         out.push_str(&format!(
             "\n\nid: {}\ntitle: {}\nedited: {}\nexcerpt: {}",

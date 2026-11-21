@@ -2,6 +2,7 @@
 
 mod commands;
 
+use duragon_core::ai::notes_mcp::{self, NotesSearch};
 use duragon_core::ai::{Ai, Events};
 use duragon_core::db::Db;
 use duragon_core::model::Appearance;
@@ -48,7 +49,24 @@ pub struct AppState {
     pub voice: Voice,
 }
 
+/// `duragon --notes-mcp <db> <open note id>`: the side chat's notes search server, spawned by the `claude` CLI.
+fn serve_notes_mcp(db: &str, exclude: &str) -> anyhow::Result<()> {
+    let db = Db::open(std::path::Path::new(db))?;
+    notes_mcp::serve(&db, exclude, std::io::stdin().lock(), std::io::stdout().lock())
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if let [_, flag, db, exclude] = args.as_slice() {
+        if flag == "--notes-mcp" {
+            if let Err(e) = serve_notes_mcp(db, exclude) {
+                eprintln!("duragon: notes search failed: {e}");
+                std::process::exit(1);
+            }
+            return;
+        }
+    }
+
     // WebKitGTK on native Wayland paints at half the display rate (30 fps on a 60 Hz screen), which makes every
     // transition stutter. Through XWayland it keeps up. Falls back to Wayland where there is no X server.
     #[cfg(target_os = "linux")]
@@ -61,9 +79,14 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
-            let db = Db::open(&dir.join("duragon.db"))?;
+            let db_path = dir.join("duragon.db");
+            let db = Db::open(&db_path)?;
             open_window(app, db.get_settings().map(|s| s.appearance).unwrap_or(Appearance::System))?;
-            let ai = Ai::new(db.clone(), Arc::new(TauriEvents(app.handle().clone())));
+            let mut ai = Ai::new(db.clone(), Arc::new(TauriEvents(app.handle().clone())));
+            match std::env::current_exe() {
+                Ok(exe) => ai.notes_search = Some(NotesSearch { exe, db: db_path }),
+                Err(e) => eprintln!("duragon: notes search unavailable: {e}"),
+            }
             let handle = app.handle().clone();
             let emit: duragon_voice::Emit = Arc::new(move |name, payload| {
                 if let Err(e) = handle.emit(name, payload) {

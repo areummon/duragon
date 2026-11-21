@@ -58,6 +58,7 @@ async fn real_draw() {
         timeout: Duration::from_secs(180),
         cancel: None,
         bin: None,
+        notes: None,
     })
     .await
     .unwrap();
@@ -125,4 +126,41 @@ async fn real_read_answers_an_unaddressed_request() {
 async fn real_read_does_not_answer_a_statement() {
     let threads = real_read_of("Plants", "Plants grow faster when you play them classical music.").await;
     assert!(threads.iter().all(|t| t.kind != ThreadKind::Reply), "{threads:?}");
+}
+
+/// Needs the app binary: `cargo build -p duragon` first.
+#[tokio::test]
+#[ignore]
+async fn real_chat_recalls_another_note() {
+    use duragon_core::ai::notes_mcp::NotesSearch;
+    let exe = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/duragon");
+    assert!(exe.exists(), "build the app first: {}", exe.display());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("duragon.db");
+    let db = Db::open(&path).unwrap();
+    let mut s = db.get_settings().unwrap();
+    s.chat_model = "haiku".into();
+    s.learn_about_you = false;
+    s.search_my_notes = true;
+    db.save_settings(&s).unwrap();
+    let save = |title: &str, body: &str| {
+        let n = db.create_note(Some(title)).unwrap();
+        let doc = json!({"type":"doc","content":[
+            {"type":"title","content":[{"type":"text","text":title}]},
+            {"type":"paragraph","content":[{"type":"text","text":body}]}]});
+        db.save_note(&n.meta.id, title, &doc, &format!("{title}\n{body}")).unwrap();
+        n.meta.id
+    };
+    save("Hash maps", "My own trick for collisions: I call it the marmalade probe. On a collision, jump ahead by the key's length times seven, wrapping around the table.");
+    let open = save("Tries", "A trie stores strings by their prefixes, one node per character.");
+    let cap = Arc::new(Capture::default());
+    let mut ai = Ai::new(db.clone(), cap.clone());
+    ai.notes_search = Some(NotesSearch { exe: exe.canonicalize().unwrap(), db: path });
+    ai.chat(&open, "In one of my older notes I made up my own collision trick for hash maps. What was it called, and how did it work?", "").await.unwrap();
+    for (name, payload) in cap.all() {
+        println!("{name}: {payload}");
+    }
+    let reply = db.list_chat(&open).unwrap().pop().unwrap();
+    assert_eq!(reply.author, Author::Riddled);
+    assert!(reply.text.to_lowercase().contains("marmalade"), "{}", reply.text);
 }

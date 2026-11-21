@@ -119,6 +119,11 @@ const WEB_SOURCES: &str = r#"
 
 Web access is on. When you used WebSearch or WebFetch for your answer, also return "sources": the pages you actually used, each as {"url", "title"}, copied from your WebSearch or WebFetch results. Never invent or guess a source. If you used no page, leave "sources" out or empty."#;
 
+/// Appended to the chat prompt when the writer lets the mind search their other notes.
+pub const NOTES_SEARCH: &str = r#"
+
+You can look through the writer's other notes: search_notes finds them by a few words, and read_note opens one by its id. Use them when the writer refers to earlier work, or when a past note would clearly help with what they are thinking through now. When you draw on one, name it by its title (for example: "you worked through this in your note Hash maps")."#;
+
 const LEARN: &str = r#"You maintain a short "About you" paragraph that a notebook assistant keeps about its writer, so every note starts out knowing it. You are given the current paragraph and the writer's latest message.
 
 Decide whether the writer said something lasting about themselves: what they study or do, how they like feedback, their goals, strengths or struggles. Passing details about the note's topic, one-off requests and anything about other people do not count.

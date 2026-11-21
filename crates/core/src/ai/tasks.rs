@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
 use super::runner::{run_claude, AiError, CancelKey, ClaudeRequest};
 use super::svg;
@@ -24,6 +25,8 @@ pub struct Ai {
     pub events: Arc<dyn Events>,
     /// Overrides `DURAGON_CLAUDE_BIN` / `claude` (tests).
     pub bin: Option<PathBuf>,
+    /// Set when this build can serve the notes search tool; the chat uses it when the writer turns it on.
+    pub notes_search: Option<NotesSearch>,
 }
 
 struct Ctx {
@@ -122,7 +125,7 @@ fn normalize(s: &str) -> (Vec<char>, Vec<(usize, usize)>) {
 
 impl Ai {
     pub fn new(db: Db, events: Arc<dyn Events>) -> Self {
-        Self { db, events, bin: None }
+        Self { db, events, bin: None, notes_search: None }
     }
 
     fn emit<T: serde::Serialize>(&self, name: &str, payload: &T) {
@@ -159,13 +162,22 @@ impl Ai {
             _ => &ctx.settings.read_model,
         };
         let web = ctx.note.web_on && !matches!(task, AiTask::Draw | AiTask::Learn);
-        let system_prompt = prompts::system_prompt(
+        let notes = match &self.notes_search {
+            Some(server) if task == AiTask::Chat && ctx.settings.search_my_notes => {
+                Some(NotesTool { server: server.clone(), open_note_id: ctx.note.meta.id.clone() })
+            }
+            _ => None,
+        };
+        let mut system_prompt = prompts::system_prompt(
             task,
             &ctx.riddler,
             &ctx.note.brief,
             &ctx.settings.about_you,
             web,
         );
+        if notes.is_some() {
+            system_prompt.push_str(prompts::NOTES_SEARCH);
+        }
         ClaudeRequest {
             model: model.clone(),
             system_prompt,
@@ -175,6 +187,7 @@ impl Ai {
             timeout: Duration::from_secs(if task == AiTask::Draw { 180 } else { 120 }),
             cancel: Some(CancelKey { note_id: ctx.note.meta.id.clone(), task }),
             bin: self.bin.clone(),
+            notes,
         }
     }
 
@@ -389,6 +402,7 @@ impl Ai {
             timeout: Duration::from_secs(120),
             cancel: None,
             bin: self.bin.clone(),
+            notes: None,
         };
         let Ok(v) = run_claude(req).await else { return Ok(()) };
         let Ok(out) = serde_json::from_value::<LearnOut>(v) else { return Ok(()) };

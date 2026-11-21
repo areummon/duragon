@@ -317,3 +317,49 @@ async fn no_sources_when_web_is_off_and_schema_follows_web() {
         assert!(!system_prompt(task, &r, "", "", false).contains("Never invent"));
     }
 }
+
+/// Replaces the fake CLI with one that saves each call's argv, NUL-separated, to `<bin>.args`.
+fn record_args(fx: &mut Fx) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let p = fx._dir.path().join("recording-claude");
+    std::fs::write(&p, "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$0.args\"\ncat >/dev/null\necho '{\"structured_output\":{\"message\":\"ok\"}}'\n").unwrap();
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    fx.ai.bin = Some(p.clone());
+    p.with_extension("args")
+}
+
+fn last_args(path: &std::path::Path) -> Vec<String> {
+    std::fs::read_to_string(path).unwrap().split('\0').filter(|a| !a.is_empty()).map(String::from).collect()
+}
+
+#[tokio::test]
+async fn only_the_side_chat_searches_other_notes_and_only_when_turned_on() {
+    use duragon_core::ai::notes_mcp::NotesSearch;
+    let mut fx = setup(json!({}), json!({}));
+    disable_learn(&fx);
+    let args_file = record_args(&mut fx);
+    let has_server = |a: &[String]| a.iter().any(|x| x == "--mcp-config");
+
+    fx.ai.notes_search = Some(NotesSearch { exe: "/opt/duragon".into(), db: "/data/duragon.db".into() });
+    fx.ai.chat(&fx.note, "hi", "").await.unwrap();
+    assert!(!has_server(&last_args(&args_file)), "off by default");
+
+    let mut s = fx.ai.db.get_settings().unwrap();
+    s.search_my_notes = true;
+    fx.ai.db.save_settings(&s).unwrap();
+    fx.ai.chat(&fx.note, "what did I say about this before?", "").await.unwrap();
+    let a = last_args(&args_file);
+    let config = &a[a.iter().position(|x| x == "--mcp-config").unwrap() + 1];
+    assert!(config.contains(&format!("\"{}\"", fx.note)), "the open note is excluded: {config}");
+    assert!(a[a.iter().position(|x| x == "--allowedTools").unwrap() + 1].contains("mcp__notes__search_notes"));
+    assert!(a[a.iter().position(|x| x == "--system-prompt").unwrap() + 1].contains("read_note"));
+
+    fx.ai.answer(&fx.note, TARGET).await.unwrap();
+    let a = last_args(&args_file);
+    assert!(!has_server(&a), "other tasks never get it");
+    assert!(!a[a.iter().position(|x| x == "--system-prompt").unwrap() + 1].contains("read_note"));
+
+    fx.ai.notes_search = None;
+    fx.ai.chat(&fx.note, "hi", "").await.unwrap();
+    assert!(!has_server(&last_args(&args_file)), "nothing to serve it");
+}
