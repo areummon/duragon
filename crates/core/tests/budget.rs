@@ -52,14 +52,14 @@ fn under_budget_payloads_are_byte_identical_to_before() {
         msg("c3", Author::You, "Why?"),
     ];
     let cases = [
-        ("read", read_payload("Plants", &blocks, "Second para.", &threads, "Duragon")),
-        ("answer", answer_payload("Plants", &blocks, "Duragon, why?", &threads, "Duragon")),
+        ("read", target_payload("Plants", &blocks, "Second para.", TargetIs::JustWritten, &threads, "Duragon")),
+        ("answer", target_payload("Plants", &blocks, "Duragon, why?", TargetIs::AddressedToYou, &threads, "Duragon")),
         ("reply", reply_payload("Plants", &blocks, &open, "Duragon")),
         ("chat", chat_payload("Plants", &blocks, &threads, "", &chat, "Duragon", " Second para. ")),
         ("chat_nonear", chat_payload("Plants", &blocks, &[], "", &chat, "Duragon", "")),
         ("draw", draw_payload("Plants", &blocks, "Show a leaf.")),
-        ("ask", ask_payload("Plants", &blocks, "Second para.", Some("Is it?"), &threads, "Duragon")),
-        ("ask_none", ask_payload("Plants", &blocks, "Second para.", None, &[], "Duragon")),
+        ("ask", target_payload("Plants", &blocks, "Second para.", TargetIs::Selected(Some("Is it?")), &threads, "Duragon")),
+        ("ask_none", target_payload("Plants", &blocks, "Second para.", TargetIs::Selected(None), &[], "Duragon")),
         ("visualize", visualize_payload("Plants", &blocks, "Second para.")),
     ];
     for (name, sections) in cases {
@@ -176,7 +176,7 @@ fn a_single_huge_paragraph_shrinks_around_the_target() {
     let text = para(20_000, "w");
     let target = "w12000 w12001 w12002";
     let blocks = vec![Block { text: "Huge".into(), heading: true }, Block { text: text.clone(), heading: false }];
-    let (out, cut) = fit(&read_payload("Huge", &blocks, target, &[], "Duragon"), 2_000);
+    let (out, cut) = fit(&target_payload("Huge", &blocks, target, TargetIs::JustWritten, &[], "Duragon"), 2_000);
     assert!(!cut.is_empty());
     assert!(tokens(&out) <= 2_000);
     assert!(out.contains("w11990 w11991") && out.contains(target));

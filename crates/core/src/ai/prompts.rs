@@ -402,19 +402,38 @@ fn message_sections(lines: Vec<String>) -> Vec<Section> {
         .collect()
 }
 
-pub fn read_payload(title: &str, blocks: &[Block], target: &str, threads: &[Thread], riddler: &str) -> Vec<Section> {
-    let mut s = note_sections(title, blocks, target);
-    s.push(Section::keep("\n"));
-    s.extend(open_threads_sections(threads, riddler));
-    s.push(Section::keep(format!("\nTARGET (the passage just written):\n{target}\n")));
-    s
+/// Why TARGET is in front of the mind, which sets how the payload names it.
+pub enum TargetIs<'a> {
+    JustWritten,
+    AddressedToYou,
+    /// A selection, with the writer's question about it if they asked one.
+    Selected(Option<&'a str>),
 }
 
-pub fn answer_payload(title: &str, blocks: &[Block], target: &str, threads: &[Thread], riddler: &str) -> Vec<Section> {
+/// The note, its open threads, and TARGET named for why it is there.
+pub fn target_payload(
+    title: &str,
+    blocks: &[Block],
+    target: &str,
+    why: TargetIs,
+    threads: &[Thread],
+    riddler: &str,
+) -> Vec<Section> {
+    let tail = match why {
+        TargetIs::JustWritten => format!("TARGET (the passage just written):\n{target}\n"),
+        TargetIs::AddressedToYou => format!("TARGET (the line addressed to you):\n{target}\n"),
+        TargetIs::Selected(question) => {
+            let q = match question.map(str::trim).filter(|q| !q.is_empty()) {
+                Some(q) => format!("WRITER'S QUESTION ABOUT TARGET:\n{q}\n"),
+                None => "No question given: riddle this selection. You must say something.\n".to_string(),
+            };
+            format!("TARGET (the selected passage):\n{target}\n\n{q}")
+        }
+    };
     let mut s = note_sections(title, blocks, target);
     s.push(Section::keep("\n"));
     s.extend(open_threads_sections(threads, riddler));
-    s.push(Section::keep(format!("\nTARGET (the line addressed to you):\n{target}\n")));
+    s.push(Section::keep(format!("\n{tail}")));
     s
 }
 
@@ -494,25 +513,6 @@ Your job now: the writer selected a passage of their note (TARGET) and is asking
 
 const VISUALIZE: &str = r#"
 Your job now: the writer selected a passage of their note (TARGET) and asked you to visualize it, so it will be sketched. {sketch_brief} Sketch what TARGET says, adding nothing it does not say."#;
-
-pub fn ask_payload(
-    title: &str,
-    blocks: &[Block],
-    target: &str,
-    question: Option<&str>,
-    threads: &[Thread],
-    riddler: &str,
-) -> Vec<Section> {
-    let q = match question.map(str::trim).filter(|q| !q.is_empty()) {
-        Some(q) => format!("WRITER'S QUESTION ABOUT TARGET:\n{q}\n"),
-        None => "No question given: riddle this selection. You must say something.\n".to_string(),
-    };
-    let mut s = note_sections(title, blocks, target);
-    s.push(Section::keep("\n"));
-    s.extend(open_threads_sections(threads, riddler));
-    s.push(Section::keep(format!("\nTARGET (the selected passage):\n{target}\n\n{q}")));
-    s
-}
 
 pub fn visualize_payload(title: &str, blocks: &[Block], target: &str) -> Vec<Section> {
     let mut s = note_sections(title, blocks, target);

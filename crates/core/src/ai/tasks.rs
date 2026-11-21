@@ -13,6 +13,7 @@ use super::prompts;
 use super::runner::{cancel, run_claude, AiError, CancelKey, ClaudeRequest};
 use super::svg;
 use crate::db::Db;
+use crate::doc;
 use crate::model::*;
 
 /// Where backend events go. The Tauri shell forwards them to the webview.
@@ -306,7 +307,7 @@ impl Ai {
     async fn draw(&self, ctx: &Ctx, msg: &Message) -> Result<()> {
         let note_id = &ctx.note.meta.id;
         self.thinking(note_id, &msg.text, AiTask::Draw);
-        let payload = prompts::draw_payload(&ctx.note.meta.title, &blocks_of(&ctx.note), &msg.text);
+        let payload = prompts::draw_payload(&ctx.note.meta.title, &doc::blocks(&ctx.note.doc), &msg.text);
         let clean = self.call::<DrawOut>(ctx, AiTask::Draw, payload).await.and_then(|(out, _)| {
             svg::sanitize(&out.svg).map_err(|m| self.error(note_id, AiTask::Draw, &m)).ok()
         });
@@ -322,7 +323,7 @@ impl Ai {
         let ctx = self.ctx(note_id)?;
         self.thinking(note_id, target, AiTask::Read);
         let threads = self.db.list_threads(note_id)?;
-        let blocks = blocks_of(&ctx.note);
+        let blocks = doc::blocks(&ctx.note.doc);
         // Each open thread on these words covers one copy of the line, so a line pasted again is read like a new one.
         let copies = blocks.iter().filter(|b| b.text.trim() == target.trim()).count().max(1);
         let covering = threads
@@ -333,10 +334,11 @@ impl Ai {
             self.events.emit("ai:quiet", json!({ "noteId": note_id, "target": target }));
             return Ok(());
         }
-        let payload = prompts::read_payload(
+        let payload = prompts::target_payload(
             &ctx.note.meta.title,
             &blocks,
             target,
+            prompts::TargetIs::JustWritten,
             &threads,
             &ctx.riddler.name,
         );
@@ -364,10 +366,11 @@ impl Ai {
         let ctx = self.ctx(note_id)?;
         self.thinking(note_id, target, AiTask::Answer);
         let threads = self.db.list_threads(note_id)?;
-        let payload = prompts::answer_payload(
+        let payload = prompts::target_payload(
             &ctx.note.meta.title,
-            &blocks_of(&ctx.note),
+            &doc::blocks(&ctx.note.doc),
             target,
+            prompts::TargetIs::AddressedToYou,
             &threads,
             &ctx.riddler.name,
         );
@@ -393,7 +396,7 @@ impl Ai {
         self.thinking(&note_id, text, AiTask::Reply);
         let payload = prompts::reply_payload(
             &ctx.note.meta.title,
-            &blocks_of(&ctx.note),
+            &doc::blocks(&ctx.note.doc),
             &thread,
             &ctx.riddler.name,
         );
@@ -417,7 +420,7 @@ impl Ai {
         let chat = self.db.list_chat(note_id)?;
         let payload = prompts::chat_payload(
             &ctx.note.meta.title,
-            &blocks_of(&ctx.note),
+            &doc::blocks(&ctx.note.doc),
             &self.db.list_threads(note_id)?,
             &summary.text,
             summary.unsummarized(&chat),
@@ -558,10 +561,6 @@ fn fallback_riddler() -> Riddler {
     }
 }
 
-fn blocks_of(note: &Note) -> Vec<crate::doc::Block> {
-    crate::doc::blocks(&note.doc)
-}
-
 #[derive(Deserialize)]
 struct AskOut {
     quote: String,
@@ -580,11 +579,11 @@ impl Ai {
         let ctx = self.ctx(note_id)?;
         let question = question.map(str::trim).filter(|q| !q.is_empty());
         self.thinking(note_id, target, AiTask::Ask);
-        let payload = prompts::ask_payload(
+        let payload = prompts::target_payload(
             &ctx.note.meta.title,
-            &blocks_of(&ctx.note),
+            &doc::blocks(&ctx.note.doc),
             target,
-            question,
+            prompts::TargetIs::Selected(question),
             &self.db.list_threads(note_id)?,
             &ctx.riddler.name,
         );
@@ -610,7 +609,7 @@ impl Ai {
     pub async fn visualize(&self, note_id: &str, target: &str) -> Result<()> {
         let ctx = self.ctx(note_id)?;
         self.thinking(note_id, target, AiTask::Visualize);
-        let payload = prompts::visualize_payload(&ctx.note.meta.title, &blocks_of(&ctx.note), target);
+        let payload = prompts::visualize_payload(&ctx.note.meta.title, &doc::blocks(&ctx.note.doc), target);
         let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Visualize, payload).await else {
             return Ok(());
         };
