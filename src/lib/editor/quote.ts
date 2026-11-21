@@ -51,23 +51,36 @@ function posOf(index: TextIndex, i: number): number {
   return -1;
 }
 
-/**
- * Where the `nth` occurrence of `quote` is (0-based). With fewer occurrences than that, the last one: a thread whose
- * copy of a repeated line was deleted still shows, on the copy that remains.
- */
-export function locate(index: TextIndex, quote: string, nth = 0): Range | null {
-  if (!quote) return null;
-  let at = -1;
-  for (let i = 0, from = 0; i <= nth; i++) {
-    const next = index.text.indexOf(quote, from);
-    if (next < 0) break;
-    at = next;
-    from = next + 1;
-  }
-  if (at < 0) return null;
+function range(index: TextIndex, at: number, len: number): Range | null {
   const from = posOf(index, at);
-  const to = posOf(index, at + quote.length - 1) + 1;
+  const to = posOf(index, at + len - 1) + 1;
   return from >= 0 && to > from ? { from, to } : null;
+}
+
+/** Where `quote` first occurs. */
+export function locate(index: TextIndex, quote: string): Range | null {
+  const at = quote ? index.text.indexOf(quote) : -1;
+  return at < 0 ? null : range(index, at, quote.length);
+}
+
+const blank = (s: string) => s.trim() === '';
+
+/**
+ * Where the `nth` copy (0-based) of `line` is, counting only copies that fill a whole line, or null when none does.
+ * With fewer copies than that, the last one: a thread whose copy of a repeated line was deleted still shows, on the
+ * copy that remains.
+ */
+export function locateLine(index: TextIndex, line: string, nth: number): Range | null {
+  const { text } = index;
+  let found = -1;
+  for (let at = line ? text.indexOf(line) : -1, n = 0; at >= 0 && n <= nth; at = text.indexOf(line, at + 1)) {
+    const end = at + line.length;
+    const lineEnd = text.indexOf('\n', end);
+    if (!blank(text.slice(text.lastIndexOf('\n', at - 1) + 1, at)) || !blank(text.slice(end, lineEnd < 0 ? undefined : lineEnd))) continue;
+    found = at;
+    n++;
+  }
+  return found < 0 ? null : range(index, found, line.length);
 }
 
 /** Finds `quote` in the doc's text. Returns ProseMirror positions, or null when the quote is not there. */

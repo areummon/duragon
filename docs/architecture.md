@@ -216,7 +216,7 @@ Drawing rules sent to the model: SVG only, viewBox width 320, `fill:none;stroke-
 
 - `App.svelte`: TopBar (hamburger, blot + wordmark, Chat pill), Sidebar, Page, ChatPanel, CommandPalette, CustomizeDialog, voice hint.
 - `Page.svelte`: width handles, NoteHeaderRow (Riddler picker, Tell Riddled, mode, Voice, Web, Export), TellRiddledCard, Editor, Margin(s).
-- Editor: TipTap with a Title node as the first block, StarterKit (headings 1–4, lists, quote), CodeBlockLowlight with a per-block language picker, HorizontalRule with `---` input rule, SlashMenu, a Decorations plugin that underlines each open thread's quote, and widget decorations that render `reply` threads inline under their line.
+- Editor: TipTap with a Title node as the first block, StarterKit (headings 1–4, lists, quote), CodeBlockLowlight with a per-block language picker, HorizontalRule with `---` input rule, SlashMenu, a Decorations plugin that underlines each open thread's quote (threads quoting the same whole line take its copies in order; a shorter quote sits where it first occurs), and widget decorations that render `reply` threads inline under their line.
 - Margin layout: each thread's top = the top of its quote's first line; threads are stacked to avoid overlap (push down). Both-margins placement alternates by order; right puts all on the right; marks renders a small `?` widget after the quote that opens the thread.
 - Read trigger: on doc change, debounce by reading pace; target = the block(s) changed since the last read; cancel any in-flight read on new input.
 - Theme: `data-theme` on `<html>` from Settings.appearance (system follows `prefers-color-scheme`). Ink colour sets `--riddle`/`--riddle-ink`. Lettering sets `--font-voice`.
