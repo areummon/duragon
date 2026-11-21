@@ -128,6 +128,7 @@ thread_to_note(id) -> Note                    "Make a note"
 list_chat(noteId) -> Message[]
 get_chat_summary(noteId) -> string            '' until the chat has folded any messages
 save_chat_summary(noteId, text)               the writer's edit; the watermark stays
+clear_chat(noteId)                            deletes the side chat and its summary
 
 get_settings() -> Settings / save_settings(Settings)
 list_riddlers() / save_riddler(Riddler) / delete_riddler(id)
@@ -205,7 +206,7 @@ A long side chat keeps a rolling summary per note (`chat_summaries`, model `Chat
 
 After a chat reply is delivered, never before, a background task (`Ai::summarize`, on the read model, like learn) checks the messages after the watermark. When there are more than 16 (`SUMMARIZE_AFTER`), it sends the summary so far and the oldest 8 (`SUMMARIZE_FOLD`) to the `summarize` task (`SUMMARIZE` prompt: at most about 180 words of plain text keeping decisions, conclusions, open questions and what the writer said they want). It saves the new text and the watermark (the 8th message's id) in one row, and only if the stored summary is still the one it read (`Db::fold_chat_summary`), so a run that races an edit or another run saves nothing. Then it emits `chat:summary`. One run per note at a time: a per-note claim in `Ai::summarizing`, released on drop. A failed run saves nothing and stays silent, so the next delivered reply retries.
 
-When a summary exists, the side chat shows a collapsed "Earlier in this chat" row at the top (`EarlierInChat.svelte`). Expanded, it is an editable textarea that saves 300 ms after typing stops and on blur (`save_chat_summary`, which keeps the watermark), and follows `chat:summary` while it is not focused. The panel's Clear only hides messages in the view; the backend keeps every message, so it leaves the summary alone.
+When a summary exists, the side chat shows a collapsed "Earlier in this chat" row at the top (`EarlierInChat.svelte`). Expanded, it is an editable textarea that saves 300 ms after typing stops and on blur (`save_chat_summary`, which keeps the watermark), and follows `chat:summary` while it is not focused. The panel's Clear calls `clear_chat`, which deletes the side chat's messages and its summary in one transaction; margin threads stay. A summary still running when the chat is cleared saves nothing, because the message its watermark points to is gone.
 
 The read task never fires twice for the same unchanged target, and never when an open thread already quotes inside the target.
 

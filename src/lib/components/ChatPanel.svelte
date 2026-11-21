@@ -4,7 +4,7 @@
   import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
   import { app } from '../state/app.svelte';
-  import { chat, chatAsText, clearChat, loadChat, send, visibleChat } from '../state/chat.svelte';
+  import { chat, chatAsText, clearChat, loadChat, send } from '../state/chat.svelte';
   import { enlarge } from '../state/layout.svelte';
   import { riddlerName } from '../state/riddler';
   import { threads } from '../state/threads.svelte';
@@ -34,7 +34,7 @@
     copiedTimer = window.setTimeout(() => (copied = false), 1200);
   }
 
-  const messages = $derived(visibleChat());
+  const messages = $derived(chat.messages);
   const open = $derived(app.chatOpen);
   const dim = $derived(open && !chat.pinned);
   const nThreads = $derived(threads.list.length);
@@ -78,7 +78,7 @@
     <div class="tools">
       {#if messages.length}
         <button class="t" class:done={copied} onclick={copyChat}>{copied ? 'Copied' : 'Copy'}</button>
-        <button class="t" onclick={clearChat}>Clear</button>
+        <button class="t" onclick={() => void clearChat()}>Clear</button>
       {/if}
       <button class="i" aria-pressed={chat.pinned} aria-label="Pin open while you write" title="Pin open while you write" onclick={() => (chat.pinned = !chat.pinned)}><Pin size={15} strokeWidth={1.5} /></button>
       <button class="i" aria-label="Close" onclick={() => (app.chatOpen = false)}><X size={17} strokeWidth={1.5} /></button>

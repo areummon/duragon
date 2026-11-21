@@ -146,3 +146,38 @@ async fn a_delivered_chat_reply_triggers_the_summary_afterwards() {
     assert!(message < summary, "{names:?}");
     assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap().text, "Folded.");
 }
+
+#[tokio::test]
+async fn clearing_the_chat_forgets_it_for_good_and_keeps_margin_threads() {
+    let mut fx = setup();
+    let chat = seed_chat(&fx, 20);
+    let summary = ChatSummary { text: "Old ground.".into(), through: Some(chat[7].id.clone()) };
+    assert!(fx.ai.db.fold_chat_summary(&fx.note, &ChatSummary::default(), &summary).unwrap());
+    let thread = fx.ai.db.create_thread(&fx.note, ThreadKind::Question, "a line").unwrap();
+    fx.ai.db.add_message(&fx.note, Some(&thread.id), Author::Riddled, "a margin question", DrawingState::None).unwrap();
+
+    fx.ai.db.clear_chat(&fx.note).unwrap();
+    assert!(fx.ai.db.list_chat(&fx.note).unwrap().is_empty());
+    assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap(), ChatSummary::default());
+    assert_eq!(fx.ai.db.list_threads(&fx.note).unwrap()[0].messages.len(), 1, "margin threads are not the chat");
+
+    let bin = claude(fx.dir.path(), &json!({"message":"Fresh start."}), "0");
+    fx.ai.bin = Some(bin.clone());
+    fx.ai.chat(&fx.note, "Hello again", "").await.unwrap();
+    let sent = std::fs::read_to_string(bin.with_extension("stdin")).unwrap();
+    assert!(!sent.contains("chat message") && !sent.contains("Old ground"), "{sent}");
+}
+
+#[tokio::test]
+async fn a_summary_running_when_the_chat_is_cleared_saves_nothing() {
+    let mut fx = setup();
+    seed_chat(&fx, 20);
+    fx.ai.bin = Some(claude(fx.dir.path(), &json!({"summary":"About the cleared chat."}), "0.3"));
+    let ai = fx.ai.clone();
+    let note = fx.note.clone();
+    let run = tokio::spawn(async move { ai.summarize(&note).await.unwrap() });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    fx.ai.db.clear_chat(&fx.note).unwrap();
+    assert!(!run.await.unwrap());
+    assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap(), ChatSummary::default());
+}

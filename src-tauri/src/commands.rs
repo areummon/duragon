@@ -108,6 +108,11 @@ pub async fn list_chat(state: State<'_, AppState>, note_id: String) -> Res<Vec<M
 }
 
 #[tauri::command]
+pub async fn clear_chat(state: State<'_, AppState>, note_id: String) -> Res<()> {
+    s(state.db.clear_chat(&note_id))
+}
+
+#[tauri::command]
 pub async fn get_chat_summary(state: State<'_, AppState>, note_id: String) -> Res<String> {
     s(state.db.get_chat_summary(&note_id).map(|c| c.text))
 }
@@ -272,7 +277,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         list_notes, search_notes, get_note, create_note, save_note, update_note_meta, delete_note,
         list_folders, create_folder, rename_folder, move_folder, delete_folder,
         list_threads, set_thread_status, set_thread_pinned, set_thread_kind, thread_to_note, list_chat,
-        get_chat_summary, save_chat_summary,
+        get_chat_summary, save_chat_summary, clear_chat,
         get_settings, save_settings, list_riddlers, save_riddler, delete_riddler,
         ai_read, ai_answer, ai_reply, ai_chat, ai_ask, ai_visualize, ai_cancel_read, export_note,
         voice_status, voice_install, list_voices, listen_start, listen_stop, speak, stop_speaking, wheel_scale,

@@ -7,7 +7,6 @@ export const chat = $state({
   messages: [] as Message[],
   waiting: false,
   pinned: false,
-  clearedAt: 0,
   /** What the backend folded of the older messages; '' until it has. */
   summary: '',
   fresh: {} as Record<string, true>,
@@ -22,7 +21,6 @@ export async function loadChat(noteId: string) {
   const be = await getBackend();
   chat.noteId = noteId;
   chat.waiting = false;
-  chat.clearedAt = 0;
   chat.fresh = {};
   chat.summary = '';
   const [messages, summary] = await Promise.all([be.listChat(noteId), be.getChatSummary(noteId)]);
@@ -52,8 +50,6 @@ export async function loadChat(noteId: string) {
   ];
 }
 
-export const visibleChat = () => chat.messages.filter((m) => m.createdAt > chat.clearedAt);
-
 export async function send(text: string) {
   const t = text.trim();
   if (!t || !chat.noteId) return;
@@ -71,7 +67,14 @@ export async function saveSummary(noteId: string, text: string) {
   await (await getBackend()).saveChatSummary(noteId, text);
 }
 
-export const clearChat = () => (chat.clearedAt = Date.now());
+export async function clearChat() {
+  const noteId = chat.noteId;
+  if (!noteId) return;
+  chat.messages = [];
+  chat.summary = '';
+  chat.fresh = {};
+  await (await getBackend()).clearChat(noteId);
+}
 
 export const chatAsText = () =>
-  visibleChat().map((m) => `${m.author === 'you' ? 'You' : 'Riddled'}: ${m.text}`).join('\n\n');
+  chat.messages.map((m) => `${m.author === 'you' ? 'You' : 'Riddled'}: ${m.text}`).join('\n\n');

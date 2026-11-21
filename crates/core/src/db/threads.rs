@@ -180,14 +180,31 @@ impl Db {
         Ok(read_summary(&self.conn(), note_id)?)
     }
 
-    /// Replaces the summary and its watermark together, only if they are still `expected`; false when they moved on.
+    /// Replaces the summary and its watermark together, only if they are still `expected` and the messages it
+    /// covers still exist; false when they moved on or the chat was cleared while it ran.
     pub fn fold_chat_summary(&self, note_id: &str, expected: &ChatSummary, next: &ChatSummary) -> Result<bool> {
         let conn = self.conn();
         if read_summary(&conn, note_id)? != *expected {
             return Ok(false);
         }
+        if let Some(through) = &next.through {
+            let kept: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE id=?1)", [through], |r| r.get(0))?;
+            if !kept {
+                return Ok(false);
+            }
+        }
         write_summary(&conn, note_id, next)?;
         Ok(true)
+    }
+
+    /// Deletes the side chat and its summary; margin threads are untouched.
+    pub fn clear_chat(&self, note_id: &str) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM messages WHERE note_id=?1 AND thread_id IS NULL", [note_id])?;
+        tx.execute("DELETE FROM chat_summaries WHERE note_id=?1", [note_id])?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// The writer's own edit: the text changes, the watermark stays.

@@ -338,6 +338,10 @@ export class MockBackend implements Backend {
   async listChat(noteId: string) {
     return structuredClone(this.chat.get(noteId) ?? []);
   }
+  async clearChat(noteId: string) {
+    this.chat.delete(noteId);
+    this.summaries.delete(noteId);
+  }
   async getChatSummary(noteId: string) {
     return this.summaries.get(noteId)?.text ?? '';
   }
