@@ -1,4 +1,4 @@
-import '@fontsource-variable/instrument-sans';
+import 'allo-font/allo.css';
 import '@fontsource-variable/newsreader';
 import 'katex/dist/katex.min.css';
 import './styles/tokens.css';
