@@ -17,6 +17,7 @@
   import { tick } from 'svelte';
   import { getBackend } from '../api/backend';
   import { TEXT_COLORS } from '../editor/textcolor';
+  import { selectionOccurrence } from '../editor/plain';
   import { kbd } from '../keys';
   import { rise } from '../motion/transitions';
   import { app } from '../state/app.svelte';
@@ -130,13 +131,13 @@
 
   async function fire(kind: 'riddle' | 'ask' | 'visualize') {
     if (!sel || !app.note) return;
-    const { text, to } = sel;
+    const { text, from, to } = sel;
     const q = question.trim();
     const be = await getBackend();
     hide();
     editor.commands.setTextSelection(to);
     if (kind === 'visualize') void be.aiVisualize(app.note.id, text);
-    else void be.aiAsk(app.note.id, text, kind === 'ask' ? q : null);
+    else void be.aiAsk(app.note.id, text, kind === 'ask' ? q : null, selectionOccurrence(editor.state.doc, from, text));
   }
 
   async function startAsk() {
@@ -184,7 +185,7 @@
         <input bind:this={input} bind:value={question} placeholder="Ask {riddlerName()} about this…" aria-label="Your question" />
       </form>
     {:else}
-      <button class="act" onclick={() => fire('riddle')}><span>Riddle this</span><span class="sub">{kbd('↵')}</span></button>
+      <button class="act" onclick={() => fire('riddle')}><span>{riddlerName()} this</span><span class="sub">{kbd('↵')}</span></button>
       <button class="act" onclick={startAsk}><span>Ask {riddlerName()}</span><span class="sub">Your own question</span></button>
       <button class="act" onclick={() => fire('visualize')}><span>Visualize</span><span class="sub">See it drawn out</span></button>
     {/if}

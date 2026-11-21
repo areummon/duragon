@@ -33,7 +33,7 @@ Preconditions:
 
 - In Chromium, the collapsed question's accessible name is the question with its spaces removed. Copy it from `agent-browser snapshot -i` if the seed text changes. After a reply it also carries "1 reply", so the copied name stops matching.
 - A thread's buttons sit inside a collapsed `<button>` until it is opened. Open it before looking for formula symbols or the reply box.
-- Margins need a wide window. Below about 1270 px, or with placement set to marks, each question is a `?` button named `Open Riddled’s thought` instead.
+- Margins need a wide window. Below about 1270 px, or with placement set to marks, each question is a `?` button named `Open Duragon’s thought` (after the note’s mind) instead.
 - A new question needs its own paragraph of at least 12 characters that doesn't end in `?` or start with a request word (those get an inline answer). The mock stays quiet on about one line in four, chosen by a hash of the text. "Plants make their food from sunlight and water." asks; "Rivers always flow from north to south." stays quiet. Don't keep typing on the line while it reads, or the read is cancelled.
 - The question arrives 2.4–3.9 s after the last keystroke (900 ms pause plus the mock's delay). `wait 5000` covers it.
 - With the side chat open, `Pin open while you write` exists twice. With `Thread options` open, `Resolve` exists as a button and a menuitem.

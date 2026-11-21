@@ -1,6 +1,7 @@
 import { getBackend } from '../api/backend';
 import type { Message } from '../api/types';
 import { caretParagraph } from '../editor/current';
+import { riddlerName } from './riddler';
 
 export const chat = $state({
   noteId: null as string | null,
@@ -80,4 +81,4 @@ export async function clearChat() {
 }
 
 export const chatAsText = () =>
-  chat.messages.map((m) => `${m.author === 'you' ? 'You' : 'Riddled'}: ${m.text}`).join('\n\n');
+  chat.messages.map((m) => `${m.author === 'you' ? 'You' : riddlerName()}: ${m.text}`).join('\n\n');

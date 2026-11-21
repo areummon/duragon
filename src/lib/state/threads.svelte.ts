@@ -2,6 +2,7 @@ import { getBackend } from '../api/backend';
 import type { AiTask, Message, Thread, ThreadStatus } from '../api/types';
 import { app, openNote } from './app.svelte';
 import { upsertMeta } from './notes.svelte';
+import { riddlerName } from './riddler';
 
 export interface Thinking {
   id: number;
@@ -203,7 +204,7 @@ export async function makeNote(id: string) {
 }
 
 export function threadText(t: Thread): string {
-  return t.messages.map((m) => `${m.author === 'you' ? 'You' : 'Riddled'}: ${m.text}`).join('\n\n');
+  return t.messages.map((m) => `${m.author === 'you' ? 'You' : riddlerName()}: ${m.text}`).join('\n\n');
 }
 
 if (import.meta.env.DEV) Object.assign((window as unknown as { __duragon: object }).__duragon ?? {}, { threads });

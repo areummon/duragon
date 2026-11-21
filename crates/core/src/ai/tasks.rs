@@ -380,7 +380,8 @@ impl Ai {
         Ok(())
     }
 
-    pub async fn answer(&self, note_id: &str, target: &str) -> Result<()> {
+    /// Answers `target`, a line addressed to the mind and the `nth` occurrence of its text in the note (from 0).
+    pub async fn answer(&self, note_id: &str, target: &str, nth: usize) -> Result<()> {
         let ctx = self.ctx(note_id)?;
         self.thinking(note_id, target, AiTask::Answer);
         let threads = self.db.list_threads(note_id)?;
@@ -388,7 +389,7 @@ impl Ai {
             &ctx.note.meta.title,
             &doc::blocks(&ctx.note.doc),
             target,
-            0,
+            nth,
             prompts::TargetIs::AddressedToYou,
             &threads,
             &ctx.riddler.name,
@@ -593,8 +594,9 @@ struct AskOut {
 }
 
 impl Ai {
-    /// Selection actions. `question = None` is "Riddle this" (must speak); `Some(q)` is "Ask Riddled".
-    pub async fn ask_selection(&self, note_id: &str, target: &str, question: Option<&str>) -> Result<()> {
+    /// Selection actions. `question = None` is "{mind} this" (must speak); `Some(q)` is "Ask {mind}". `nth` is which
+    /// occurrence of the selected text in the note, from 0, was selected, so a long note is cut around it.
+    pub async fn ask_selection(&self, note_id: &str, target: &str, question: Option<&str>, nth: usize) -> Result<()> {
         let ctx = self.ctx(note_id)?;
         let question = question.map(str::trim).filter(|q| !q.is_empty());
         self.thinking(note_id, target, AiTask::Ask);
@@ -602,7 +604,7 @@ impl Ai {
             &ctx.note.meta.title,
             &doc::blocks(&ctx.note.doc),
             target,
-            0,
+            nth,
             prompts::TargetIs::Selected(question),
             &self.db.list_threads(note_id)?,
             &ctx.riddler.name,

@@ -94,7 +94,7 @@ async fn real_answer_with_web_sources() {
     db.save_note(&note.meta.id, "Rust", &doc, &format!("Rust\n{text}")).unwrap();
     let cap = Arc::new(Capture::default());
     let ai = Ai::new(db, cap.clone());
-    ai.answer(&note.meta.id, text).await.unwrap();
+    ai.answer(&note.meta.id, text, 0).await.unwrap();
     let t = &ai.db.list_threads(&note.meta.id).unwrap()[0];
     println!("{}\nSOURCES: {:#?}", t.messages[0].text, t.messages[0].sources);
     assert!(!t.messages[0].sources.is_empty());

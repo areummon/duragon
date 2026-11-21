@@ -43,11 +43,11 @@ export class TauriBackend implements Backend {
   deleteRiddler = (id: string) => invoke<void>('delete_riddler', { id });
 
   aiRead = (noteId: string, target: string, nth: number) => invoke<void>('ai_read', { noteId, target, nth });
-  aiAnswer = (noteId: string, target: string) => invoke<void>('ai_answer', { noteId, target });
+  aiAnswer = (noteId: string, target: string, nth: number) => invoke<void>('ai_answer', { noteId, target, nth });
   aiReply = (threadId: string, text: string) => invoke<void>('ai_reply', { threadId, text });
   aiChat = (noteId: string, text: string, near: string) => invoke<void>('ai_chat', { noteId, text, near });
-  aiAsk = (noteId: string, target: string, question: string | null) =>
-    invoke<void>('ai_ask', { noteId, target, question });
+  aiAsk = (noteId: string, target: string, question: string | null, nth: number) =>
+    invoke<void>('ai_ask', { noteId, target, question, nth });
   aiVisualize = (noteId: string, target: string) => invoke<void>('ai_visualize', { noteId, target });
   aiCancelRead = (noteId: string) => invoke<void>('ai_cancel_read', { noteId });
 

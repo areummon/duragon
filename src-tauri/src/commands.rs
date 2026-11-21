@@ -161,9 +161,9 @@ pub async fn ai_read(state: State<'_, AppState>, note_id: String, target: String
 }
 
 #[tauri::command]
-pub async fn ai_answer(state: State<'_, AppState>, note_id: String, target: String) -> Res<()> {
+pub async fn ai_answer(state: State<'_, AppState>, note_id: String, target: String, nth: usize) -> Res<()> {
     let ai = state.ai.clone();
-    tauri::async_runtime::spawn(async move { log_failure("answer", ai.answer(&note_id, &target).await) });
+    tauri::async_runtime::spawn(async move { log_failure("answer", ai.answer(&note_id, &target, nth).await) });
     Ok(())
 }
 
@@ -184,10 +184,10 @@ pub async fn ai_chat(state: State<'_, AppState>, note_id: String, text: String, 
 }
 
 #[tauri::command]
-pub async fn ai_ask(state: State<'_, AppState>, note_id: String, target: String, question: Option<String>) -> Res<()> {
+pub async fn ai_ask(state: State<'_, AppState>, note_id: String, target: String, question: Option<String>, nth: usize) -> Res<()> {
     let ai = state.ai.clone();
     tauri::async_runtime::spawn(async move {
-        log_failure("ask", ai.ask_selection(&note_id, &target, question.as_deref()).await)
+        log_failure("ask", ai.ask_selection(&note_id, &target, question.as_deref(), nth).await)
     });
     Ok(())
 }

@@ -41,11 +41,12 @@ export interface Backend {
 
   /** Reads `target`, the `nth` occurrence of its text in the note (from 0), so a long note is cut around that copy. */
   aiRead(noteId: string, target: string, nth: number): Promise<void>;
-  aiAnswer(noteId: string, target: string): Promise<void>;
+  /** Answers `target`, a line addressed to the mind and the `nth` occurrence of its text in the note (from 0). */
+  aiAnswer(noteId: string, target: string, nth: number): Promise<void>;
   aiReply(threadId: string, text: string): Promise<void>;
   aiChat(noteId: string, text: string, near: string): Promise<void>;
-  /** Selection actions. question=null is "Riddle this"; a string is "Ask Riddled". */
-  aiAsk(noteId: string, target: string, question: string | null): Promise<void>;
+  /** Selection actions. question=null is "{mind} this"; a string is "Ask {mind}". `nth` says which occurrence of the selected text was selected. */
+  aiAsk(noteId: string, target: string, question: string | null, nth: number): Promise<void>;
   aiVisualize(noteId: string, target: string): Promise<void>;
   aiCancelRead(noteId: string): Promise<void>;
 

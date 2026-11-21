@@ -122,3 +122,32 @@ export function markdownish(doc: unknown): string {
   ((doc as JsonNode).content ?? []).forEach((b) => md(b, '', out));
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
+
+/** Where block `i` begins in the note's text: its blocks joined by "\n", as the backend joins them. */
+export const blockStart = (texts: string[], i: number) => texts.slice(0, i).reduce((n, t) => n + t.length + 1, 0);
+
+/**
+ * Which occurrence of `target`, from 0, starts at `at` in the note's text, counted without overlaps the way the backend
+ * finds it, so a long note is cut around that copy.
+ */
+export function occurrence(texts: string[], at: number, target: string): number {
+  const plain = texts.join('\n');
+  let n = 0;
+  for (let k = plain.indexOf(target); k >= 0 && k < at; k = plain.indexOf(target, k + target.length)) n++;
+  return n;
+}
+
+/** Which occurrence of its text the line in block `i` is. */
+export function lineOccurrence(texts: string[], i: number): number {
+  const line = texts[i].trim();
+  return occurrence(texts, blockStart(texts, i) + texts[i].indexOf(line), line);
+}
+
+/** Which occurrence of `text` the selection starting at `from` is. */
+export function selectionOccurrence(doc: PMNode, from: number, text: string): number {
+  const texts = docBlocks(doc);
+  const $from = doc.resolve(from);
+  const into = $from.depth ? doc.textBetween($from.start(1), from, '\n', '\n').length : 0;
+  const lead = text.length - text.trimStart().length;
+  return occurrence(texts, blockStart(texts, $from.index(0)) + into + lead, text.trim());
+}

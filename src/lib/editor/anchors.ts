@@ -4,6 +4,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { blotSvg } from '../ui/blot';
 import { indexText, locate, locateLine, type Range } from './quote';
+import { riddlerName } from '../state/riddler';
 
 export interface AnchorThread {
   id: string;
@@ -98,7 +99,7 @@ function build(doc: PMNode, input: AnchorInput, h: AnchorHandlers, kept = new Ma
           b.className = 'q-mark';
           b.type = 'button';
           b.innerHTML = blotSvg(t.id, 13) + '<i></i>';
-          b.setAttribute('aria-label', 'Open Riddled’s thought');
+          b.setAttribute('aria-label', `Open ${riddlerName()}’s thought`);
           b.addEventListener('mousedown', (e) => e.preventDefault());
           b.addEventListener('click', () => h.onOpen(t.id));
           return b;

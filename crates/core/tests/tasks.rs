@@ -135,22 +135,29 @@ async fn read_stays_quiet_when_the_model_says_nothing() {
 
 #[tokio::test]
 async fn a_long_note_is_read_around_the_copy_being_read() {
-    let mut fx = setup(json!({}), json!({}));
     let filler = |i: usize| format!("para{i} {}", "words ".repeat(100));
     let mut content = vec![json!({"type":"title","content":[{"type":"text","text":"Plants"}]})];
     for i in 0..300 {
         let text = if i == 20 || i == 280 { TARGET.to_string() } else { filler(i) };
         content.push(json!({"type":"paragraph","content":[{"type":"text","text":text}]}));
     }
-    fx.ai.db.save_note(&fx.note, "Plants", &json!({"type":"doc","content":content}), "").unwrap();
-    let bin = recording_claude(fx._dir.path(), &json!({"said":false}), "0");
-    fx.ai.bin = Some(bin.clone());
+    for task in ["read", "answer", "ask"] {
+        let mut fx = setup(json!({}), json!({}));
+        disable_learn(&fx);
+        fx.ai.db.save_note(&fx.note, "Plants", &json!({"type":"doc","content":content}), "").unwrap();
+        let bin = recording_claude(fx._dir.path(), &json!({"said":false,"quote":"","message":""}), "0");
+        fx.ai.bin = Some(bin.clone());
 
-    fx.ai.read(&fx.note, TARGET, 1).await.unwrap();
-    let sent = std::fs::read_to_string(bin.with_extension("stdin")).unwrap();
-    assert!(sent.contains("[… "), "the note was cut");
-    assert!(sent.contains("para279 ") && sent.contains("para281 "), "the second copy's neighbours are kept");
-    assert!(!sent.contains("para19 ") && !sent.contains("para21 "), "the first copy's neighbours give way");
+        match task {
+            "read" => fx.ai.read(&fx.note, TARGET, 1).await.unwrap(),
+            "answer" => fx.ai.answer(&fx.note, TARGET, 1).await.unwrap(),
+            _ => fx.ai.ask_selection(&fx.note, TARGET, None, 1).await.unwrap(),
+        }
+        let sent = std::fs::read_to_string(bin.with_extension("stdin")).unwrap();
+        assert!(sent.contains("[… "), "{task}: the note was cut");
+        assert!(sent.contains("para279 ") && sent.contains("para281 "), "{task}: the second copy's neighbours are kept");
+        assert!(!sent.contains("para19 ") && !sent.contains("para21 "), "{task}: the first copy's neighbours give way");
+    }
 }
 
 #[tokio::test]
@@ -210,7 +217,7 @@ async fn answer_reply_and_chat_flow() {
     fx.ai.db.save_settings(&s).unwrap();
 
     let line = "Duragon, draw the Calvin cycle";
-    fx.ai.answer(&fx.note, line).await.unwrap();
+    fx.ai.answer(&fx.note, line, 0).await.unwrap();
     let threads = fx.ai.db.list_threads(&fx.note).unwrap();
     assert_eq!((threads[0].kind, threads[0].quote.as_str()), (ThreadKind::Reply, line));
     assert_eq!(threads[0].messages[0].drawing, DrawingState::Done);
@@ -251,7 +258,7 @@ async fn ask_must_say_something_and_persists_the_question() {
     s.learn_about_you = false;
     fx.ai.db.save_settings(&s).unwrap();
 
-    fx.ai.ask_selection(&fx.note, TARGET, Some("is this right?")).await.unwrap();
+    fx.ai.ask_selection(&fx.note, TARGET, Some("is this right?"), 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread"]);
     assert_eq!(fx.cap.all()[0].1["task"], "ask");
     let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
@@ -261,7 +268,7 @@ async fn ask_must_say_something_and_persists_the_question() {
     assert_eq!(t.messages[1].author, Author::Riddled);
 
     let fx2 = setup(json!({"quote":"not in target","message":"Hm."}), json!({}));
-    fx2.ai.ask_selection(&fx2.note, TARGET, None).await.unwrap();
+    fx2.ai.ask_selection(&fx2.note, TARGET, None, 0).await.unwrap();
     let t = &fx2.ai.db.list_threads(&fx2.note).unwrap()[0];
     assert_eq!(t.quote, TARGET);
     assert_eq!(t.messages.len(), 1);
@@ -299,7 +306,7 @@ async fn web_sources_are_persisted_cleaned_and_shown_to_later_turns() {
         json!({}),
     );
     enable_web(&fx);
-    fx.ai.answer(&fx.note, "Duragon, latest Rust?").await.unwrap();
+    fx.ai.answer(&fx.note, "Duragon, latest Rust?", 0).await.unwrap();
     let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
     let src = &t.messages[0].sources;
     assert_eq!(src.len(), 2);
@@ -316,7 +323,7 @@ async fn web_sources_are_persisted_cleaned_and_shown_to_later_turns() {
 async fn no_sources_when_web_is_off_and_schema_follows_web() {
     use duragon_core::ai::prompts::{schema, system_prompt};
     let fx = setup(json!({"message":"Hm.","sources":[]}), json!({}));
-    fx.ai.answer(&fx.note, TARGET).await.unwrap();
+    fx.ai.answer(&fx.note, TARGET, 0).await.unwrap();
     assert!(fx.ai.db.list_threads(&fx.note).unwrap()[0].messages[0].sources.is_empty());
     for task in [AiTask::Answer, AiTask::Reply, AiTask::Chat, AiTask::Ask, AiTask::Read] {
         assert!(schema(task, true)["properties"].get("sources").is_some(), "{task:?}");
@@ -366,7 +373,7 @@ async fn only_the_side_chat_searches_other_notes_and_only_when_turned_on() {
     assert!(a[a.iter().position(|x| x == "--allowedTools").unwrap() + 1].contains("mcp__notes__search_notes"));
     assert!(a[a.iter().position(|x| x == "--system-prompt").unwrap() + 1].contains("read_note"));
 
-    fx.ai.answer(&fx.note, TARGET).await.unwrap();
+    fx.ai.answer(&fx.note, TARGET, 0).await.unwrap();
     let a = last_args(&args_file);
     assert!(!has_server(&a), "other tasks never get it");
     assert!(!a[a.iter().position(|x| x == "--system-prompt").unwrap() + 1].contains("read_note"));
@@ -405,13 +412,13 @@ async fn symbols_are_asked_for_only_when_turned_on_and_only_for_prose() {
     let thread = fx.ai.db.create_thread(&fx.note, ThreadKind::Question, "mitochondria").unwrap();
     fx.ai.chat(&fx.note, "kinetic energy?", "").await.unwrap();
     assert!(asks(&last_args(&args_file)), "chat");
-    fx.ai.answer(&fx.note, TARGET).await.unwrap();
+    fx.ai.answer(&fx.note, TARGET, 0).await.unwrap();
     assert!(asks(&last_args(&args_file)), "answer");
     fx.ai.reply(&thread.id, "why?").await.unwrap();
     assert!(asks(&last_args(&args_file)), "reply");
     fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert!(asks(&last_args(&args_file)), "read");
-    fx.ai.ask_selection(&fx.note, TARGET, None).await.unwrap();
+    fx.ai.ask_selection(&fx.note, TARGET, None, 0).await.unwrap();
     assert!(asks(&last_args(&args_file)), "ask");
     let a = last_args(&args_file);
     assert!(arg(&a, "--system-prompt").contains("mass of the falling object"));
@@ -451,7 +458,7 @@ async fn at_most_sixteen_symbols_are_kept() {
     let fx = setup(json!({"message": format!("${}$", letters.join("+")), "symbols": symbols}), json!({}));
     disable_learn(&fx);
     explain_symbols(&fx, true);
-    fx.ai.answer(&fx.note, "Duragon, the alphabet?").await.unwrap();
+    fx.ai.answer(&fx.note, "Duragon, the alphabet?", 0).await.unwrap();
     let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
     assert_eq!(t.messages[0].symbols.len(), 16);
     assert_eq!(t.messages[0].symbols[15].tex, "p");
@@ -473,7 +480,7 @@ async fn a_huge_note_is_cut_to_budget_around_the_target_and_the_message_says_so(
     assert!(tokens(&plain) > AiTask::Answer.spec().budget, "the note alone is over budget");
     fx.ai.db.save_note(&fx.note, "Cells", &doc, &plain).unwrap();
 
-    fx.ai.answer(&fx.note, &target).await.unwrap();
+    fx.ai.answer(&fx.note, &target, 0).await.unwrap();
     let sent = std::fs::read_to_string(bin.with_extension("stdin")).unwrap();
     assert!(tokens(&sent) <= AiTask::Answer.spec().budget, "{} tokens", tokens(&sent));
     assert!(sent.contains(&paras[1499]) && sent.contains(&paras[1501]), "the target's neighbours stay");
@@ -485,6 +492,6 @@ async fn a_huge_note_is_cut_to_budget_around_the_target_and_the_message_says_so(
 
     let small = setup(json!({"message":"Hm."}), json!({}));
     disable_learn(&small);
-    small.ai.answer(&small.note, TARGET).await.unwrap();
+    small.ai.answer(&small.note, TARGET, 0).await.unwrap();
     assert_eq!(small.cap.all()[1].1["messages"][0]["trimmed"], false);
 }

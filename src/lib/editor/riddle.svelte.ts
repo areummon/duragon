@@ -13,7 +13,7 @@ import { measureLines } from './pencil';
 import { current } from './current';
 import { QUIET } from './create';
 import { TextSelection } from '@tiptap/pm/state';
-import { docBlocks } from './plain';
+import { docBlocks, lineOccurrence, selectionOccurrence } from './plain';
 import type { BlockChange } from './Editor.svelte';
 
 const PACE = { regular: 900, slow: 1800 } as const;
@@ -51,15 +51,6 @@ function answeredLines() {
 }
 
 const copiesOf = (lines: string[], line: string) => Math.max(1, lines.filter((l) => l === line).length);
-
-/** Which occurrence of `target`, from 0, block `i` holds in the note's text: its blocks joined by "\n", as the backend joins them. */
-function occurrence(texts: string[], i: number, target: string): number {
-  const plain = texts.join('\n');
-  const at = texts.slice(0, i).reduce((n, t) => n + t.length + 1, 0) + texts[i].indexOf(target);
-  let n = 0;
-  for (let k = plain.indexOf(target); k >= 0 && k < at; k = plain.indexOf(target, k + target.length)) n++;
-  return n;
-}
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -196,14 +187,15 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     if (empty) return;
     e.preventDefault();
     const text = editor.state.doc.textBetween(from, to, '\n');
-    void getBackend().then((be) => be.aiAsk(noteId, text, null));
+    const nth = selectionOccurrence(editor.state.doc, from, text);
+    void getBackend().then((be) => be.aiAsk(noteId, text, null, nth));
   };
   view.dom.addEventListener('keydown', keydown);
 
-  async function answer(text: string, copies: number) {
+  async function answer(text: string, copies: number, nth: number) {
     answered.take(text);
     if (threads.list.filter((t) => t.kind === 'reply' && t.quote === text).length >= copies) return;
-    await (await getBackend()).aiAnswer(noteId, text);
+    await (await getBackend()).aiAnswer(noteId, text, nth);
   }
 
   /** Whether an open thread is anchored in top-level block `i`: the anchors know which copy of a line each sits on. */
@@ -229,12 +221,13 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
       const block = editor.state.selection.$from.index(0);
       const enter = block === caretBlock + 1 && !settings.value.justMyWords;
       // Runs on every keystroke, so it reads the doc only when a read is in flight or Enter was pressed.
-      const lines = readTarget !== null || enter ? docBlocks(editor.state.doc).map((t) => t.trim()) : [];
+      const texts = readTarget !== null || enter ? docBlocks(editor.state.doc) : [];
+      const lines = texts.map((t) => t.trim());
       if (readTarget !== null && !lines.includes(readTarget, 1)) cancelRead();
       const line = lines[caretBlock];
       if (enter && isAddressed(line)) {
         const copies = copiesOf(lines.slice(1), line);
-        if (answered.pending(line, copies)) void answer(line, copies);
+        if (answered.pending(line, copies)) void answer(line, copies, lineOccurrence(texts, caretBlock));
       }
       caretBlock = block;
     },
@@ -245,7 +238,7 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
       answered.prune(body);
       for (const i of changed) {
         const copies = copiesOf(body, lines[i]);
-        if (isAddressed(lines[i]) && answered.pending(lines[i], copies)) void answer(lines[i], copies);
+        if (isAddressed(lines[i]) && answered.pending(lines[i], copies)) void answer(lines[i], copies, lineOccurrence(texts, i));
       }
       if (app.note.mode !== 'thinks') return;
       // Only a block whose text is new is read, so an unchanged line never is, and a copy pasted again is.
@@ -254,7 +247,7 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
       const target = lines[i];
       if (target.length < (isRequest(target) ? MIN_REQUEST : MIN_TARGET) || covered(i)) return;
       readTarget = target;
-      const nth = occurrence(texts, i, target);
+      const nth = lineOccurrence(texts, i);
       void getBackend().then((be) => be.aiRead(noteId, target, nth));
     },
     detach() {
