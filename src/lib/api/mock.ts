@@ -145,6 +145,7 @@ export class MockBackend implements Backend {
   private folders = new Map<string, Folder>();
   private threads = new Map<string, Thread>();
   private chat = new Map<string, Message[]>();
+  private summaries = new Map<string, { text: string; through: string | null }>();
   private riddlers = new Map<string, Riddler>([[BUILTIN_RIDDLER_ID, BUILTIN_RIDDLER]]);
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private handlers = new Map<string, Set<(p: any) => void>>();
@@ -337,6 +338,25 @@ export class MockBackend implements Backend {
   async listChat(noteId: string) {
     return structuredClone(this.chat.get(noteId) ?? []);
   }
+  async getChatSummary(noteId: string) {
+    return this.summaries.get(noteId)?.text ?? '';
+  }
+  async saveChatSummary(noteId: string, text: string) {
+    this.summaries.set(noteId, { text, through: this.summaries.get(noteId)?.through ?? null });
+  }
+
+  /** Like Ai::summarize: past 16 unsummarized messages, the oldest 8 fold into the summary. */
+  private foldChat(noteId: string) {
+    const list = this.chat.get(noteId) ?? [];
+    const prev = this.summaries.get(noteId) ?? { text: '', through: null };
+    const pending = list.slice(list.findIndex((m) => m.id === prev.through) + 1);
+    if (pending.length <= 16) return;
+    const fold = pending.slice(0, 8);
+    const asked = fold.filter((m) => m.author === 'you').map((m) => `“${m.text}”`).join(', ');
+    const text = `${prev.text ? `${prev.text} ` : ''}The writer asked ${asked}, and the replies pointed at the claim that the whole process happens in one place.`;
+    this.summaries.set(noteId, { text, through: fold[fold.length - 1].id });
+    this.emit('chat:summary', { noteId, summary: text });
+  }
 
   async wheelScale() {
     return 1;
@@ -461,6 +481,7 @@ export class MockBackend implements Backend {
       list.push(m);
       this.emit('ai:message', { ...m });
       if (draws) this.finishDrawing(`${noteId}:chat`, m, text);
+      this.schedule(`${noteId}:chat`, 400, () => this.foldChat(noteId));
     });
   }
   async aiCancelRead(noteId: string) {

@@ -193,3 +193,92 @@ async fn real_chat_explains_formula_symbols() {
         assert!(reply.text.contains(&sym.tex), "{sym:?}");
     }
 }
+
+const TOPICS: [&str; 6] = ["tide pools", "medieval bookbinding", "sourdough starters", "orbital resonance", "jazz voicings", "glacier formation"];
+
+#[tokio::test]
+#[ignore]
+async fn real_chat_on_a_huge_note_reads_around_the_cursor() {
+    let db = Db::open_in_memory().unwrap();
+    let mut s = db.get_settings().unwrap();
+    (s.chat_model, s.learn_about_you) = ("haiku".into(), false);
+    db.save_settings(&s).unwrap();
+    let near = "The Velloran footbridge was rebuilt in 1873 with grey granite hauled from the Ashby quarry, forty miles north.";
+    let mut content = vec![json!({"type":"title","content":[{"type":"text","text":"Field notes"}]})];
+    let mut chars = 0;
+    for i in 0.. {
+        if chars > 900_000 {
+            break;
+        }
+        let p = if i == 6000 {
+            near.to_string()
+        } else {
+            format!("Note {i} on {}: an ordinary observation, written down so it is not forgotten, with nothing unusual in it.", TOPICS[i % TOPICS.len()])
+        };
+        chars += p.len() + 1;
+        content.push(json!({"type":"paragraph","content":[{"type":"text","text":p}]}));
+    }
+    let doc = json!({"type":"doc","content":content});
+    let plain = doc::plain_text(&doc);
+    println!("NOTE CHARS: {}", plain.chars().count());
+    let note = db.create_note(Some("Field notes")).unwrap().meta.id;
+    db.save_note(&note, "Field notes", &doc, &plain).unwrap();
+    let cap = Arc::new(Capture::default());
+    let ai = Ai::new(db.clone(), cap.clone());
+    ai.chat(&note, "In one sentence: where did the granite for the bridge in the paragraph at my cursor come from?", near).await.unwrap();
+    let errors: Vec<_> = cap.all().into_iter().filter(|(n, _)| n == "ai:error").collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    let reply = db.list_chat(&note).unwrap().pop().unwrap();
+    println!("TRIMMED: {}\nMESSAGE: {}", reply.trimmed, reply.text);
+    assert_eq!(reply.author, Author::Riddled);
+    assert!(reply.trimmed);
+    assert!(reply.text.contains("Ashby"), "{}", reply.text);
+}
+
+#[tokio::test]
+#[ignore]
+async fn real_chat_summary_keeps_an_early_decision() {
+    let db = Db::open_in_memory().unwrap();
+    let mut s = db.get_settings().unwrap();
+    (s.chat_model, s.read_model, s.learn_about_you) = ("haiku".into(), "haiku".into(), false);
+    db.save_settings(&s).unwrap();
+    let note = db.create_note(Some("Story")).unwrap().meta.id;
+    let mut seed = vec![
+        (Author::You, "Help me plan my short story."),
+        (Author::Riddled, "Happy to. What do you know so far: who it is about, and where it happens?"),
+        (Author::You, "Decision made: the protagonist is called Marisol Quint, and the story is set in Lisbon in 1962. That is final."),
+        (Author::Riddled, "Marisol Quint in 1962 Lisbon. What does she want that the city stands in the way of?"),
+    ];
+    let filler = [
+        (Author::You, "I am still thinking about the tone, maybe something quiet."),
+        (Author::Riddled, "Quiet can carry a lot. What would a quiet scene leave unsaid?"),
+    ];
+    while seed.len() < 19 {
+        seed.extend(filler.iter().cloned());
+    }
+    seed.truncate(19);
+    for (author, text) in &seed {
+        db.add_message(&note, None, *author, text, DrawingState::None).unwrap();
+    }
+    let cap = Arc::new(Capture::default());
+    let ai = Ai::new(db.clone(), cap.clone());
+    ai.chat(&note, "Just reply with the single word OK this time.", "").await.unwrap();
+    for _ in 0..240 {
+        if cap.names().iter().any(|n| n == "chat:summary") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    let summary = db.get_chat_summary(&note).unwrap();
+    println!("SUMMARY: {}\nTHROUGH: {:?}", summary.text, summary.through);
+    assert!(summary.text.contains("Marisol"), "{summary:?}");
+    let chat = db.list_chat(&note).unwrap();
+    let rest = summary.unsummarized(&chat);
+    println!("VERBATIM AFTER WATERMARK: {} messages, last: {}", rest.len(), rest.last().unwrap().text);
+    assert!(rest.iter().all(|m| !m.text.contains("Marisol") && !m.text.contains("Lisbon")), "the decision now lives only in the summary");
+
+    ai.chat(&note, "Remind me: what name and setting did we settle on?", "").await.unwrap();
+    let reply = db.list_chat(&note).unwrap().pop().unwrap();
+    println!("FOLLOW-UP: {}", reply.text);
+    assert!(reply.text.contains("Marisol") && reply.text.contains("Lisbon"), "{}", reply.text);
+}

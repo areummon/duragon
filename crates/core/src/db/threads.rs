@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use rusqlite::{params, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use super::{new_id, now_ms, Db};
 use crate::doc;
@@ -40,6 +40,26 @@ fn thread_row(r: &Row) -> rusqlite::Result<Thread> {
         created_at: r.get(6)?,
         messages: Vec::new(),
     })
+}
+
+fn read_summary(conn: &Connection, note_id: &str) -> rusqlite::Result<ChatSummary> {
+    conn.query_row(
+        "SELECT chat_summary, chat_summarized_through FROM chat_summaries WHERE note_id=?1",
+        [note_id],
+        |r| Ok(ChatSummary { text: r.get(0)?, through: r.get(1)? }),
+    )
+    .optional()
+    .map(Option::unwrap_or_default)
+}
+
+fn write_summary(conn: &Connection, note_id: &str, s: &ChatSummary) -> Result<()> {
+    conn.execute(
+        "INSERT INTO chat_summaries(note_id, chat_summary, chat_summarized_through) VALUES (?1,?2,?3)
+         ON CONFLICT(note_id) DO UPDATE SET chat_summary=excluded.chat_summary,
+           chat_summarized_through=excluded.chat_summarized_through",
+        params![note_id, s.text, s.through],
+    )?;
+    Ok(())
 }
 
 impl Db {
@@ -154,6 +174,27 @@ impl Db {
         ))?;
         let rows = st.query_map([note_id], msg_row)?.collect::<Result<_, _>>()?;
         Ok(rows)
+    }
+
+    pub fn get_chat_summary(&self, note_id: &str) -> Result<ChatSummary> {
+        Ok(read_summary(&self.conn(), note_id)?)
+    }
+
+    /// Replaces the summary and its watermark together, only if they are still `expected`; false when they moved on.
+    pub fn fold_chat_summary(&self, note_id: &str, expected: &ChatSummary, next: &ChatSummary) -> Result<bool> {
+        let conn = self.conn();
+        if read_summary(&conn, note_id)? != *expected {
+            return Ok(false);
+        }
+        write_summary(&conn, note_id, next)?;
+        Ok(true)
+    }
+
+    /// The writer's own edit: the text changes, the watermark stays.
+    pub fn set_chat_summary_text(&self, note_id: &str, text: &str) -> Result<()> {
+        let conn = self.conn();
+        let through = read_summary(&conn, note_id)?.through;
+        write_summary(&conn, note_id, &ChatSummary { text: text.into(), through })
     }
 
     pub fn set_thread_status(&self, id: &str, status: ThreadStatus) -> Result<()> {

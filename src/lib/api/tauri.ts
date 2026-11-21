@@ -31,6 +31,8 @@ export class TauriBackend implements Backend {
   setThreadKind = (id: string, kind: ThreadKind) => invoke<void>('set_thread_kind', { id, kind });
   threadToNote = (id: string) => invoke<Note>('thread_to_note', { id });
   listChat = (noteId: string) => invoke<Message[]>('list_chat', { noteId });
+  getChatSummary = (noteId: string) => invoke<string>('get_chat_summary', { noteId });
+  saveChatSummary = (noteId: string, text: string) => invoke<void>('save_chat_summary', { noteId, text });
 
   getSettings = () => invoke<Settings>('get_settings');
   wheelScale = () => invoke<number>('wheel_scale');

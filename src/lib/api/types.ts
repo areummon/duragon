@@ -116,7 +116,7 @@ export interface NoteMetaPatch {
   folderId?: string | null;
 }
 
-export type AiTask = 'read' | 'answer' | 'reply' | 'chat' | 'ask' | 'visualize' | 'draw' | 'learn';
+export type AiTask = 'read' | 'answer' | 'reply' | 'chat' | 'ask' | 'visualize' | 'draw' | 'learn' | 'summarize';
 export type ExportFormat = 'md' | 'docx';
 
 export interface BackendEvents {
@@ -126,6 +126,8 @@ export interface BackendEvents {
   'ai:quiet': { noteId: string; target: string };
   'ai:error': { noteId: string; task: AiTask; message: string };
   'about:updated': string;
+  /** The side chat's summary of its older messages changed in the background. */
+  'chat:summary': { noteId: string; summary: string };
   'voice:status': VoiceStatus;
   /** Microphone level 0..1 while listening, ~20 Hz. */
   'voice:level': number;

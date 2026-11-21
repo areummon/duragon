@@ -55,8 +55,8 @@ fn under_budget_payloads_are_byte_identical_to_before() {
         ("read", read_payload("Plants", &blocks, "Second para.", &threads, "Duragon")),
         ("answer", answer_payload("Plants", &blocks, "Duragon, why?", &threads, "Duragon")),
         ("reply", reply_payload("Plants", &blocks, &open, "Duragon")),
-        ("chat", chat_payload("Plants", &blocks, &threads, &chat, "Duragon", " Second para. ")),
-        ("chat_nonear", chat_payload("Plants", &blocks, &[], &chat, "Duragon", "")),
+        ("chat", chat_payload("Plants", &blocks, &threads, "", &chat, "Duragon", " Second para. ")),
+        ("chat_nonear", chat_payload("Plants", &blocks, &[], "", &chat, "Duragon", "")),
         ("draw", draw_payload("Plants", &blocks, "Show a leaf.")),
         ("ask", ask_payload("Plants", &blocks, "Second para.", Some("Is it?"), &threads, "Duragon")),
         ("ask_none", ask_payload("Plants", &blocks, "Second para.", None, &[], "Duragon")),
@@ -107,7 +107,7 @@ fn long_chat() -> (Vec<Thread>, Vec<Message>) {
 
 fn chat_sections() -> Vec<Section> {
     let (threads, chat) = long_chat();
-    chat_payload("Biology", &long_note(), &threads, &chat, "Duragon", &para(50, "p25w"))
+    chat_payload("Biology", &long_note(), &threads, "", &chat, "Duragon", &para(50, "p25w"))
 }
 
 /// The cut text at the budget `full - shave` tokens.

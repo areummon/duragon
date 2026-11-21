@@ -159,6 +159,10 @@ Decide whether the writer said something lasting about themselves: what they stu
 
 If so, return changed=true and aboutYou: the full updated paragraph, in the third person, merging the new fact with what was there, at most 700 characters, plain text. If not, return changed=false and leave aboutYou out. When unsure, return changed=false."#;
 
+const SUMMARIZE: &str = r#"You keep the running summary of a side chat between a writer and a notebook assistant about one of their notes. The chat is long, so its oldest messages are folded into this summary and no longer shown to the assistant; the summary is all it will remember of them.
+
+You are given the summary so far (possibly empty) and the next messages to fold in, oldest first. Return the updated summary: the summary so far merged with what these messages add. Keep the decisions made, the conclusions reached, the questions still open, and what the writer said they want or are aiming for, with any specific names, numbers and choices exactly as stated. Drop greetings, repetition and anything later messages superseded. Write plain text in the third person ("The writer decided ..."), at most about 180 words, no headings or lists."#;
+
 fn tone_rule(t: Tone) -> &'static str {
     match t {
         Tone::Plain => "Plain: clear and neutral.",
@@ -180,6 +184,7 @@ pub fn system_prompt(task: AiTask, riddler: &Riddler, brief: &str, about_you: &s
     match task {
         AiTask::Draw => return DRAW.to_string(),
         AiTask::Learn => return LEARN.to_string(),
+        AiTask::Summarize => return SUMMARIZE.to_string(),
         _ => {}
     }
     let mut p = CORE.replace("{name}", &riddler.name);
@@ -258,8 +263,9 @@ pub fn schema(task: AiTask, web: bool) -> Value {
             }),
             vec!["changed"],
         ),
+        AiTask::Summarize => (json!({ "summary": s("The updated summary, plain text, at most about 180 words") }), vec!["summary"]),
     };
-    let takes_sources = web && !matches!(task, AiTask::Draw | AiTask::Learn | AiTask::Visualize);
+    let takes_sources = web && !matches!(task, AiTask::Draw | AiTask::Learn | AiTask::Summarize | AiTask::Visualize);
     if takes_sources {
         props["sources"] = json!({
             "type": "array",
@@ -432,10 +438,12 @@ pub fn reply_payload(title: &str, blocks: &[Block], thread: &Thread, riddler: &s
     s
 }
 
+/// `chat` is the messages after the summary's watermark; `summary` stands in for the ones before.
 pub fn chat_payload(
     title: &str,
     blocks: &[Block],
     threads: &[Thread],
+    summary: &str,
     chat: &[Message],
     riddler: &str,
     near: &str,
@@ -460,6 +468,9 @@ pub fn chat_payload(
                 .shortened(Step(Stage::ClosedThreads, i), short)
         });
     }
+    if !summary.trim().is_empty() {
+        s.push(Section::keep(format!("\nEARLIER IN THIS CHAT:\n{}\n", summary.trim())));
+    }
     s.push(Section::keep("\nCHAT SO FAR (reply to the writer's last message):\n"));
     s.extend(message_sections(
         chat.iter().map(|m| format!("{}: {}{}\n", speaker(m, riddler), m.text, sources_suffix(m))).collect(),
@@ -470,6 +481,15 @@ pub fn chat_payload(
 pub fn draw_payload(title: &str, blocks: &[Block], brief: &str) -> Vec<Section> {
     let mut s = note_sections(title, blocks, brief);
     s.push(Section::keep(format!("\nDRAWING BRIEF:\n{brief}\n")));
+    s
+}
+
+pub fn summarize_payload(summary: &str, fold: &[Message], riddler: &str) -> String {
+    let current = if summary.trim().is_empty() { "(empty)" } else { summary.trim() };
+    let mut s = format!("SUMMARY SO FAR:\n{current}\n\nMESSAGES TO FOLD IN (oldest first):\n");
+    for m in fold {
+        s.push_str(&format!("{}: {}{}\n", speaker(m, riddler), m.text, sources_suffix(m)));
+    }
     s
 }
 

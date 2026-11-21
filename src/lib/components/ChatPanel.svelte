@@ -10,6 +10,7 @@
   import { threads } from '../state/threads.svelte';
   import Blot from './Blot.svelte';
   import Drawing from './Drawing.svelte';
+  import EarlierInChat from './EarlierInChat.svelte';
   import InkText from './InkText.svelte';
   import TrimmedHint from './TrimmedHint.svelte';
   import { askAboutSymbol } from '../symbolTip';
@@ -85,6 +86,7 @@
   </header>
 
   <div class="scroll" bind:this={scroller}>
+    <EarlierInChat />
     {#if messages.length === 0}
       <p class="empty">I've read the whole note and its threads. Ask me anything about it.</p>
       <div class="chips">

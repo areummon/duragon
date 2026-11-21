@@ -101,6 +101,8 @@ messages(id TEXT PK, note_id TEXT, thread_id TEXT NULL REFERENCES threads ON DEL
          -- sources: [{url, title}] the Mind used on the web; symbols: [{tex, meaning}] for its formulas;
          -- trimmed: 1 when the payload was cut to its budget
 riddlers(id TEXT PK, name, description, how_it_thinks, tone, frequency, builtin INT)
+chat_summaries(note_id TEXT PK REFERENCES notes ON DELETE CASCADE, chat_summary TEXT DEFAULT '',
+               chat_summarized_through TEXT NULL)   -- the side chat's summary and the id of the last message it covers
 kv(key TEXT PK, value TEXT)          -- settings JSON under key 'settings'
 ```
 
@@ -124,6 +126,8 @@ list_threads(noteId) -> Thread[]              includes messages
 set_thread_status(id, status) / set_thread_pinned(id, pinned)
 thread_to_note(id) -> Note                    "Make a note"
 list_chat(noteId) -> Message[]
+get_chat_summary(noteId) -> string            '' until the chat has folded any messages
+save_chat_summary(noteId, text)               the writer's edit; the watermark stays
 
 get_settings() -> Settings / save_settings(Settings)
 list_riddlers() / save_riddler(Riddler) / delete_riddler(id)
@@ -146,6 +150,7 @@ ai:message    (Message)                       new or updated message (drawing pe
 ai:quiet      ({noteId, target})              read decided to say nothing
 ai:error      ({noteId, task, message})
 about:updated (string)                        about-you paragraph changed
+chat:summary  ({noteId, summary})             the side chat's summary was folded forward in the background
 ```
 
 ## AI runner (crates/core/src/ai)
@@ -173,6 +178,7 @@ Tasks, prompts and schemas live in `ai/prompts.rs`. Every prompt gets the Riddle
 | chat | chat panel | `{message, draw?}` | appends chat Message |
 | draw | after any of the above with a brief | `{svg}` | fills the Message's svg, drawing=done |
 | learn | after reply/chat/answer when learnAboutYou | `{changed, aboutYou?}` | saves setting, emits about:updated |
+| summarize | after a chat reply is delivered, when more than 16 chat messages are unsummarized | `{summary}` | folds the oldest 8 into the chat summary, emits chat:summary |
 
 When `explainSymbols` is on, read, answer, reply, chat and ask (the tasks whose message the writer reads as prose) gain an optional `symbols: [{tex, meaning}]` in their schema, and their prompt gains a paragraph (`EXPLAIN_SYMBOLS`) asking for each distinct symbol and constant in the message's formulas, `tex` copied exactly as written and `meaning` a phrase of at most 8 words. When it is off, prompt and schema are unchanged. The backend trims the symbols, drops blank ones, duplicates and any whose `tex` is not in the message, keeps at most 16, and stores them on the Message. In an open thread or the side chat, `InkText` renders a formula with symbols through `renderTexWithSymbols` (`rich.ts`): `markSymbols` wraps each occurrence as `{\htmlData{sym=<i>}{…}}`, matching whole TeX tokens and skipping the arguments of `\text`, `\mathrm` and the like, and KaTeX trusts only `\htmlData`. Each symbol becomes a focusable button (`symbolTip.ts`): pointing at it with a fine pointer or focusing it shows its meaning in a tooltip, and a press writes back `Explain $<tex>$ in more detail: what does it represent here?` in the same thread or chat.
 
@@ -192,6 +198,14 @@ Drop order (`Stage`, then rank within it):
 Never cut: the system prompt, About you and the Riddler (all in the system prompt), the note header, the target, the writer's latest message, and the chat summary. The volatile parts (target, latest message) stay last so the stable prefix can be cached.
 
 When a call was cut, the message it produced carries `trimmed: true` (stored in `messages.trimmed`). The thread view and the side chat show a faint line under it (`TrimmedHint.svelte`): "Read around this passage" or "Read around your cursor; the note was too long to read whole." A drawing's own payload is fitted too, but does not change its message's flag.
+
+### Side chat summary
+
+A long side chat keeps a rolling summary per note (`chat_summaries`, model `ChatSummary { text, through }`), where `through` is the id of the last chat message the summary covers. The chat payload sends `EARLIER IN THIS CHAT:` and the summary (when it is not empty), then only the messages after `through`, verbatim. The panel still shows the full history.
+
+After a chat reply is delivered, never before, a background task (`Ai::summarize`, on the read model, like learn) checks the messages after the watermark. When there are more than 16 (`SUMMARIZE_AFTER`), it sends the summary so far and the oldest 8 (`SUMMARIZE_FOLD`) to the `summarize` task (`SUMMARIZE` prompt: at most about 180 words of plain text keeping decisions, conclusions, open questions and what the writer said they want). It saves the new text and the watermark (the 8th message's id) in one row, and only if the stored summary is still the one it read (`Db::fold_chat_summary`), so a run that races an edit or another run saves nothing. Then it emits `chat:summary`. One run per note at a time: a per-note claim in `Ai::summarizing`, released on drop. A failed run saves nothing and stays silent, so the next delivered reply retries.
+
+When a summary exists, the side chat shows a collapsed "Earlier in this chat" row at the top (`EarlierInChat.svelte`). Expanded, it is an editable textarea that saves 300 ms after typing stops and on blur (`save_chat_summary`, which keeps the watermark), and follows `chat:summary` while it is not focused. The panel's Clear only hides messages in the view; the backend keeps every message, so it leaves the summary alone.
 
 The read task never fires twice for the same unchanged target, and never when an open thread already quotes inside the target.
 

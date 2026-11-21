@@ -3,8 +3,9 @@ use anyhow::Result;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::budget::{budget_tokens, fit, Section};
@@ -28,6 +29,8 @@ pub struct Ai {
     pub bin: Option<PathBuf>,
     /// Set when this build can serve the notes search tool; the chat uses it when the writer turns it on.
     pub notes_search: Option<NotesSearch>,
+    /// Notes with a summary call in flight.
+    summarizing: Arc<Mutex<HashSet<String>>>,
 }
 
 struct Ctx {
@@ -80,6 +83,36 @@ struct LearnOut {
 
 const ABOUT_YOU_MAX: usize = 700;
 
+/// The chat summary folds `SUMMARIZE_FOLD` messages at a time once more than `SUMMARIZE_AFTER` are unsummarized.
+pub const SUMMARIZE_AFTER: usize = 16;
+pub const SUMMARIZE_FOLD: usize = 8;
+/// A hard stop past the prompt's ~180 words, since the summary is never cut from the chat payload.
+const SUMMARY_MAX: usize = 2_000;
+
+#[derive(Deserialize)]
+struct SummaryOut {
+    summary: String,
+}
+
+/// Holds `key` in the set until dropped.
+struct InFlight {
+    set: Arc<Mutex<HashSet<String>>>,
+    key: String,
+}
+
+impl InFlight {
+    fn claim(set: &Arc<Mutex<HashSet<String>>>, key: &str) -> Option<Self> {
+        let fresh = set.lock().unwrap_or_else(|e| e.into_inner()).insert(key.to_string());
+        fresh.then(|| Self { set: set.clone(), key: key.to_string() })
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        self.set.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.key);
+    }
+}
+
 /// Finds `quote` in `target`: exact first, then ignoring case and whitespace runs.
 /// Returns the actual substring of `target`.
 pub fn resolve_quote(target: &str, quote: &str) -> Option<String> {
@@ -130,7 +163,7 @@ fn normalize(s: &str) -> (Vec<char>, Vec<(usize, usize)>) {
 
 impl Ai {
     pub fn new(db: Db, events: Arc<dyn Events>) -> Self {
-        Self { db, events, bin: None, notes_search: None }
+        Self { db, events, bin: None, notes_search: None, summarizing: Arc::default() }
     }
 
     fn emit<T: serde::Serialize>(&self, name: &str, payload: &T) {
@@ -372,11 +405,14 @@ impl Ai {
         let ctx = self.ctx(note_id)?;
         self.db.add_message(note_id, None, Author::You, text, DrawingState::None)?;
         self.thinking(note_id, text, AiTask::Chat);
+        let summary = self.db.get_chat_summary(note_id)?;
+        let chat = self.db.list_chat(note_id)?;
         let payload = prompts::chat_payload(
             &ctx.note.meta.title,
             &blocks_of(&ctx.note),
             &self.db.list_threads(note_id)?,
-            &self.db.list_chat(note_id)?,
+            &summary.text,
+            summary.unsummarized(&chat),
             &ctx.riddler.name,
             near,
         );
@@ -389,7 +425,54 @@ impl Ai {
         }
         self.deliver(&ctx, None, false, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
         self.spawn_learn(&ctx, text);
+        self.spawn_summarize(note_id);
         Ok(())
+    }
+
+    fn spawn_summarize(&self, note_id: &str) {
+        let ai = self.clone();
+        let note_id = note_id.to_string();
+        tokio::spawn(async move {
+            let _ = ai.summarize(&note_id).await;
+        });
+    }
+
+    /// Folds the oldest unsummarized chat messages into the note's chat summary once more than
+    /// `SUMMARIZE_AFTER` are unsummarized. Returns whether it saved a new summary. One call per note at a time;
+    /// a failure saves nothing, so the next delivered reply tries again.
+    pub async fn summarize(&self, note_id: &str) -> Result<bool> {
+        let Some(_claim) = InFlight::claim(&self.summarizing, note_id) else { return Ok(false) };
+        let prev = self.db.get_chat_summary(note_id)?;
+        let chat = self.db.list_chat(note_id)?;
+        let pending = prev.unsummarized(&chat);
+        if pending.len() <= SUMMARIZE_AFTER {
+            return Ok(false);
+        }
+        let fold = &pending[..SUMMARIZE_FOLD];
+        let ctx = self.ctx(note_id)?;
+        let req = ClaudeRequest {
+            model: ctx.settings.read_model.clone(),
+            system_prompt: prompts::system_prompt(AiTask::Summarize, &ctx.riddler, "", "", false),
+            schema: prompts::schema(AiTask::Summarize, false),
+            payload: prompts::summarize_payload(&prev.text, fold, &ctx.riddler.name),
+            web: false,
+            timeout: Duration::from_secs(120),
+            cancel: None,
+            bin: self.bin.clone(),
+            notes: None,
+        };
+        let Ok(v) = run_claude(req).await else { return Ok(false) };
+        let Ok(out) = serde_json::from_value::<SummaryOut>(v) else { return Ok(false) };
+        let text: String = out.summary.trim().chars().take(SUMMARY_MAX).collect();
+        if text.is_empty() {
+            return Ok(false);
+        }
+        let next = ChatSummary { text, through: fold.last().map(|m| m.id.clone()) };
+        if !self.db.fold_chat_summary(note_id, &prev, &next)? {
+            return Ok(false);
+        }
+        self.events.emit("chat:summary", json!({ "noteId": note_id, "summary": next.text }));
+        Ok(true)
     }
 
     fn spawn_learn(&self, ctx: &Ctx, latest: &str) {

@@ -40,6 +40,7 @@ str_enum!(ExportFormat { Md => "md", Docx => "docx" });
 str_enum!(AiTask {
     Read => "read", Answer => "answer", Reply => "reply",
     Chat => "chat", Ask => "ask", Visualize => "visualize", Draw => "draw", Learn => "learn",
+    Summarize => "summarize",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -104,6 +105,23 @@ pub struct Message {
     #[serde(default)]
     pub trimmed: bool,
     pub created_at: i64,
+}
+
+/// What the side chat remembers of its messages up to and including `through`, which are no longer sent verbatim.
+/// Saved as one row, so the text and its watermark never disagree.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSummary {
+    pub text: String,
+    pub through: Option<String>,
+}
+
+impl ChatSummary {
+    /// The messages of `chat` after the watermark; all of them when it is unset or no longer there.
+    pub fn unsummarized<'a>(&self, chat: &'a [Message]) -> &'a [Message] {
+        let at = self.through.as_ref().and_then(|id| chat.iter().position(|m| &m.id == id));
+        at.map_or(chat, |i| &chat[i + 1..])
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

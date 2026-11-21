@@ -26,6 +26,9 @@ export interface Backend {
   setThreadKind(id: string, kind: ThreadKind): Promise<void>;
   threadToNote(id: string): Promise<Note>;
   listChat(noteId: string): Promise<Message[]>;
+  /** What the side chat remembers of its older messages, '' until it has folded any. */
+  getChatSummary(noteId: string): Promise<string>;
+  saveChatSummary(noteId: string, text: string): Promise<void>;
 
   getSettings(): Promise<Settings>;
   saveSettings(settings: Settings): Promise<void>;

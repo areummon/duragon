@@ -329,3 +329,42 @@ fn an_older_database_gains_message_trimmed_off() {
     assert!(db.get_message(&m.id).unwrap().trimmed);
     assert_eq!(serde_json::to_value(&m).unwrap()["trimmed"], true);
 }
+
+#[test]
+fn chat_summary_edits_persist_and_keep_the_watermark() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("d.db");
+    let db = Db::open(&path).unwrap();
+    let note = db.list_notes().unwrap()[0].id.clone();
+    assert_eq!(db.get_chat_summary(&note).unwrap(), ChatSummary::default());
+    let m = db.add_message(&note, None, Author::You, "hi", DrawingState::None).unwrap();
+    let folded = ChatSummary { text: "Said hi.".into(), through: Some(m.id.clone()) };
+    assert!(db.fold_chat_summary(&note, &ChatSummary::default(), &folded).unwrap());
+    assert!(!db.fold_chat_summary(&note, &ChatSummary::default(), &folded).unwrap(), "only from the state it read");
+    db.set_chat_summary_text(&note, "Greeted me.").unwrap();
+    drop(db);
+
+    let db = Db::open(&path).unwrap();
+    assert_eq!(db.get_chat_summary(&note).unwrap(), ChatSummary { text: "Greeted me.".into(), through: Some(m.id) });
+    db.delete_note(&note).unwrap();
+    assert_eq!(db.get_chat_summary(&note).unwrap(), ChatSummary::default());
+}
+
+#[test]
+fn an_older_database_gains_chat_summaries() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("d.db");
+    let note = {
+        let db = Db::open(&path).unwrap();
+        db.list_notes().unwrap()[0].id.clone()
+    };
+    let old = rusqlite::Connection::open(&path).unwrap();
+    old.execute_batch("DROP TABLE chat_summaries").unwrap();
+    old.pragma_update(None, "user_version", 6).unwrap();
+    drop(old);
+
+    let db = Db::open(&path).unwrap();
+    assert_eq!(db.get_chat_summary(&note).unwrap(), ChatSummary::default());
+    db.set_chat_summary_text(&note, "Kept.").unwrap();
+    assert_eq!(db.get_chat_summary(&note).unwrap().text, "Kept.");
+}

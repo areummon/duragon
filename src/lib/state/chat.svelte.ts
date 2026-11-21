@@ -8,6 +8,8 @@ export const chat = $state({
   waiting: false,
   pinned: false,
   clearedAt: 0,
+  /** What the backend folded of the older messages; '' until it has. */
+  summary: '',
   fresh: {} as Record<string, true>,
 });
 
@@ -22,9 +24,15 @@ export async function loadChat(noteId: string) {
   chat.waiting = false;
   chat.clearedAt = 0;
   chat.fresh = {};
-  chat.messages = await be.listChat(noteId);
+  chat.summary = '';
+  const [messages, summary] = await Promise.all([be.listChat(noteId), be.getChatSummary(noteId)]);
   if (chat.noteId !== noteId) return;
+  chat.messages = messages;
+  chat.summary = summary;
   off = [
+    be.on('chat:summary', (p) => {
+      if (p.noteId === noteId) chat.summary = p.summary;
+    }),
     be.on('ai:message', (m) => {
       if (m.noteId !== noteId || m.threadId !== null) return;
       const i = chat.messages.findIndex((x) => x.id === m.id || (x.id.startsWith('local-') && x.author === m.author && x.text === m.text));
@@ -56,6 +64,11 @@ export async function send(text: string) {
   chat.fresh[id] = true;
   chat.waiting = true;
   await (await getBackend()).aiChat(chat.noteId, t, caretParagraph());
+}
+
+export async function saveSummary(noteId: string, text: string) {
+  if (chat.noteId === noteId) chat.summary = text;
+  await (await getBackend()).saveChatSummary(noteId, text);
 }
 
 export const clearChat = () => (chat.clearedAt = Date.now());
