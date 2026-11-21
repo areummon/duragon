@@ -66,21 +66,21 @@ export function locate(index: TextIndex, quote: string): Range | null {
 const blank = (s: string) => s.trim() === '';
 
 /**
- * Where the `nth` copy (0-based) of `line` is, counting only copies that fill a whole line, or null when none does.
- * With fewer copies than that, the last one: a thread whose copy of a repeated line was deleted still shows, on the
- * copy that remains.
+ * The first copy of `line` that fills a whole line and does not start at a position in `taken`, or null when no copy
+ * fills a whole line. With every copy taken, the last one: a thread whose copy of a repeated line was deleted still
+ * shows, on a copy that remains.
  */
-export function locateLine(index: TextIndex, line: string, nth: number): Range | null {
+export function locateLine(index: TextIndex, line: string, taken: Set<number | undefined>): Range | null {
   const { text } = index;
-  let found = -1;
-  for (let at = line ? text.indexOf(line) : -1, n = 0; at >= 0 && n <= nth; at = text.indexOf(line, at + 1)) {
+  let last: Range | null = null;
+  for (let at = line ? text.indexOf(line) : -1; at >= 0; at = text.indexOf(line, at + 1)) {
     const end = at + line.length;
     const lineEnd = text.indexOf('\n', end);
     if (!blank(text.slice(text.lastIndexOf('\n', at - 1) + 1, at)) || !blank(text.slice(end, lineEnd < 0 ? undefined : lineEnd))) continue;
-    found = at;
-    n++;
+    last = range(index, at, line.length) ?? last;
+    if (last && !taken.has(last.from)) return last;
   }
-  return found < 0 ? null : range(index, found, line.length);
+  return last;
 }
 
 /** Finds `quote` in the doc's text. Returns ProseMirror positions, or null when the quote is not there. */

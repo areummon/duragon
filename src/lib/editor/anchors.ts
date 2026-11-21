@@ -59,20 +59,32 @@ function anchorAttrs(t: AnchorThread, input: AnchorInput) {
   return attrs;
 }
 
-function build(doc: PMNode, input: AnchorInput, h: AnchorHandlers): AnchorState {
+/**
+ * Where each thread's quote sits. An anchor stays on the words it was placed on while the note is edited around it, so
+ * each copy of a repeated line keeps its own thread. A new thread, or one whose words were edited away, is placed by
+ * text: a quote of a whole line on the first copy that no other thread on those words holds, a shorter quote where it
+ * first occurs, never on an unrelated later line that happens to contain the same words.
+ */
+function place(doc: PMNode, threads: AnchorThread[], kept: Map<string, Range | null>): Map<string, Range | null> {
   const ranges = new Map<string, Range | null>();
-  const decos: Decoration[] = [];
-  // One pass over the doc for every thread: this runs on each keystroke. Threads quoting the same whole line take its
-  // copies in order, so a line written twice and read twice anchors each answer to its own copy. A shorter quote
-  // anchors where it first occurs, never on an unrelated later line that happens to contain the same words.
-  const index = input.threads.length ? indexText(doc) : null;
-  const seen = new Map<string, number>();
-  if (index) for (const t of input.threads) {
-    const nth = seen.get(t.quote) ?? 0;
-    const line = locateLine(index, t.quote, nth);
-    if (line) seen.set(t.quote, nth + 1);
-    ranges.set(t.id, line ?? locate(index, t.quote));
+  const lost: AnchorThread[] = [];
+  for (const t of threads) {
+    const r = kept.get(t.id);
+    if (r && r.from < r.to && r.to <= doc.content.size && doc.textBetween(r.from, r.to, '\n') === t.quote) ranges.set(t.id, r);
+    else lost.push(t);
   }
+  // Runs on each keystroke, so the doc is indexed only when a thread needs placing.
+  const index = lost.length ? indexText(doc) : null;
+  for (const t of lost) {
+    const taken = new Set(threads.filter((o) => o.quote === t.quote).map((o) => ranges.get(o.id)?.from));
+    ranges.set(t.id, index && (locateLine(index, t.quote, taken) ?? locate(index, t.quote)));
+  }
+  return ranges;
+}
+
+function build(doc: PMNode, input: AnchorInput, h: AnchorHandlers, kept = new Map<string, Range | null>()): AnchorState {
+  const ranges = place(doc, input.threads, kept);
+  const decos: Decoration[] = [];
   if (input.hidden) return { input, deco: DecorationSet.empty, ranges };
 
   for (const t of input.threads) {
@@ -128,7 +140,9 @@ export function anchorPlugin(h: AnchorHandlers) {
       apply(tr, prev, _old, state) {
         const next = tr.getMeta(anchorKey) as AnchorInput | undefined;
         if (!next && !tr.docChanged) return prev;
-        return build(state.doc, next ?? prev.input, h);
+        const kept = new Map<string, Range | null>();
+        for (const [id, r] of prev.ranges) kept.set(id, r && { from: tr.mapping.map(r.from, 1), to: tr.mapping.map(r.to, -1) });
+        return build(state.doc, next ?? prev.input, h, kept);
       },
     },
     props: {
