@@ -10,10 +10,10 @@ import { app } from '../state/app.svelte';
 import { collapseOnType, geometry, open, threads, visibleThreads, type Geometry } from '../state/threads.svelte';
 import { anchorKey, anchorPlugin, type AnchorInput } from './anchors';
 import { measureLines } from './pencil';
-import { blockTexts } from './plain';
 import { current } from './current';
 import { QUIET } from './create';
 import { TextSelection } from '@tiptap/pm/state';
+import type { Node as PMNode } from '@tiptap/pm/model';
 
 const PACE = { regular: 900, slow: 1800 } as const;
 const MIN_TARGET = 12;
@@ -28,6 +28,38 @@ const placed = new Set<string>();
 const REQUEST = /^(?:draw|sketch|explain|show|tell|describe|compare|list|summari[sz]e|visuali[sz]e|what|why|how|who|when|where|can|could|should|is|are|do|does)\b/i;
 
 const isRequest = (line: string) => line.endsWith('?') || REQUEST.test(line);
+
+/** The note's lines below the title, trimmed, as the editor reports changed blocks. */
+function bodyLines(doc: PMNode): string[] {
+  const lines: string[] = [];
+  doc.forEach((block, _offset, i) => {
+    if (i > 0) lines.push(block.textBetween(0, block.content.size, '\n', '\n').trim());
+  });
+  return lines;
+}
+
+/**
+ * How many copies of each line the mind has already been given. Counting copies, not remembering text, lets a line
+ * that is pasted again, or deleted and written again, be read like any new line, while an unchanged line never is.
+ */
+function ledger() {
+  const done = new Map<string, number>();
+  return {
+    pending: (line: string, copies: number) => (done.get(line) ?? 0) < copies,
+    take: (line: string, copies: number) => done.set(line, copies),
+    give: (line: string) => done.set(line, Math.max(0, (done.get(line) ?? 0) - 1)),
+    /** Forget copies that are gone, so writing them again counts as new. */
+    prune(lines: string[]) {
+      for (const [line, n] of done) {
+        const left = lines.filter((l) => l === line).length;
+        if (left === 0) done.delete(line);
+        else if (left < n) done.set(line, left);
+      }
+    },
+  };
+}
+
+const copiesOf = (lines: string[], line: string) => Math.max(1, lines.filter((l) => l === line).length);
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -48,8 +80,8 @@ export interface Riddle {
 export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string): Riddle {
   const view = editor.view;
   current.editor = editor;
-  const lastRead = new Set<string>();
-  const answered = new Set<string>();
+  const read = ledger();
+  const answered = ledger();
   let readTarget: string | null = null;
   let caretBlock = editor.state.selection.$from.index(0);
   let frame = 0;
@@ -169,9 +201,9 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
   };
   view.dom.addEventListener('keydown', keydown);
 
-  async function answer(text: string) {
-    answered.add(text);
-    if (threads.list.some((t) => t.kind === 'reply' && t.quote === text)) return;
+  async function answer(text: string, copies: number) {
+    answered.take(text, copies);
+    if (threads.list.filter((t) => t.kind === 'reply' && t.quote === text).length >= copies) return;
     await (await getBackend()).aiAnswer(noteId, text);
   }
 
@@ -179,7 +211,7 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     if (readTarget === null) return;
     const target = readTarget;
     readTarget = null;
-    lastRead.delete(target);
+    read.give(target);
     threads.thinking = threads.thinking.filter((t) => t.task !== 'read');
     void getBackend().then((be) => be.aiCancelRead(noteId));
   }
@@ -190,24 +222,37 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     onEdit() {
       collapseOnType();
       // A read stays valid while its line is unchanged: pressing Enter after it, or writing elsewhere, keeps it.
-      if (readTarget !== null && !blockTexts(editor.getJSON()).some((t) => t.trim() === readTarget)) cancelRead();
+      // Runs on every keystroke, so it reads the doc directly rather than serializing it.
+      if (readTarget !== null && !bodyLines(editor.state.doc).includes(readTarget)) cancelRead();
       const block = editor.state.selection.$from.index(0);
       if (block === caretBlock + 1 && !settings.value.justMyWords) {
-        const line = editor.state.doc.child(caretBlock).textContent;
-        if (isAddressed(line) && !answered.has(line)) void answer(line);
+        const line = editor.state.doc.child(caretBlock).textContent.trim();
+        if (isAddressed(line)) {
+          const copies = copiesOf(bodyLines(editor.state.doc), line);
+          if (answered.pending(line, copies)) void answer(line, copies);
+        }
       }
       caretBlock = block;
     },
     onBlocksChanged(texts) {
       if (settings.value.justMyWords || !app.note) return;
+      const all = bodyLines(editor.state.doc);
+      read.prune(all);
+      answered.prune(all);
       const lines = texts.map((t) => t.trim());
-      for (const line of lines) if (isAddressed(line) && !answered.has(line)) void answer(line);
+      for (const line of lines) {
+        const copies = copiesOf(all, line);
+        if (isAddressed(line) && answered.pending(line, copies)) void answer(line, copies);
+      }
       if (app.note.mode !== 'thinks') return;
       const target = [...lines].reverse().find((t) => !isAddressed(t));
-      if (!target || lastRead.has(target)) return;
+      if (!target) return;
+      const copies = copiesOf(all, target);
+      if (!read.pending(target, copies)) return;
       if (target.length < (isRequest(target) ? MIN_REQUEST : MIN_TARGET)) return;
-      if (threads.list.some((t) => t.status === 'open' && target.includes(t.quote))) return;
-      lastRead.add(target);
+      // Each open thread on these words covers one copy of the line; a copy beyond them is new.
+      if (threads.list.filter((t) => t.status === 'open' && t.quote && target.includes(t.quote)).length >= copies) return;
+      read.take(target, copies);
       readTarget = target;
       void getBackend().then((be) => be.aiRead(noteId, target));
     },
