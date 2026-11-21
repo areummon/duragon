@@ -345,7 +345,8 @@ impl Ai {
         Ok(())
     }
 
-    pub async fn read(&self, note_id: &str, target: &str) -> Result<()> {
+    /// Reads `target`, the `nth` occurrence of its text in the note (from 0), so a long note is cut around that copy.
+    pub async fn read(&self, note_id: &str, target: &str, nth: usize) -> Result<()> {
         let ctx = self.ctx(note_id)?;
         self.thinking(note_id, target, AiTask::Read);
         let threads = self.db.list_threads(note_id)?;
@@ -353,6 +354,7 @@ impl Ai {
             &ctx.note.meta.title,
             &doc::blocks(&ctx.note.doc),
             target,
+            nth,
             prompts::TargetIs::JustWritten,
             &threads,
             &ctx.riddler.name,
@@ -386,6 +388,7 @@ impl Ai {
             &ctx.note.meta.title,
             &doc::blocks(&ctx.note.doc),
             target,
+            0,
             prompts::TargetIs::AddressedToYou,
             &threads,
             &ctx.riddler.name,
@@ -599,6 +602,7 @@ impl Ai {
             &ctx.note.meta.title,
             &doc::blocks(&ctx.note.doc),
             target,
+            0,
             prompts::TargetIs::Selected(question),
             &self.db.list_threads(note_id)?,
             &ctx.riddler.name,

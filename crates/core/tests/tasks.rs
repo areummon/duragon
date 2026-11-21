@@ -43,7 +43,7 @@ fn quote_resolution() {
 #[tokio::test]
 async fn read_creates_a_thread_for_an_exact_quote() {
     let fx = setup(json!({"said":true,"quote":"the mitochondria","message":"Where does the light get absorbed?"}), json!({}));
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread"], "{:?}", fx.cap.all());
     let (_, th) = &fx.cap.all()[1];
     assert_eq!(th["quote"], "the mitochondria");
@@ -69,7 +69,7 @@ async fn read_answers_a_request_inline_under_the_whole_line() {
         json!({}),
     );
     disable_learn(&fx);
-    fx.ai.read(&fx.note, line).await.unwrap();
+    fx.ai.read(&fx.note, line, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread"], "{:?}", fx.cap.all());
     let th = &fx.cap.all()[1].1;
     assert_eq!(th["kind"], "reply");
@@ -87,7 +87,7 @@ async fn read_reply_with_a_brief_chains_a_drawing() {
         json!({"svg": SVG}),
     );
     disable_learn(&fx);
-    fx.ai.read(&fx.note, line).await.unwrap();
+    fx.ai.read(&fx.note, line, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread", "ai:thinking", "ai:message"]);
     assert_eq!(fx.cap.all()[1].1["kind"], "reply");
     assert_eq!(fx.cap.all()[1].1["messages"][0]["drawing"], "pending");
@@ -99,7 +99,7 @@ async fn read_reply_with_a_brief_chains_a_drawing() {
 #[tokio::test]
 async fn read_with_explicit_question_kind_stays_a_margin_question() {
     let fx = setup(json!({"said":true,"kind":"question","quote":"mitochondria","message":"Sure?"}), json!({}));
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
     assert_eq!((t.kind, t.quote.as_str()), (ThreadKind::Question, "mitochondria"));
 }
@@ -113,14 +113,14 @@ fn read_schema_offers_question_or_reply() {
 #[tokio::test]
 async fn read_repairs_a_sloppy_quote() {
     let fx = setup(json!({"said":true,"quote":"PHOTOSYNTHESIS  happens","message":"Really?"}), json!({}));
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert_eq!(fx.ai.db.list_threads(&fx.note).unwrap()[0].quote, "Photosynthesis happens");
 }
 
 #[tokio::test]
 async fn read_drops_a_quote_that_is_not_in_the_target() {
     let fx = setup(json!({"said":true,"quote":"chloroplasts","message":"Really?"}), json!({}));
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:quiet"]);
     assert_eq!(fx.cap.all()[1].1, json!({"noteId": fx.note, "target": TARGET}));
     assert!(fx.ai.db.list_threads(&fx.note).unwrap().is_empty());
@@ -129,8 +129,28 @@ async fn read_drops_a_quote_that_is_not_in_the_target() {
 #[tokio::test]
 async fn read_stays_quiet_when_the_model_says_nothing() {
     let fx = setup(json!({"said":false}), json!({}));
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:quiet"]);
+}
+
+#[tokio::test]
+async fn a_long_note_is_read_around_the_copy_being_read() {
+    let mut fx = setup(json!({}), json!({}));
+    let filler = |i: usize| format!("para{i} {}", "words ".repeat(100));
+    let mut content = vec![json!({"type":"title","content":[{"type":"text","text":"Plants"}]})];
+    for i in 0..300 {
+        let text = if i == 20 || i == 280 { TARGET.to_string() } else { filler(i) };
+        content.push(json!({"type":"paragraph","content":[{"type":"text","text":text}]}));
+    }
+    fx.ai.db.save_note(&fx.note, "Plants", &json!({"type":"doc","content":content}), "").unwrap();
+    let bin = recording_claude(fx._dir.path(), &json!({"said":false}), "0");
+    fx.ai.bin = Some(bin.clone());
+
+    fx.ai.read(&fx.note, TARGET, 1).await.unwrap();
+    let sent = std::fs::read_to_string(bin.with_extension("stdin")).unwrap();
+    assert!(sent.contains("[… "), "the note was cut");
+    assert!(sent.contains("para279 ") && sent.contains("para281 "), "the second copy's neighbours are kept");
+    assert!(!sent.contains("para19 ") && !sent.contains("para21 "), "the first copy's neighbours give way");
 }
 
 #[tokio::test]
@@ -139,7 +159,7 @@ async fn read_chains_a_drawing_pending_then_done() {
         json!({"said":true,"quote":"mitochondria","message":"Show a cell with its parts.","drawing":true}),
         json!({"svg": SVG}),
     );
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread", "ai:thinking", "ai:message"]);
     let ev = fx.cap.all();
     assert_eq!(ev[1].1["messages"][0]["drawing"], "pending");
@@ -157,7 +177,7 @@ async fn a_hostile_drawing_is_marked_failed() {
         json!({"said":true,"quote":"mitochondria","message":"Look.","drawing":true}),
         json!({"svg": "<html><script>alert(1)</script></html>"}),
     );
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread", "ai:thinking", "ai:error", "ai:message"]);
     let last = fx.cap.all().pop().unwrap().1;
     assert_eq!((last["drawing"].as_str(), last["svg"].is_null()), (Some("failed"), true));
@@ -168,7 +188,7 @@ async fn cli_failure_emits_ai_error() {
     let fx = setup(json!({}), json!({}));
     let mut ai = fx.ai.clone();
     ai.bin = Some(fixture("fail.sh"));
-    ai.read(&fx.note, TARGET).await.unwrap();
+    ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:error"]);
     let e = &fx.cap.all()[1].1;
     assert_eq!(e["task"], "read");
@@ -178,7 +198,7 @@ async fn cli_failure_emits_ai_error() {
 #[tokio::test]
 async fn malformed_output_emits_ai_error() {
     let fx = setup(json!({"said":"maybe"}), json!({}));
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:error"]);
 }
 
@@ -389,7 +409,7 @@ async fn symbols_are_asked_for_only_when_turned_on_and_only_for_prose() {
     assert!(asks(&last_args(&args_file)), "answer");
     fx.ai.reply(&thread.id, "why?").await.unwrap();
     assert!(asks(&last_args(&args_file)), "reply");
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    fx.ai.read(&fx.note, TARGET, 0).await.unwrap();
     assert!(asks(&last_args(&args_file)), "read");
     fx.ai.ask_selection(&fx.note, TARGET, None).await.unwrap();
     assert!(asks(&last_args(&args_file)), "ask");

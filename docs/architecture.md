@@ -133,7 +133,7 @@ clear_chat(noteId)                            cancels an in-flight chat reply, d
 get_settings() -> Settings / save_settings(Settings)
 list_riddlers() / save_riddler(Riddler) / delete_riddler(id)
 
-ai_read(noteId, target)                       fire and forget; result arrives as events
+ai_read(noteId, target, nth)                  fire and forget; result arrives as events; nth = which occurrence of target's text, from 0
 ai_answer(noteId, target)
 ai_reply(threadId, text)
 ai_chat(noteId, text)
@@ -193,7 +193,7 @@ Drop order (`Stage`, then rank within it):
 
 1. Older chat messages, oldest first (in reply, older messages of the thread). A run of them reads `[… N earlier messages omitted …]`.
 2. Closed (resolved or dismissed) threads in the chat payload: each first shrinks to its quote and last message, then they go, oldest first, as `[… N threads omitted …]`.
-3. Distant parts of the note. The note is split into blocks (`doc::blocks`), and a block over 1000 chars into pieces at whitespace. Headings (the title and `heading` blocks) and the pieces around the focus stay, where the focus is the target for read, answer, ask and visualize, the thread's quote for reply, the cursor paragraph (`near`) for chat, and the start of the note when it is not found. The rest goes farthest first, each run replaced by `[… N words omitted …]`.
+3. Distant parts of the note. The note is split into blocks (`doc::blocks`), and a block over 1000 chars into pieces at whitespace. Headings (the title and `heading` blocks) and the pieces around the focus stay, where the focus is the target for read (its `nth` occurrence, the copy being read), answer, ask and visualize (their first occurrence), the thread's quote for reply, the cursor paragraph (`near`) for chat, and the start of the note when it is not found. The rest goes farthest first, each run replaced by `[… N words omitted …]`.
 4. Open threads shrink to their quote and last message, and are never dropped.
 
 Never cut: the system prompt, About you and the Riddler (all in the system prompt), the note header, the target, the writer's latest message, and the chat summary. The volatile parts (target, latest message) stay last so the stable prefix can be cached.

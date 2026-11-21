@@ -39,7 +39,8 @@ export interface Backend {
   saveRiddler(riddler: Riddler): Promise<Riddler>;
   deleteRiddler(id: string): Promise<void>;
 
-  aiRead(noteId: string, target: string): Promise<void>;
+  /** Reads `target`, the `nth` occurrence of its text in the note (from 0), so a long note is cut around that copy. */
+  aiRead(noteId: string, target: string, nth: number): Promise<void>;
   aiAnswer(noteId: string, target: string): Promise<void>;
   aiReply(threadId: string, text: string): Promise<void>;
   aiChat(noteId: string, text: string, near: string): Promise<void>;

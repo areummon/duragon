@@ -309,11 +309,11 @@ fn speaker<'a>(m: &Message, riddler: &'a str) -> &'a str {
 /// A block longer than this is cut into pieces of about this many chars, so one long paragraph can shrink too.
 const PIECE_CHARS: usize = 1_000;
 
-/// The note as sections: headings and the stretch around `focus` stay, and the further a piece is from it,
-/// the sooner it gives way. Without a focus found in the note, the start counts as the focus.
-fn note_sections(title: &str, blocks: &[Block], focus: &str) -> Vec<Section> {
+/// The note as sections: headings and the stretch around the `nth` occurrence of `focus` stay, and the further a
+/// piece is from it, the sooner it gives way. Without a focus found in the note, the start counts as the focus.
+fn note_sections(title: &str, blocks: &[Block], focus: &str, nth: usize) -> Vec<Section> {
     let plain = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join("\n");
-    let focus = locate(&plain, focus);
+    let focus = locate(&plain, focus, nth);
     let mut pieces: Vec<(&str, bool)> = Vec::new();
     let mut texts: Vec<String> = blocks.iter().map(|b| format!("{}\n", b.text)).collect();
     if texts.is_empty() {
@@ -347,14 +347,16 @@ fn note_sections(title: &str, blocks: &[Block], focus: &str) -> Vec<Section> {
     out
 }
 
-/// Where `focus` sits in `plain`: the whole of it, else its first line that appears.
-fn locate(plain: &str, focus: &str) -> Option<std::ops::Range<usize>> {
+/// Where `focus` sits in `plain`: its `nth` occurrence (the last, when there are fewer), else its first line that appears.
+fn locate(plain: &str, focus: &str, nth: usize) -> Option<std::ops::Range<usize>> {
     let f = focus.trim();
     if f.is_empty() {
         return None;
     }
-    let candidates = std::iter::once(f).chain(f.lines().map(str::trim).filter(|l| !l.is_empty()));
-    candidates.into_iter().find_map(|c| plain.find(c).map(|at| at..at + c.len()))
+    if let Some((at, _)) = plain.match_indices(f).take(nth + 1).last() {
+        return Some(at..at + f.len());
+    }
+    f.lines().map(str::trim).filter(|l| !l.is_empty()).find_map(|c| plain.find(c).map(|at| at..at + c.len()))
 }
 
 fn split_pieces(s: &str) -> Vec<&str> {
@@ -411,10 +413,12 @@ pub enum TargetIs<'a> {
 }
 
 /// The note, its open threads, and TARGET named for why it is there.
+/// `nth` says which occurrence of `target` in the note, from 0, is the one in front of the mind.
 pub fn target_payload(
     title: &str,
     blocks: &[Block],
     target: &str,
+    nth: usize,
     why: TargetIs,
     threads: &[Thread],
     riddler: &str,
@@ -430,7 +434,7 @@ pub fn target_payload(
             format!("TARGET (the selected passage):\n{target}\n\n{q}")
         }
     };
-    let mut s = note_sections(title, blocks, target);
+    let mut s = note_sections(title, blocks, target, nth);
     s.push(Section::keep("\n"));
     s.extend(open_threads_sections(threads, riddler));
     s.push(Section::keep(format!("\n{tail}")));
@@ -438,7 +442,7 @@ pub fn target_payload(
 }
 
 pub fn reply_payload(title: &str, blocks: &[Block], thread: &Thread, riddler: &str) -> Vec<Section> {
-    let mut s = note_sections(title, blocks, &thread.quote);
+    let mut s = note_sections(title, blocks, &thread.quote, 0);
     s.push(Section::keep(format!(
         "\nTHREAD YOU ARE IN (reply to the writer's last message):\nThread on \"{}\":\n",
         thread.quote
@@ -457,7 +461,7 @@ pub fn chat_payload(
     riddler: &str,
     near: &str,
 ) -> Vec<Section> {
-    let mut s = note_sections(title, blocks, near);
+    let mut s = note_sections(title, blocks, near, 0);
     if !near.trim().is_empty() {
         s.push(Section::keep(format!("\nThe writer's cursor is near: {}\n", near.trim())));
     }
@@ -487,7 +491,7 @@ pub fn chat_payload(
 }
 
 pub fn draw_payload(title: &str, blocks: &[Block], brief: &str) -> Vec<Section> {
-    let mut s = note_sections(title, blocks, brief);
+    let mut s = note_sections(title, blocks, brief, 0);
     s.push(Section::keep(format!("\nDRAWING BRIEF:\n{brief}\n")));
     s
 }
@@ -515,7 +519,7 @@ const VISUALIZE: &str = r#"
 Your job now: the writer selected a passage of their note (TARGET) and asked you to visualize it, so it will be sketched. {sketch_brief} Sketch what TARGET says, adding nothing it does not say."#;
 
 pub fn visualize_payload(title: &str, blocks: &[Block], target: &str) -> Vec<Section> {
-    let mut s = note_sections(title, blocks, target);
+    let mut s = note_sections(title, blocks, target, 0);
     s.push(Section::keep(format!("\nTARGET (the selected passage to visualize):\n{target}\n")));
     s
 }

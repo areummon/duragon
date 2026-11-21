@@ -25,7 +25,7 @@ async fn real_read_on_a_wrong_sentence() {
     db.save_note(&note.meta.id, "Plants", &doc, &format!("Plants\n{text}")).unwrap();
     let cap = Arc::new(Capture::default());
     let ai = Ai::new(db, cap.clone());
-    ai.read(&note.meta.id, text).await.unwrap();
+    ai.read(&note.meta.id, text, 0).await.unwrap();
     for (name, payload) in cap.all() {
         println!("{name}: {payload}");
     }
@@ -112,7 +112,7 @@ async fn real_read_of(title: &str, text: &str) -> Vec<Thread> {
     db.save_note(&note.meta.id, title, &doc, &format!("{title}\n{text}")).unwrap();
     let cap = Arc::new(Capture::default());
     let ai = Ai::new(db, cap.clone());
-    ai.read(&note.meta.id, text).await.unwrap();
+    ai.read(&note.meta.id, text, 0).await.unwrap();
     for (name, payload) in cap.all() {
         println!("{name}: {payload}");
     }

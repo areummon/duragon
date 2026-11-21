@@ -52,6 +52,15 @@ function answeredLines() {
 
 const copiesOf = (lines: string[], line: string) => Math.max(1, lines.filter((l) => l === line).length);
 
+/** Which occurrence of `target`, from 0, block `i` holds in the note's text: its blocks joined by "\n", as the backend joins them. */
+function occurrence(texts: string[], i: number, target: string): number {
+  const plain = texts.join('\n');
+  const at = texts.slice(0, i).reduce((n, t) => n + t.length + 1, 0) + texts[i].indexOf(target);
+  let n = 0;
+  for (let k = plain.indexOf(target); k >= 0 && k < at; k = plain.indexOf(target, k + target.length)) n++;
+  return n;
+}
+
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export function isAddressed(line: string): boolean {
@@ -245,7 +254,8 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
       const target = lines[i];
       if (target.length < (isRequest(target) ? MIN_REQUEST : MIN_TARGET) || covered(i)) return;
       readTarget = target;
-      void getBackend().then((be) => be.aiRead(noteId, target));
+      const nth = occurrence(texts, i, target);
+      void getBackend().then((be) => be.aiRead(noteId, target, nth));
     },
     detach() {
       stop();

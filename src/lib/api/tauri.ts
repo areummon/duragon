@@ -42,7 +42,7 @@ export class TauriBackend implements Backend {
   saveRiddler = (riddler: Riddler) => invoke<Riddler>('save_riddler', { riddler });
   deleteRiddler = (id: string) => invoke<void>('delete_riddler', { id });
 
-  aiRead = (noteId: string, target: string) => invoke<void>('ai_read', { noteId, target });
+  aiRead = (noteId: string, target: string, nth: number) => invoke<void>('ai_read', { noteId, target, nth });
   aiAnswer = (noteId: string, target: string) => invoke<void>('ai_answer', { noteId, target });
   aiReply = (threadId: string, text: string) => invoke<void>('ai_reply', { threadId, text });
   aiChat = (noteId: string, text: string, near: string) => invoke<void>('ai_chat', { noteId, text, near });
