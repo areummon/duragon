@@ -100,6 +100,9 @@ pub struct Message {
     /// What the symbols in the message's formulas stand for, when the writer turned that on; empty otherwise.
     #[serde(default)]
     pub symbols: Vec<Symbol>,
+    /// The payload was cut to its budget, so the Mind read the note only around the target or cursor.
+    #[serde(default)]
+    pub trimmed: bool,
     pub created_at: i64,
 }
 

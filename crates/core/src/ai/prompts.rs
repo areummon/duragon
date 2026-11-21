@@ -1,7 +1,9 @@
 //! System prompts, output schemas and payload builders for every AI task.
 use serde_json::{json, Value};
 
-use crate::model::{AiTask, Author, Frequency, Message, Riddler, Thread, Tone};
+use super::budget::{Section, Stage, Step, Unit};
+use crate::doc::Block;
+use crate::model::{AiTask, Author, Frequency, Message, Riddler, Thread, ThreadStatus, Tone};
 
 const CORE: &str = r#"You are the Riddler named "{name}", reading over the writer's shoulder in their notebook.
 
@@ -277,9 +279,19 @@ pub fn schema(task: AiTask, web: bool) -> Value {
 fn thread_block(t: &Thread, riddler: &str) -> String {
     let mut s = format!("Thread on \"{}\":\n", t.quote);
     for m in &t.messages {
-        s.push_str(&format!("  {}: {}{}\n", speaker(m, riddler), m.text, sources_suffix(m)));
+        s.push_str(&thread_line(m, riddler));
     }
     s
+}
+
+fn thread_line(m: &Message, riddler: &str) -> String {
+    format!("  {}: {}{}\n", speaker(m, riddler), m.text, sources_suffix(m))
+}
+
+/// A thread cut to its quote and last message, when that is shorter.
+fn thread_short(t: &Thread, riddler: &str, prefix: &str) -> Option<String> {
+    let last = t.messages.last().filter(|_| t.messages.len() > 1)?;
+    Some(format!("{prefix}Thread on \"{}\":\n{}", t.quote, thread_line(last, riddler)))
 }
 
 /// Tells later turns that an earlier answer came from the web.
@@ -298,75 +310,167 @@ fn speaker<'a>(m: &Message, riddler: &'a str) -> &'a str {
     }
 }
 
-fn note_block(title: &str, plain: &str) -> String {
-    format!("NOTE TITLE: {title}\nNOTE TEXT:\n{plain}\n")
+/// A block longer than this is cut into pieces of about this many chars, so one long paragraph can shrink too.
+const PIECE_CHARS: usize = 1_000;
+
+/// The note as sections: headings and the stretch around `focus` stay, and the further a piece is from it,
+/// the sooner it gives way. Without a focus found in the note, the start counts as the focus.
+fn note_sections(title: &str, blocks: &[Block], focus: &str) -> Vec<Section> {
+    let plain = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join("\n");
+    let focus = locate(&plain, focus);
+    let mut pieces: Vec<(&str, bool)> = Vec::new();
+    let mut texts: Vec<String> = blocks.iter().map(|b| format!("{}\n", b.text)).collect();
+    if texts.is_empty() {
+        texts.push("\n".into());
+    }
+    let mut at = 0;
+    let mut kept: Vec<usize> = Vec::new();
+    for (i, text) in texts.iter().enumerate() {
+        let heading = blocks.get(i).is_some_and(|b| b.heading);
+        for piece in split_pieces(text) {
+            let end = at + piece.len();
+            let in_focus = focus.as_ref().is_some_and(|f| f.start < end && at < f.end.max(f.start + 1));
+            if in_focus {
+                kept.push(pieces.len());
+            }
+            pieces.push((piece, heading || in_focus));
+            at = end;
+        }
+    }
+    let (lo, hi) = (kept.first().copied().unwrap_or(0), kept.last().copied().unwrap_or(0));
+    let distance = |k: usize| if k < lo { lo - k } else { k.saturating_sub(hi) };
+    let far = (0..pieces.len()).map(distance).max().unwrap_or(0);
+    let mut out = vec![Section::keep(format!("NOTE TITLE: {title}\nNOTE TEXT:\n"))];
+    for (k, (piece, keep)) in pieces.into_iter().enumerate() {
+        out.push(if keep {
+            Section::keep(piece)
+        } else {
+            Section::droppable(piece, Step(Stage::DistantNote, far - distance(k)), Unit::Words)
+        });
+    }
+    out
 }
 
-fn open_threads_block(threads: &[Thread], riddler: &str) -> String {
-    let open: Vec<_> = threads.iter().filter(|t| t.status == crate::model::ThreadStatus::Open).collect();
+/// Where `focus` sits in `plain`: the whole of it, else its first line that appears.
+fn locate(plain: &str, focus: &str) -> Option<std::ops::Range<usize>> {
+    let f = focus.trim();
+    if f.is_empty() {
+        return None;
+    }
+    let candidates = std::iter::once(f).chain(f.lines().map(str::trim).filter(|l| !l.is_empty()));
+    candidates.into_iter().find_map(|c| plain.find(c).map(|at| at..at + c.len()))
+}
+
+fn split_pieces(s: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut start, mut count) = (0, 0);
+    for (i, c) in s.char_indices() {
+        count += 1;
+        if count >= PIECE_CHARS && c.is_whitespace() {
+            let end = i + c.len_utf8();
+            out.push(&s[start..end]);
+            (start, count) = (end, 0);
+        }
+    }
+    if start < s.len() {
+        out.push(&s[start..]);
+    }
+    out
+}
+
+fn open_threads_sections(threads: &[Thread], riddler: &str) -> Vec<Section> {
+    let open: Vec<_> = threads.iter().filter(|t| t.status == ThreadStatus::Open).collect();
     if open.is_empty() {
-        return "OPEN THREADS: none\n".into();
+        return vec![Section::keep("OPEN THREADS: none\n")];
     }
-    let mut s = String::from("OPEN THREADS (already raised, do not repeat):\n");
-    for t in open {
-        s.push_str(&thread_block(t, riddler));
+    let mut out = vec![Section::keep("OPEN THREADS (already raised, do not repeat):\n")];
+    for (i, t) in open.into_iter().enumerate() {
+        out.push(Section::keep(thread_block(t, riddler)).shortened(Step(Stage::OpenThreads, i), thread_short(t, riddler, "")));
     }
+    out
+}
+
+/// Messages in order; every one but the last may give way, oldest first.
+fn message_sections(lines: Vec<String>) -> Vec<Section> {
+    let n = lines.len();
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(i, line)| {
+            if i + 1 == n {
+                Section::keep(line)
+            } else {
+                Section::droppable(line, Step(Stage::OldMessages, i), Unit::Messages)
+            }
+        })
+        .collect()
+}
+
+pub fn read_payload(title: &str, blocks: &[Block], target: &str, threads: &[Thread], riddler: &str) -> Vec<Section> {
+    let mut s = note_sections(title, blocks, target);
+    s.push(Section::keep("\n"));
+    s.extend(open_threads_sections(threads, riddler));
+    s.push(Section::keep(format!("\nTARGET (the passage just written):\n{target}\n")));
     s
 }
 
-pub fn read_payload(title: &str, plain: &str, target: &str, threads: &[Thread], riddler: &str) -> String {
-    format!(
-        "{}\n{}\nTARGET (the passage just written):\n{target}\n",
-        note_block(title, plain),
-        open_threads_block(threads, riddler)
-    )
+pub fn answer_payload(title: &str, blocks: &[Block], target: &str, threads: &[Thread], riddler: &str) -> Vec<Section> {
+    let mut s = note_sections(title, blocks, target);
+    s.push(Section::keep("\n"));
+    s.extend(open_threads_sections(threads, riddler));
+    s.push(Section::keep(format!("\nTARGET (the line addressed to you):\n{target}\n")));
+    s
 }
 
-pub fn answer_payload(title: &str, plain: &str, target: &str, threads: &[Thread], riddler: &str) -> String {
-    format!(
-        "{}\n{}\nTARGET (the line addressed to you):\n{target}\n",
-        note_block(title, plain),
-        open_threads_block(threads, riddler)
-    )
-}
-
-pub fn reply_payload(title: &str, plain: &str, thread: &Thread, riddler: &str) -> String {
-    format!(
-        "{}\nTHREAD YOU ARE IN (reply to the writer's last message):\n{}",
-        note_block(title, plain),
-        thread_block(thread, riddler)
-    )
+pub fn reply_payload(title: &str, blocks: &[Block], thread: &Thread, riddler: &str) -> Vec<Section> {
+    let mut s = note_sections(title, blocks, &thread.quote);
+    s.push(Section::keep(format!(
+        "\nTHREAD YOU ARE IN (reply to the writer's last message):\nThread on \"{}\":\n",
+        thread.quote
+    )));
+    s.extend(message_sections(thread.messages.iter().map(|m| thread_line(m, riddler)).collect()));
+    s
 }
 
 pub fn chat_payload(
     title: &str,
-    plain: &str,
+    blocks: &[Block],
     threads: &[Thread],
     chat: &[Message],
     riddler: &str,
     near: &str,
-) -> String {
-    let mut s = note_block(title, plain);
+) -> Vec<Section> {
+    let mut s = note_sections(title, blocks, near);
     if !near.trim().is_empty() {
-        s.push_str(&format!("\nThe writer's cursor is near: {}\n", near.trim()));
+        s.push(Section::keep(format!("\nThe writer's cursor is near: {}\n", near.trim())));
     }
-    s.push_str("\nTHREADS IN THE NOTE:\n");
+    s.push(Section::keep("\nTHREADS IN THE NOTE:\n"));
     if threads.is_empty() {
-        s.push_str("none\n");
+        s.push(Section::keep("none\n"));
     }
-    for t in threads {
-        s.push_str(&format!("[{}] ", t.status.as_str()));
-        s.push_str(&thread_block(t, riddler));
+    let n = threads.len();
+    for (i, t) in threads.iter().enumerate() {
+        let prefix = format!("[{}] ", t.status.as_str());
+        let short = thread_short(t, riddler, &prefix);
+        let text = format!("{prefix}{}", thread_block(t, riddler));
+        s.push(if t.status == ThreadStatus::Open {
+            Section::keep(text).shortened(Step(Stage::OpenThreads, i), short)
+        } else {
+            Section::droppable(text, Step(Stage::ClosedThreads, n + i), Unit::Threads)
+                .shortened(Step(Stage::ClosedThreads, i), short)
+        });
     }
-    s.push_str("\nCHAT SO FAR (reply to the writer's last message):\n");
-    for m in chat {
-        s.push_str(&format!("{}: {}{}\n", speaker(m, riddler), m.text, sources_suffix(m)));
-    }
+    s.push(Section::keep("\nCHAT SO FAR (reply to the writer's last message):\n"));
+    s.extend(message_sections(
+        chat.iter().map(|m| format!("{}: {}{}\n", speaker(m, riddler), m.text, sources_suffix(m))).collect(),
+    ));
     s
 }
 
-pub fn draw_payload(title: &str, plain: &str, brief: &str) -> String {
-    format!("{}\nDRAWING BRIEF:\n{brief}\n", note_block(title, plain))
+pub fn draw_payload(title: &str, blocks: &[Block], brief: &str) -> Vec<Section> {
+    let mut s = note_sections(title, blocks, brief);
+    s.push(Section::keep(format!("\nDRAWING BRIEF:\n{brief}\n")));
+    s
 }
 
 pub fn learn_payload(about_you: &str, latest: &str) -> String {
@@ -384,23 +488,25 @@ Your job now: the writer selected a passage of their note (TARGET) and asked you
 
 pub fn ask_payload(
     title: &str,
-    plain: &str,
+    blocks: &[Block],
     target: &str,
     question: Option<&str>,
     threads: &[Thread],
     riddler: &str,
-) -> String {
+) -> Vec<Section> {
     let q = match question.map(str::trim).filter(|q| !q.is_empty()) {
         Some(q) => format!("WRITER'S QUESTION ABOUT TARGET:\n{q}\n"),
         None => "No question given: riddle this selection. You must say something.\n".to_string(),
     };
-    format!(
-        "{}\n{}\nTARGET (the selected passage):\n{target}\n\n{q}",
-        note_block(title, plain),
-        open_threads_block(threads, riddler)
-    )
+    let mut s = note_sections(title, blocks, target);
+    s.push(Section::keep("\n"));
+    s.extend(open_threads_sections(threads, riddler));
+    s.push(Section::keep(format!("\nTARGET (the selected passage):\n{target}\n\n{q}")));
+    s
 }
 
-pub fn visualize_payload(title: &str, plain: &str, target: &str) -> String {
-    format!("{}\nTARGET (the selected passage to visualize):\n{target}\n", note_block(title, plain))
+pub fn visualize_payload(title: &str, blocks: &[Block], target: &str) -> Vec<Section> {
+    let mut s = note_sections(title, blocks, target);
+    s.push(Section::keep(format!("\nTARGET (the selected passage to visualize):\n{target}\n")));
+    s
 }

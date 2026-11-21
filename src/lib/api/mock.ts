@@ -124,6 +124,10 @@ function drawingFor(topic: string): string {
 
 const now = () => Date.now();
 
+/** As in budget.rs: tokens are chars / 4, and a note past its task's budget is read around the target or cursor. */
+const TASK_BUDGET = 30_000;
+const CHAT_BUDGET = 80_000;
+
 const SOURCES = [
   { url: 'https://en.wikipedia.org/wiki/Photosynthesis', title: 'Photosynthesis, Wikipedia' },
   { url: 'https://www.khanacademy.org/science/biology', title: 'Biology, Khan Academy' },
@@ -210,6 +214,7 @@ export class MockBackend implements Backend {
           svg: null,
           sources: [],
           symbols: [],
+          trimmed: false,
           createdAt: t,
         },
       ],
@@ -358,7 +363,10 @@ export class MockBackend implements Backend {
     const web = this.notes.get(noteId)?.webOn ?? false;
     const sources = web ? SOURCES.slice(0, 1 + (hash(text) % 2)) : [];
     const symbols = this.settings.explainSymbols && text === RICH_ANSWER ? RICH_SYMBOLS : [];
-    return { id: uid(), noteId, threadId, author: 'riddled', text, drawing, svg: null, sources, symbols, createdAt: now() };
+    const note = this.notes.get(noteId);
+    const budget = threadId === null ? CHAT_BUDGET : TASK_BUDGET;
+    const trimmed = !!note && Math.ceil(plainOf(note.doc).length / 4) > budget;
+    return { id: uid(), noteId, threadId, author: 'riddled', text, drawing, svg: null, sources, symbols, trimmed, createdAt: now() };
   }
 
   private think(noteId: string, target: string, task: AiTask) {
@@ -432,7 +440,7 @@ export class MockBackend implements Backend {
   async aiReply(threadId: string, text: string) {
     const th = this.threads.get(threadId);
     if (!th) throw new Error(`thread not found: ${threadId}`);
-    th.messages.push({ id: uid(), noteId: th.noteId, threadId, author: 'you', text, drawing: 'none', svg: null, sources: [], symbols: [], createdAt: now() });
+    th.messages.push({ id: uid(), noteId: th.noteId, threadId, author: 'you', text, drawing: 'none', svg: null, sources: [], symbols: [], trimmed: false, createdAt: now() });
     this.think(th.noteId, text, 'reply');
     this.schedule(threadId, this.wait(), () => {
       const draws = DRAW.test(text);
@@ -444,7 +452,7 @@ export class MockBackend implements Backend {
   }
   async aiChat(noteId: string, text: string, _near?: string) {
     const list = this.chat.get(noteId) ?? [];
-    list.push({ id: uid(), noteId, threadId: null, author: 'you', text, drawing: 'none', svg: null, sources: [], symbols: [], createdAt: now() });
+    list.push({ id: uid(), noteId, threadId: null, author: 'you', text, drawing: 'none', svg: null, sources: [], symbols: [], trimmed: false, createdAt: now() });
     this.chat.set(noteId, list);
     this.think(noteId, text, 'chat');
     this.schedule(`${noteId}:chat`, this.wait() + 500, () => {

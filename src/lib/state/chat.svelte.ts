@@ -51,7 +51,7 @@ export async function send(text: string) {
   if (!t || !chat.noteId) return;
   const id = `local-${++seq}`;
   chat.messages.push({
-    id, noteId: chat.noteId, threadId: null, author: 'you', text: t, drawing: 'none', svg: null, sources: [], symbols: [], createdAt: Date.now(),
+    id, noteId: chat.noteId, threadId: null, author: 'you', text: t, drawing: 'none', svg: null, sources: [], symbols: [], trimmed: false, createdAt: Date.now(),
   });
   chat.fresh[id] = true;
   chat.waiting = true;

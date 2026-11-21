@@ -5,7 +5,7 @@ use super::{new_id, now_ms, Db};
 use crate::doc;
 use crate::model::*;
 
-const MSG_COLS: &str = "id, note_id, thread_id, author, text, drawing, svg, sources, symbols, created_at";
+const MSG_COLS: &str = "id, note_id, thread_id, author, text, drawing, svg, sources, symbols, trimmed, created_at";
 
 fn msg_row(r: &Row) -> rusqlite::Result<Message> {
     let author: String = r.get(3)?;
@@ -22,7 +22,8 @@ fn msg_row(r: &Row) -> rusqlite::Result<Message> {
         svg: r.get(6)?,
         sources: serde_json::from_str(&sources).unwrap_or_default(),
         symbols: serde_json::from_str(&symbols).unwrap_or_default(),
-        created_at: r.get(9)?,
+        trimmed: r.get(9)?,
+        created_at: r.get(10)?,
     })
 }
 
@@ -101,7 +102,7 @@ impl Db {
         text: &str,
         drawing: DrawingState,
     ) -> Result<Message> {
-        self.add_message_with(note_id, thread_id, author, text, drawing, &[], &[])
+        self.add_message_with(note_id, thread_id, author, text, drawing, &[], &[], false)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -114,13 +115,14 @@ impl Db {
         drawing: DrawingState,
         sources: &[Source],
         symbols: &[Symbol],
+        trimmed: bool,
     ) -> Result<Message> {
         let id = new_id();
         self.conn().execute(
-            "INSERT INTO messages(id,note_id,thread_id,author,text,drawing,svg,sources,symbols,created_at) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,?9)",
+            "INSERT INTO messages(id,note_id,thread_id,author,text,drawing,svg,sources,symbols,trimmed,created_at) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,?9,?10)",
             params![
                 id, note_id, thread_id, author.as_str(), text, drawing.as_str(),
-                serde_json::to_string(sources)?, serde_json::to_string(symbols)?, now_ms()
+                serde_json::to_string(sources)?, serde_json::to_string(symbols)?, trimmed, now_ms()
             ],
         )?;
         self.get_message(&id)

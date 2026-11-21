@@ -264,7 +264,7 @@ fn a_stored_sonnet_drawing_model_moves_to_opus_once() {
     drop(db);
     // As if the database predates the move to Opus.
     let old = rusqlite::Connection::open(&path).unwrap();
-    old.execute_batch("ALTER TABLE folders DROP COLUMN parent_id; ALTER TABLE messages DROP COLUMN symbols").unwrap();
+    old.execute_batch("ALTER TABLE folders DROP COLUMN parent_id; ALTER TABLE messages DROP COLUMN symbols; ALTER TABLE messages DROP COLUMN trimmed").unwrap();
     old.pragma_update(None, "user_version", 2).unwrap();
     drop(old);
 
@@ -298,14 +298,34 @@ fn an_older_database_gains_message_symbols() {
     let before = db.add_message(&note, None, Author::Riddled, "old", DrawingState::None).unwrap();
     drop(db);
     let old = rusqlite::Connection::open(&path).unwrap();
-    old.execute_batch("ALTER TABLE messages DROP COLUMN symbols").unwrap();
+    old.execute_batch("ALTER TABLE messages DROP COLUMN symbols; ALTER TABLE messages DROP COLUMN trimmed").unwrap();
     old.pragma_update(None, "user_version", 4).unwrap();
     drop(old);
 
     let db = Db::open(&path).unwrap();
     assert!(db.get_message(&before.id).unwrap().symbols.is_empty());
     let sym = Symbol { tex: "v_0".into(), meaning: "starting speed".into() };
-    let m = db.add_message_with(&note, None, Author::Riddled, "$v_0$", DrawingState::None, &[], &[sym.clone()]).unwrap();
+    let m = db.add_message_with(&note, None, Author::Riddled, "$v_0$", DrawingState::None, &[], &[sym.clone()], false).unwrap();
     assert_eq!(db.list_chat(&note).unwrap()[1].symbols, vec![sym]);
     assert_eq!(serde_json::to_value(&m).unwrap()["symbols"][0]["tex"], "v_0");
+}
+
+#[test]
+fn an_older_database_gains_message_trimmed_off() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("d.db");
+    let db = Db::open(&path).unwrap();
+    let note = db.list_notes().unwrap()[0].id.clone();
+    let before = db.add_message(&note, None, Author::Riddled, "old", DrawingState::None).unwrap();
+    drop(db);
+    let old = rusqlite::Connection::open(&path).unwrap();
+    old.execute_batch("ALTER TABLE messages DROP COLUMN trimmed").unwrap();
+    old.pragma_update(None, "user_version", 5).unwrap();
+    drop(old);
+
+    let db = Db::open(&path).unwrap();
+    assert!(!db.get_message(&before.id).unwrap().trimmed);
+    let m = db.add_message_with(&note, None, Author::Riddled, "new", DrawingState::None, &[], &[], true).unwrap();
+    assert!(db.get_message(&m.id).unwrap().trimmed);
+    assert_eq!(serde_json::to_value(&m).unwrap()["trimmed"], true);
 }

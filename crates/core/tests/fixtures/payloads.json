@@ -1,0 +1,38 @@
+[
+  [
+    "read",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nOPEN THREADS (already raised, do not repeat):\nThread on \"mitochondria\":\n  Duragon: Sure?\n  Writer: yes via web (from the web: X <https://x.org/>)\n\nTARGET (the passage just written):\nSecond para.\n"
+  ],
+  [
+    "answer",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nOPEN THREADS (already raised, do not repeat):\nThread on \"mitochondria\":\n  Duragon: Sure?\n  Writer: yes via web (from the web: X <https://x.org/>)\n\nTARGET (the line addressed to you):\nDuragon, why?\n"
+  ],
+  [
+    "reply",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nTHREAD YOU ARE IN (reply to the writer's last message):\nThread on \"mitochondria\":\n  Duragon: Sure?\n  Writer: yes via web (from the web: X <https://x.org/>)\n"
+  ],
+  [
+    "chat",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nThe writer's cursor is near: Second para.\n\nTHREADS IN THE NOTE:\n[open] Thread on \"mitochondria\":\n  Duragon: Sure?\n  Writer: yes via web (from the web: X <https://x.org/>)\n[resolved] Thread on \"light\":\n  Duragon: Sure?\n  Writer: yes via web (from the web: X <https://x.org/>)\n\nCHAT SO FAR (reply to the writer's last message):\nWriter: What next?\nDuragon: Look again.\nWriter: Why?\n"
+  ],
+  [
+    "chat_nonear",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nTHREADS IN THE NOTE:\nnone\n\nCHAT SO FAR (reply to the writer's last message):\nWriter: What next?\nDuragon: Look again.\nWriter: Why?\n"
+  ],
+  [
+    "draw",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nDRAWING BRIEF:\nShow a leaf.\n"
+  ],
+  [
+    "ask",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nOPEN THREADS (already raised, do not repeat):\nThread on \"mitochondria\":\n  Duragon: Sure?\n  Writer: yes via web (from the web: X <https://x.org/>)\n\nTARGET (the selected passage):\nSecond para.\n\nWRITER'S QUESTION ABOUT TARGET:\nIs it?\n"
+  ],
+  [
+    "ask_none",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nOPEN THREADS: none\n\nTARGET (the selected passage):\nSecond para.\n\nNo question given: riddle this selection. You must say something.\n"
+  ],
+  [
+    "visualize",
+    "NOTE TITLE: Plants\nNOTE TEXT:\nPlants\nPhotosynthesis happens in the mitochondria.\n\nSecond para.\n\nTARGET (the selected passage to visualize):\nSecond para.\n"
+  ]
+]

@@ -55,7 +55,8 @@ r#"ALTER TABLE messages ADD COLUMN sources TEXT NOT NULL DEFAULT '[]';"#,
 r#"UPDATE kv SET value = json_set(value, '$.drawModel', 'opus')
    WHERE key = 'settings' AND json_extract(value, '$.drawModel') = 'sonnet';"#,
 r#"ALTER TABLE folders ADD COLUMN parent_id TEXT;"#,
-r#"ALTER TABLE messages ADD COLUMN symbols TEXT NOT NULL DEFAULT '[]';"#];
+r#"ALTER TABLE messages ADD COLUMN symbols TEXT NOT NULL DEFAULT '[]';"#,
+r#"ALTER TABLE messages ADD COLUMN trimmed INTEGER NOT NULL DEFAULT 0;"#];
 
 #[derive(Clone)]
 pub struct Db {

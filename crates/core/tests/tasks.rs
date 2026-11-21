@@ -296,7 +296,8 @@ async fn web_sources_are_persisted_cleaned_and_shown_to_later_turns() {
     assert_eq!(src[1].title, "https://doc.rust-lang.org/");
     assert_eq!(fx.cap.all()[1].1["messages"][0]["sources"][0]["url"], "https://blog.rust-lang.org/");
 
-    let payload = duragon_core::ai::prompts::reply_payload("T", "plain", t, "Duragon");
+    let blocks = duragon_core::doc::blocks(&duragon_core::doc::doc(vec![duragon_core::doc::paragraph("plain")]));
+    let (payload, _) = duragon_core::ai::budget::fit(&duragon_core::ai::prompts::reply_payload("T", &blocks, t, "Duragon"), 30_000);
     assert!(payload.contains("(from the web: Rust Blog <https://blog.rust-lang.org/>"), "{payload}");
 }
 
@@ -443,4 +444,46 @@ async fn at_most_sixteen_symbols_are_kept() {
     let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
     assert_eq!(t.messages[0].symbols.len(), 16);
     assert_eq!(t.messages[0].symbols[15].tex, "p");
+}
+
+/// A fake `claude` that records its stdin next to itself and answers `out`.
+fn recording_claude(dir: &std::path::Path, out: &Value) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join("claude-rec");
+    let script = format!("#!/bin/sh\ncat > \"$0.stdin\"\ncat <<'DURAGON_EOF'\n{}\nDURAGON_EOF\n", common::wrap(out.clone()));
+    std::fs::write(&path, script).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+#[tokio::test]
+async fn a_huge_note_is_cut_to_budget_around_the_target_and_the_message_says_so() {
+    use duragon_core::ai::budget::{tokens, TASK_BUDGET};
+    let mut fx = setup(json!({}), json!({}));
+    disable_learn(&fx);
+    let bin = recording_claude(fx._dir.path(), &json!({"message":"Look near here."}));
+    fx.ai.bin = Some(bin.clone());
+    let paras: Vec<String> = (0..3000).map(|i| format!("Paragraph {i} says something about cells at some length, padded out to be long.")).collect();
+    let target = paras[1500].clone();
+    let mut content = vec![json!({"type":"title","content":[{"type":"text","text":"Cells"}]})];
+    content.extend(paras.iter().map(|p| json!({"type":"paragraph","content":[{"type":"text","text":p}]})));
+    let doc = json!({"type":"doc","content":content});
+    let plain = duragon_core::doc::plain_text(&doc);
+    assert!(tokens(&plain) > TASK_BUDGET, "the note alone is over budget");
+    fx.ai.db.save_note(&fx.note, "Cells", &doc, &plain).unwrap();
+
+    fx.ai.answer(&fx.note, &target).await.unwrap();
+    let sent = std::fs::read_to_string(bin.with_extension("stdin")).unwrap();
+    assert!(tokens(&sent) <= TASK_BUDGET, "{} tokens", tokens(&sent));
+    assert!(sent.contains(&paras[1499]) && sent.contains(&paras[1501]), "the target's neighbours stay");
+    assert!(sent.contains("words omitted …]"));
+    assert!(sent.ends_with(&format!("TARGET (the line addressed to you):\n{target}\n")));
+    let th = &fx.cap.all()[1].1;
+    assert_eq!(th["messages"][0]["trimmed"], true, "{th}");
+    assert!(fx.ai.db.list_threads(&fx.note).unwrap()[0].messages[0].trimmed, "persisted");
+
+    let small = setup(json!({"message":"Hm."}), json!({}));
+    disable_learn(&small);
+    small.ai.answer(&small.note, TARGET).await.unwrap();
+    assert_eq!(small.cap.all()[1].1["messages"][0]["trimmed"], false);
 }

@@ -6,6 +6,7 @@
   import Volume2 from 'lucide-svelte/icons/volume-2';
   import { readAloud, stopSpeaking, voice } from '../state/voice.svelte';
   import Sources from './Sources.svelte';
+  import TrimmedHint from './TrimmedHint.svelte';
   import { tick } from 'svelte';
   import type { MathSymbol, Message, Thread } from '../api/types';
   import { open as openThread, reply, setStatus, threads, togglePin } from '../state/threads.svelte';
@@ -195,6 +196,7 @@
                 {/if}<button class="speak" aria-label={playingId === m.id ? 'Stop' : 'Read aloud'} title={playingId === m.id ? 'Stop' : 'Read aloud'} onclick={() => speak(m)}>{#if playingId === m.id}<span class="stop"></span>{:else}<Volume2 size={12} strokeWidth={1.7} />{/if}</button>
               </p>
               <Sources sources={m.sources} />
+              {#if m.trimmed}<TrimmedHint around="passage" />{/if}
               {#if m.drawing !== 'none'}
                 <div class="art"><Drawing status={m.drawing} svg={m.svg} fresh={!!threads.freshDraw[m.id]} size={variant === 'dialog' ? 'dialog' : variant === 'margin' ? 'margin' : 'large'} onLarger={() => enlarge(m.svg)} /></div>
               {/if}

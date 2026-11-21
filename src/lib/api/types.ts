@@ -45,6 +45,8 @@ export interface Message {
   sources: Source[];
   /** What each symbol in its formulas stands for, when explainSymbols was on; [] otherwise. */
   symbols: MathSymbol[];
+  /** The note was too long to send whole, so the Mind read it around the target or cursor. */
+  trimmed: boolean;
   createdAt: number;
 }
 

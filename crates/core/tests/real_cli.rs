@@ -2,7 +2,8 @@
 //! `cargo test -p duragon-core --test real_cli -- --ignored --nocapture <name>`
 mod common;
 use common::Capture;
-use duragon_core::ai::{prompts, run_claude, svg, Ai, ClaudeRequest};
+use duragon_core::ai::{budget, prompts, run_claude, svg, Ai, ClaudeRequest};
+use duragon_core::doc;
 use duragon_core::db::Db;
 use duragon_core::model::*;
 use serde_json::json;
@@ -49,11 +50,18 @@ async fn real_draw() {
         model: "haiku".into(),
         system_prompt: prompts::system_prompt(AiTask::Draw, &riddler, "", "", false),
         schema: prompts::schema(AiTask::Draw, false),
-        payload: prompts::draw_payload(
-            "Plants",
-            "Plants\nPhotosynthesis turns light, water and CO2 into sugar and oxygen.",
-            "Show light, water and CO2 going into a chloroplast, and sugar and oxygen coming out.",
-        ),
+        payload: budget::fit(
+            &prompts::draw_payload(
+                "Plants",
+                &doc::blocks(&doc::doc(vec![
+                    doc::title("Plants"),
+                    doc::paragraph("Photosynthesis turns light, water and CO2 into sugar and oxygen."),
+                ])),
+                "Show light, water and CO2 going into a chloroplast, and sugar and oxygen coming out.",
+            ),
+            budget::DRAW_BUDGET,
+        )
+        .0,
         web: false,
         timeout: Duration::from_secs(180),
         cancel: None,

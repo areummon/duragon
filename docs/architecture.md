@@ -55,7 +55,9 @@ type ThreadKind = 'question' | 'reply';          // question: unprompted, margin
 type ThreadStatus = 'open' | 'resolved' | 'dismissed';
 interface Thread { id; noteId; kind: ThreadKind; quote: string; status: ThreadStatus; pinned: boolean; createdAt; messages: Message[] }
 type DrawingState = 'none' | 'pending' | 'done' | 'failed';
-interface Message { id; noteId; threadId: string | null; author: 'you' | 'riddled'; text: string; drawing: DrawingState; svg: string | null; createdAt }
+interface Message { id; noteId; threadId: string | null; author: 'you' | 'riddled'; text: string; drawing: DrawingState; svg: string | null;
+  sources: Source[]; symbols: MathSymbol[]; trimmed: boolean; createdAt }
+// trimmed: the payload behind this message was cut to its budget (see "Payload budget")
 // chat panel messages are Message rows with threadId = null and a noteId
 
 interface Riddler { id; name; description; howItThinks; tone: Tone; frequency: Frequency; builtin: boolean }
@@ -95,8 +97,9 @@ notes_fts USING fts5(title, plain, content='notes', content_rowid='rowid')  + tr
 folders(id TEXT PK, name TEXT, created_at INT)
 threads(id TEXT PK, note_id TEXT REFERENCES notes ON DELETE CASCADE, kind TEXT, quote TEXT, status TEXT, pinned INT, created_at INT)
 messages(id TEXT PK, note_id TEXT, thread_id TEXT NULL REFERENCES threads ON DELETE CASCADE, author TEXT,
-         text TEXT, drawing TEXT, svg TEXT NULL, sources TEXT DEFAULT '[]', symbols TEXT DEFAULT '[]', created_at INT)
-         -- sources: [{url, title}] the Mind used on the web; symbols: [{tex, meaning}] for its formulas
+         text TEXT, drawing TEXT, svg TEXT NULL, sources TEXT DEFAULT '[]', symbols TEXT DEFAULT '[]', trimmed INT DEFAULT 0, created_at INT)
+         -- sources: [{url, title}] the Mind used on the web; symbols: [{tex, meaning}] for its formulas;
+         -- trimmed: 1 when the payload was cut to its budget
 riddlers(id TEXT PK, name, description, how_it_thinks, tone, frequency, builtin INT)
 kv(key TEXT PK, value TEXT)          -- settings JSON under key 'settings'
 ```
@@ -172,6 +175,23 @@ Tasks, prompts and schemas live in `ai/prompts.rs`. Every prompt gets the Riddle
 | learn | after reply/chat/answer when learnAboutYou | `{changed, aboutYou?}` | saves setting, emits about:updated |
 
 When `explainSymbols` is on, read, answer, reply, chat and ask (the tasks whose message the writer reads as prose) gain an optional `symbols: [{tex, meaning}]` in their schema, and their prompt gains a paragraph (`EXPLAIN_SYMBOLS`) asking for each distinct symbol and constant in the message's formulas, `tex` copied exactly as written and `meaning` a phrase of at most 8 words. When it is off, prompt and schema are unchanged. The backend trims the symbols, drops blank ones, duplicates and any whose `tex` is not in the message, keeps at most 16, and stores them on the Message. In an open thread or the side chat, `InkText` renders a formula with symbols through `renderTexWithSymbols` (`rich.ts`): `markSymbols` wraps each occurrence as `{\htmlData{sym=<i>}{…}}`, matching whole TeX tokens and skipping the arguments of `\text`, `\mathrm` and the like, and KaTeX trusts only `\htmlData`. Each symbol becomes a focusable button (`symbolTip.ts`): pointing at it with a fine pointer or focusing it shows its meaning in a tooltip, and a press writes back `Explain $<tex>$ in more detail: what does it represent here?` in the same thread or chat.
+
+### Payload budget
+
+Each call is stateless, so the payload is rebuilt every time, and a long note or chat would otherwise grow it without bound. The payload builders in `prompts.rs` return labelled sections (`ai/budget.rs`), not a string. A `Section` carries its text and, optionally, a shorter form and the step at which it shrinks, and a step at which it is dropped. A section with neither is never cut. `fit(sections, budget_tokens)` concatenates them and, while the estimate is over budget, applies the cuts in step order. It returns the text and whether anything was cut. Under budget the text is byte for byte what the builders produced before they returned sections (`tests/fixtures/payloads.json`).
+
+Tokens are estimated as chars / 4, rounded up, which overcounts on purpose. Budgets are per task and tunable (constants in `budget.rs`, payload only, the system prompt not counted): read, answer, reply, ask and visualize `TASK_BUDGET` = 30 000; chat `CHAT_BUDGET` = 80 000; draw `DRAW_BUDGET` = 30 000.
+
+Drop order (`Stage`, then rank within it):
+
+1. Older chat messages, oldest first (in reply, older messages of the thread). A run of them reads `[… N earlier messages omitted …]`.
+2. Closed (resolved or dismissed) threads in the chat payload: each first shrinks to its quote and last message, then they go, oldest first, as `[… N threads omitted …]`.
+3. Distant parts of the note. The note is split into blocks (`doc::blocks`), and a block over 1000 chars into pieces at whitespace. Headings (the title and `heading` blocks) and the pieces around the focus stay, where the focus is the target for read, answer, ask and visualize, the thread's quote for reply, the cursor paragraph (`near`) for chat, and the start of the note when it is not found. The rest goes farthest first, each run replaced by `[… N words omitted …]`.
+4. Open threads shrink to their quote and last message, and are never dropped.
+
+Never cut: the system prompt, About you and the Riddler (all in the system prompt), the note header, the target, the writer's latest message, and the chat summary. The volatile parts (target, latest message) stay last so the stable prefix can be cached.
+
+When a call was cut, the message it produced carries `trimmed: true` (stored in `messages.trimmed`). The thread view and the side chat show a faint line under it (`TrimmedHint.svelte`): "Read around this passage" or "Read around your cursor; the note was too long to read whole." A drawing's own payload is fitted too, but does not change its message's flag.
 
 The read task never fires twice for the same unchanged target, and never when an open thread already quotes inside the target.
 

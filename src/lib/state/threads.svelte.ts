@@ -190,7 +190,7 @@ export async function reply(id: string, text: string) {
   const t = find(id);
   if (!t || !text.trim()) return;
   t.messages.push({
-    id: `local-${++seq}`, noteId: t.noteId, threadId: id, author: 'you', text, drawing: 'none', svg: null, sources: [], symbols: [], createdAt: Date.now(),
+    id: `local-${++seq}`, noteId: t.noteId, threadId: id, author: 'you', text, drawing: 'none', svg: null, sources: [], symbols: [], trimmed: false, createdAt: Date.now(),
   });
   threads.replying[id] = true;
   await (await getBackend()).aiReply(id, text);

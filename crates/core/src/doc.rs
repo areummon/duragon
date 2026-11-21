@@ -29,8 +29,20 @@ pub fn doc(blocks: Vec<Value>) -> Value {
     json!({ "type": "doc", "content": blocks })
 }
 
+/// A textblock of the note. `heading` marks the title and section headings, which give a long note its shape.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Block {
+    pub text: String,
+    pub heading: bool,
+}
+
 /// Block text joined by newlines. The frontend derives `plain` the same way.
 pub fn plain_text(doc: &Value) -> String {
+    blocks(doc).into_iter().map(|b| b.text).collect::<Vec<_>>().join("\n")
+}
+
+/// The textblocks in reading order; a hard break inside one becomes a newline in its text.
+pub fn blocks(doc: &Value) -> Vec<Block> {
     fn inline(n: &Value, out: &mut String) {
         if let Some(t) = n.get("text").and_then(Value::as_str) {
             out.push_str(t);
@@ -42,25 +54,21 @@ pub fn plain_text(doc: &Value) -> String {
             inline(c, out);
         }
     }
-    fn walk(n: &Value, lines: &mut Vec<String>) {
-        let kids = children(n);
-        let is_textblock = matches!(
-            n.get("type").and_then(Value::as_str),
-            Some("title" | "paragraph" | "heading" | "codeBlock")
-        );
-        if is_textblock {
-            let mut s = String::new();
-            inline(n, &mut s);
-            lines.push(s);
+    fn walk(n: &Value, out: &mut Vec<Block>) {
+        let kind = n.get("type").and_then(Value::as_str);
+        if matches!(kind, Some("title" | "paragraph" | "heading" | "codeBlock")) {
+            let mut text = String::new();
+            inline(n, &mut text);
+            out.push(Block { text, heading: matches!(kind, Some("title" | "heading")) });
         } else {
-            for c in kids {
-                walk(c, lines);
+            for c in children(n) {
+                walk(c, out);
             }
         }
     }
-    let mut lines = Vec::new();
-    walk(doc, &mut lines);
-    lines.join("\n")
+    let mut out = Vec::new();
+    walk(doc, &mut out);
+    out
 }
 
 pub fn children(n: &Value) -> &[Value] {

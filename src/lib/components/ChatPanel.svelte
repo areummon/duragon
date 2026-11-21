@@ -11,6 +11,7 @@
   import Blot from './Blot.svelte';
   import Drawing from './Drawing.svelte';
   import InkText from './InkText.svelte';
+  import TrimmedHint from './TrimmedHint.svelte';
   import { askAboutSymbol } from '../symbolTip';
 
   const CHIPS = ['What am I still misunderstanding?', 'What have we figured out so far?', 'What should I work on next?'];
@@ -96,6 +97,7 @@
         {:else}
           <div class="riddled">
             <InkText text={m.text} animate={!!chat.fresh[m.id]} symbols={m.symbols} onask={(s) => void send(askAboutSymbol(s))} />
+            {#if m.trimmed}<TrimmedHint around="cursor" />{/if}
             {#if m.drawing !== 'none'}
               <div class="art"><Drawing status={m.drawing} svg={m.svg} fresh={!!chat.fresh[`d${m.id}`]} size="large" onLarger={() => enlarge(m.svg)} /></div>
             {/if}

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::budget::{budget_tokens, fit, Section};
 use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
 use super::runner::{run_claude, AiError, CancelKey, ClaudeRequest};
@@ -200,9 +201,11 @@ impl Ai {
         }
     }
 
-    /// Runs one task. Emits `ai:error` and returns `None` on failure; cancellation is silent.
-    async fn call<T: DeserializeOwned>(&self, ctx: &Ctx, task: AiTask, payload: String) -> Option<T> {
+    /// Runs one task on its payload cut to the task's budget, and says whether it was cut.
+    /// Emits `ai:error` and returns `None` on failure; cancellation is silent.
+    async fn call<T: DeserializeOwned>(&self, ctx: &Ctx, task: AiTask, payload: Vec<Section>) -> Option<(T, bool)> {
         let note_id = &ctx.note.meta.id;
+        let (payload, trimmed) = fit(&payload, budget_tokens(task));
         let out = match run_claude(self.request(ctx, task, payload)).await {
             Ok(v) => v,
             Err(AiError::Cancelled) => return None,
@@ -212,7 +215,7 @@ impl Ai {
             }
         };
         match serde_json::from_value(out) {
-            Ok(v) => Some(v),
+            Ok(v) => Some((v, trimmed)),
             Err(e) => {
                 self.error(note_id, task, &format!("unexpected {} output: {e}", task.as_str()));
                 None
@@ -232,6 +235,7 @@ impl Ai {
         drawing: bool,
         sources: &[Source],
         symbols: &[Symbol],
+        trimmed: bool,
     ) -> Result<()> {
         let state = if drawing { DrawingState::Pending } else { DrawingState::None };
         let text = text.trim();
@@ -243,6 +247,7 @@ impl Ai {
             state,
             &clean_sources(sources),
             &clean_symbols(text, symbols),
+            trimmed,
         )?;
         match thread {
             Some(t) if announce_thread => self.emit("ai:thread", &self.db.get_thread(&t.id)?),
@@ -257,7 +262,8 @@ impl Ai {
     async fn draw(&self, ctx: &Ctx, msg: &Message) -> Result<()> {
         let note_id = &ctx.note.meta.id;
         self.thinking(note_id, &msg.text, AiTask::Draw);
-        let payload = prompts::draw_payload(&ctx.note.meta.title, &plain_of(&ctx.note), &msg.text);
+        let payload = prompts::draw_payload(&ctx.note.meta.title, &blocks_of(&ctx.note), &msg.text);
+        let (payload, _) = fit(&payload, budget_tokens(AiTask::Draw));
         let result = match run_claude(self.request(ctx, AiTask::Draw, payload)).await {
             Ok(v) => serde_json::from_value::<DrawOut>(v)
                 .map_err(|e| format!("unexpected draw output: {e}"))
@@ -288,12 +294,12 @@ impl Ai {
         }
         let payload = prompts::read_payload(
             &ctx.note.meta.title,
-            &plain_of(&ctx.note),
+            &blocks_of(&ctx.note),
             target,
             &threads,
             &ctx.riddler.name,
         );
-        let Some(out) = self.call::<ReadOut>(&ctx, AiTask::Read, payload).await else {
+        let Some((out, trimmed)) = self.call::<ReadOut>(&ctx, AiTask::Read, payload).await else {
             return Ok(());
         };
         let quote = match out.kind {
@@ -306,7 +312,7 @@ impl Ai {
             return Ok(());
         };
         let thread = self.db.create_thread(note_id, out.kind, &quote)?;
-        self.deliver(&ctx, Some(&thread), true, message, out.drawing, &out.sources, &out.symbols).await?;
+        self.deliver(&ctx, Some(&thread), true, message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
         if out.kind == ThreadKind::Reply {
             self.spawn_learn(&ctx, target);
         }
@@ -319,12 +325,12 @@ impl Ai {
         let threads = self.db.list_threads(note_id)?;
         let payload = prompts::answer_payload(
             &ctx.note.meta.title,
-            &plain_of(&ctx.note),
+            &blocks_of(&ctx.note),
             target,
             &threads,
             &ctx.riddler.name,
         );
-        let Some(out) = self.call::<SayOut>(&ctx, AiTask::Answer, payload).await else {
+        let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Answer, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
@@ -332,7 +338,7 @@ impl Ai {
             return Ok(());
         }
         let thread = self.db.create_thread(note_id, ThreadKind::Reply, target.trim_end())?;
-        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources, &out.symbols).await?;
+        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
         self.spawn_learn(&ctx, target);
         Ok(())
     }
@@ -346,18 +352,18 @@ impl Ai {
         self.thinking(&note_id, text, AiTask::Reply);
         let payload = prompts::reply_payload(
             &ctx.note.meta.title,
-            &plain_of(&ctx.note),
+            &blocks_of(&ctx.note),
             &thread,
             &ctx.riddler.name,
         );
-        let Some(out) = self.call::<SayOut>(&ctx, AiTask::Reply, payload).await else {
+        let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Reply, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
             self.error(&note_id, AiTask::Reply, "empty reply");
             return Ok(());
         }
-        self.deliver(&ctx, Some(&thread), false, &out.message, out.drawing, &out.sources, &out.symbols).await?;
+        self.deliver(&ctx, Some(&thread), false, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
         self.spawn_learn(&ctx, text);
         Ok(())
     }
@@ -368,20 +374,20 @@ impl Ai {
         self.thinking(note_id, text, AiTask::Chat);
         let payload = prompts::chat_payload(
             &ctx.note.meta.title,
-            &plain_of(&ctx.note),
+            &blocks_of(&ctx.note),
             &self.db.list_threads(note_id)?,
             &self.db.list_chat(note_id)?,
             &ctx.riddler.name,
             near,
         );
-        let Some(out) = self.call::<SayOut>(&ctx, AiTask::Chat, payload).await else {
+        let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Chat, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
             self.error(note_id, AiTask::Chat, "empty reply");
             return Ok(());
         }
-        self.deliver(&ctx, None, false, &out.message, out.drawing, &out.sources, &out.symbols).await?;
+        self.deliver(&ctx, None, false, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
         self.spawn_learn(&ctx, text);
         Ok(())
     }
@@ -473,8 +479,8 @@ fn fallback_riddler() -> Riddler {
     }
 }
 
-fn plain_of(note: &Note) -> String {
-    crate::doc::plain_text(&note.doc)
+fn blocks_of(note: &Note) -> Vec<crate::doc::Block> {
+    crate::doc::blocks(&note.doc)
 }
 
 #[derive(Deserialize)]
@@ -497,13 +503,13 @@ impl Ai {
         self.thinking(note_id, target, AiTask::Ask);
         let payload = prompts::ask_payload(
             &ctx.note.meta.title,
-            &plain_of(&ctx.note),
+            &blocks_of(&ctx.note),
             target,
             question,
             &self.db.list_threads(note_id)?,
             &ctx.riddler.name,
         );
-        let Some(out) = self.call::<AskOut>(&ctx, AiTask::Ask, payload).await else {
+        let Some((out, trimmed)) = self.call::<AskOut>(&ctx, AiTask::Ask, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
@@ -515,7 +521,7 @@ impl Ai {
         if let Some(q) = question {
             self.db.add_message(note_id, Some(&thread.id), Author::You, q, DrawingState::None)?;
         }
-        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources, &out.symbols).await?;
+        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
         if let Some(q) = question {
             self.spawn_learn(&ctx, q);
         }
@@ -525,8 +531,8 @@ impl Ai {
     pub async fn visualize(&self, note_id: &str, target: &str) -> Result<()> {
         let ctx = self.ctx(note_id)?;
         self.thinking(note_id, target, AiTask::Visualize);
-        let payload = prompts::visualize_payload(&ctx.note.meta.title, &plain_of(&ctx.note), target);
-        let Some(out) = self.call::<SayOut>(&ctx, AiTask::Visualize, payload).await else {
+        let payload = prompts::visualize_payload(&ctx.note.meta.title, &blocks_of(&ctx.note), target);
+        let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Visualize, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
@@ -534,6 +540,6 @@ impl Ai {
             return Ok(());
         }
         let thread = self.db.create_thread(note_id, ThreadKind::Question, target.trim())?;
-        self.deliver(&ctx, Some(&thread), true, &out.message, true, &[], &[]).await
+        self.deliver(&ctx, Some(&thread), true, &out.message, true, &[], &[], trimmed).await
     }
 }
