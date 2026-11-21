@@ -134,31 +134,6 @@ async fn read_stays_quiet_when_the_model_says_nothing() {
 }
 
 #[tokio::test]
-async fn a_line_pasted_again_is_read_even_though_its_first_copy_has_a_thread() {
-    let fx = setup(json!({"said":true,"quote":"mitochondria","message":"Here too?"}), json!({}));
-    let para = json!({"type":"paragraph","content":[{"type":"text","text":TARGET}]});
-    let doc = json!({"type":"doc","content":[{"type":"title","content":[{"type":"text","text":"Plants"}]}, para, para]});
-    fx.ai.db.save_note(&fx.note, "Plants", &doc, &format!("Plants\n{TARGET}\n{TARGET}")).unwrap();
-    fx.ai.db.create_thread(&fx.note, ThreadKind::Question, "mitochondria").unwrap();
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
-    assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:thread"], "{:?}", fx.cap.all());
-    assert_eq!(fx.ai.db.list_threads(&fx.note).unwrap().len(), 2);
-
-    fx.cap.0.lock().unwrap().clear();
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
-    assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:quiet"], "both copies are covered now");
-}
-
-#[tokio::test]
-async fn read_skips_targets_already_covered_by_an_open_thread() {
-    let fx = setup(json!({"said":true,"quote":"mitochondria","message":"again"}), json!({}));
-    fx.ai.db.create_thread(&fx.note, ThreadKind::Question, "mitochondria").unwrap();
-    fx.ai.read(&fx.note, TARGET).await.unwrap();
-    assert_eq!(fx.cap.names(), vec!["ai:thinking", "ai:quiet"]);
-    assert_eq!(fx.ai.db.list_threads(&fx.note).unwrap().len(), 1);
-}
-
-#[tokio::test]
 async fn read_chains_a_drawing_pending_then_done() {
     let fx = setup(
         json!({"said":true,"quote":"mitochondria","message":"Show a cell with its parts.","drawing":true}),

@@ -2,6 +2,12 @@
   import type { Editor as TipTapEditor } from '@tiptap/core';
   import type { Range } from './quote';
 
+  /** An edit that settled: every top-level block's text, title first, and the indexes of the blocks that are new. */
+  export interface BlockChange {
+    texts: string[];
+    changed: number[];
+  }
+
   export interface EditorApi {
     findQuote(quote: string): Range | null;
     editor: TipTapEditor;
@@ -15,14 +21,14 @@
   import { registerFlush } from '../state/app.svelte';
   import { upsertMeta } from '../state/notes.svelte';
   import { createEditor } from './create';
-  import { blockTexts, docTitle, normalizeDoc, plainText } from './plain';
+  import { changedBlocks, docBlocks, docTitle, normalizeDoc, plainText } from './plain';
   import { findQuote } from './quote';
   import SlashMenu from './SlashMenu.svelte';
 
   interface Props {
     note: Note;
     focusTitle?: boolean;
-    onBlocksChanged?: (changedBlockTexts: string[]) => void;
+    onBlocksChanged?: (change: BlockChange) => void;
     onEdit?: () => void;
     changeDelay?: () => number;
     onReady?: (api: EditorApi | null) => void;
@@ -38,27 +44,12 @@
     upsertMeta(await (await getBackend()).saveNote(id, docTitle(json), json, plainText(json)));
   }
 
-  /** Blocks of `current` (title excluded) that were not in `before`, counting duplicates. */
-  function changed(before: string[], current: string[]): string[] {
-    const left = new Map<string, number>();
-    before.forEach((t) => left.set(t, (left.get(t) ?? 0) + 1));
-    return current.slice(1).filter((t) => {
-      const n = left.get(t) ?? 0;
-      if (n > 0) {
-        left.set(t, n - 1);
-        return false;
-      }
-      return t.trim() !== '';
-    });
-  }
-
   function mount(n: Note) {
     const id = n.id;
     const doc = normalizeDoc(n.doc, n.title);
     let timer: number | undefined;
     let changeTimer: number | undefined;
     let dirty = false;
-    let lastBlocks = blockTexts(doc).slice(1);
 
     const save = async () => {
       window.clearTimeout(timer);
@@ -68,10 +59,10 @@
     };
 
     const flushChanges = () => {
-      const current = blockTexts(ed.getJSON());
-      const diff = changed(lastBlocks, current);
-      lastBlocks = current.slice(1);
-      if (diff.length) onBlocksChanged?.(diff);
+      const texts = docBlocks(ed.state.doc);
+      const changed = changedBlocks(lastBlocks, texts);
+      lastBlocks = texts;
+      if (changed.length) onBlocksChanged?.({ texts, changed });
     };
 
     const ed = createEditor({
@@ -87,6 +78,7 @@
         changeTimer = window.setTimeout(flushChanges, changeDelay());
       },
     });
+    let lastBlocks = docBlocks(ed.state.doc);
     editor = ed;
     registerFlush(save);
     onReady?.({ editor: ed, findQuote: (quote) => findQuote(ed.state.doc, quote) });

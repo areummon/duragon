@@ -13,7 +13,8 @@ import { measureLines } from './pencil';
 import { current } from './current';
 import { QUIET } from './create';
 import { TextSelection } from '@tiptap/pm/state';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import { docBlocks } from './plain';
+import type { BlockChange } from './Editor.svelte';
 
 const PACE = { regular: 900, slow: 1800 } as const;
 const MIN_TARGET = 12;
@@ -29,25 +30,15 @@ const REQUEST = /^(?:draw|sketch|explain|show|tell|describe|compare|list|summari
 
 const isRequest = (line: string) => line.endsWith('?') || REQUEST.test(line);
 
-/** The note's lines below the title, trimmed, as the editor reports changed blocks. */
-function bodyLines(doc: PMNode): string[] {
-  const lines: string[] = [];
-  doc.forEach((block, _offset, i) => {
-    if (i > 0) lines.push(block.textBetween(0, block.content.size, '\n', '\n').trim());
-  });
-  return lines;
-}
-
 /**
- * How many copies of each line the mind has already been given. Counting copies, not remembering text, lets a line
- * that is pasted again, or deleted and written again, be read like any new line, while an unchanged line never is.
+ * How many copies of each addressed line have been answered. Counting copies, not remembering text, lets a line that
+ * is pasted again, or deleted and written again, be answered like any new line, while an answered copy never is again.
  */
-function ledger() {
+function answeredLines() {
   const done = new Map<string, number>();
   return {
     pending: (line: string, copies: number) => (done.get(line) ?? 0) < copies,
-    take: (line: string, copies: number) => done.set(line, copies),
-    give: (line: string) => done.set(line, Math.max(0, (done.get(line) ?? 0) - 1)),
+    take: (line: string) => done.set(line, (done.get(line) ?? 0) + 1),
     /** Forget copies that are gone, so writing them again counts as new. */
     prune(lines: string[]) {
       for (const [line, n] of done) {
@@ -70,7 +61,7 @@ export function isAddressed(line: string): boolean {
 
 export interface Riddle {
   onEdit(): void;
-  onBlocksChanged(texts: string[]): void;
+  onBlocksChanged(change: BlockChange): void;
   /** Debounce for read-along, from the reading pace. */
   delay(): number;
   measure(): void;
@@ -80,8 +71,7 @@ export interface Riddle {
 export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string): Riddle {
   const view = editor.view;
   current.editor = editor;
-  const read = ledger();
-  const answered = ledger();
+  const answered = answeredLines();
   let readTarget: string | null = null;
   let caretBlock = editor.state.selection.$from.index(0);
   let frame = 0;
@@ -202,16 +192,21 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
   view.dom.addEventListener('keydown', keydown);
 
   async function answer(text: string, copies: number) {
-    answered.take(text, copies);
+    answered.take(text);
     if (threads.list.filter((t) => t.kind === 'reply' && t.quote === text).length >= copies) return;
     await (await getBackend()).aiAnswer(noteId, text);
   }
 
+  /** Whether an open thread is anchored in top-level block `i`: the anchors know which copy of a line each sits on. */
+  function covered(i: number) {
+    const { doc } = view.state;
+    for (const r of anchorKey.getState(view.state)?.ranges.values() ?? []) if (r && doc.resolve(r.from).index(0) === i) return true;
+    return false;
+  }
+
   function cancelRead() {
     if (readTarget === null) return;
-    const target = readTarget;
     readTarget = null;
-    read.give(target);
     threads.thinking = threads.thinking.filter((t) => t.task !== 'read');
     void getBackend().then((be) => be.aiCancelRead(noteId));
   }
@@ -222,37 +217,33 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     onEdit() {
       collapseOnType();
       // A read stays valid while its line is unchanged: pressing Enter after it, or writing elsewhere, keeps it.
-      // Runs on every keystroke, so it reads the doc directly rather than serializing it.
-      if (readTarget !== null && !bodyLines(editor.state.doc).includes(readTarget)) cancelRead();
       const block = editor.state.selection.$from.index(0);
-      if (block === caretBlock + 1 && !settings.value.justMyWords) {
-        const line = editor.state.doc.child(caretBlock).textContent.trim();
-        if (isAddressed(line)) {
-          const copies = copiesOf(bodyLines(editor.state.doc), line);
-          if (answered.pending(line, copies)) void answer(line, copies);
-        }
+      const enter = block === caretBlock + 1 && !settings.value.justMyWords;
+      // Runs on every keystroke, so it reads the doc only when a read is in flight or Enter was pressed.
+      const lines = readTarget !== null || enter ? docBlocks(editor.state.doc).map((t) => t.trim()) : [];
+      if (readTarget !== null && !lines.includes(readTarget, 1)) cancelRead();
+      const line = lines[caretBlock];
+      if (enter && isAddressed(line)) {
+        const copies = copiesOf(lines.slice(1), line);
+        if (answered.pending(line, copies)) void answer(line, copies);
       }
       caretBlock = block;
     },
-    onBlocksChanged(texts) {
+    onBlocksChanged({ texts, changed }) {
       if (settings.value.justMyWords || !app.note) return;
-      const all = bodyLines(editor.state.doc);
-      read.prune(all);
-      answered.prune(all);
       const lines = texts.map((t) => t.trim());
-      for (const line of lines) {
-        const copies = copiesOf(all, line);
-        if (isAddressed(line) && answered.pending(line, copies)) void answer(line, copies);
+      const body = lines.slice(1);
+      answered.prune(body);
+      for (const i of changed) {
+        const copies = copiesOf(body, lines[i]);
+        if (isAddressed(lines[i]) && answered.pending(lines[i], copies)) void answer(lines[i], copies);
       }
       if (app.note.mode !== 'thinks') return;
-      const target = [...lines].reverse().find((t) => !isAddressed(t));
-      if (!target) return;
-      const copies = copiesOf(all, target);
-      if (!read.pending(target, copies)) return;
-      if (target.length < (isRequest(target) ? MIN_REQUEST : MIN_TARGET)) return;
-      // Each open thread on these words covers one copy of the line; a copy beyond them is new.
-      if (threads.list.filter((t) => t.status === 'open' && t.quote && target.includes(t.quote)).length >= copies) return;
-      read.take(target, copies);
+      // Only a block whose text is new is read, so an unchanged line never is, and a copy pasted again is.
+      const i = [...changed].reverse().find((i) => !isAddressed(lines[i]));
+      if (i === undefined) return;
+      const target = lines[i];
+      if (target.length < (isRequest(target) ? MIN_REQUEST : MIN_TARGET) || covered(i)) return;
       readTarget = target;
       void getBackend().then((be) => be.aiRead(noteId, target));
     },

@@ -1,3 +1,5 @@
+import type { Node as PMNode } from '@tiptap/pm/model';
+
 interface JsonNode {
   type: string;
   text?: string;
@@ -25,6 +27,35 @@ export function blockTexts(doc: unknown): string[] {
     blockLines(b, lines);
     return lines.join('\n');
   });
+}
+
+/** `blockTexts` of the live editor doc, without serializing it: each top-level block's text, title first. */
+export function docBlocks(doc: PMNode): string[] {
+  const out: string[] = [];
+  doc.forEach((block) => out.push(block.textBetween(0, block.content.size, '\n', '\n')));
+  return out;
+}
+
+/**
+ * Which blocks of `after` (by index, never the title) hold text that is new since `before`. Blocks that match from
+ * either end are unchanged, so a pasted copy of a line is the new one rather than the copy that was already there.
+ * Between them, text that was there before is matched up and not counted.
+ */
+export function changedBlocks(before: string[], after: string[]): number[] {
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let end = 0;
+  const room = Math.min(before.length, after.length) - start;
+  while (end < room && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
+  const left = new Map<string, number>();
+  for (const t of before.slice(start, before.length - end)) left.set(t, (left.get(t) ?? 0) + 1);
+  const out: number[] = [];
+  for (let i = start; i < after.length - end; i++) {
+    const n = left.get(after[i]) ?? 0;
+    if (n > 0) left.set(after[i], n - 1);
+    else if (i > 0 && after[i].trim() !== '') out.push(i);
+  }
+  return out;
 }
 
 /** Title, then each top-level block's text, one per line. What AI tasks and search read. */

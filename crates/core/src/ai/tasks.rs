@@ -349,20 +349,9 @@ impl Ai {
         let ctx = self.ctx(note_id)?;
         self.thinking(note_id, target, AiTask::Read);
         let threads = self.db.list_threads(note_id)?;
-        let blocks = doc::blocks(&ctx.note.doc);
-        // Each open thread on these words covers one copy of the line, so a line pasted again is read like a new one.
-        let copies = blocks.iter().filter(|b| b.text.trim() == target.trim()).count().max(1);
-        let covering = threads
-            .iter()
-            .filter(|t| t.status == ThreadStatus::Open && !t.quote.is_empty() && target.contains(&t.quote))
-            .count();
-        if covering >= copies {
-            self.events.emit("ai:quiet", json!({ "noteId": note_id, "target": target }));
-            return Ok(());
-        }
         let payload = prompts::target_payload(
             &ctx.note.meta.title,
-            &blocks,
+            &doc::blocks(&ctx.note.doc),
             target,
             prompts::TargetIs::JustWritten,
             &threads,
