@@ -11,7 +11,7 @@
   import SettingsIcon from 'lucide-svelte/icons/settings';
   import type { Folder, NoteMeta } from '../api/types';
   import { app, deleteNote, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
-  import { createFolder, deleteFolder, notes, renameFolder } from '../state/notes.svelte';
+  import { createFolder, deleteFolder, folderWithin, moveFolder, notes, renameFolder } from '../state/notes.svelte';
   import { kbd } from '../keys';
   import { unfold, veil } from '../motion/transitions';
   import Blot from './Blot.svelte';
@@ -22,6 +22,8 @@
   let showAll = $state(false);
   const shown = $derived(showAll ? recent : recent.slice(0, 10));
   const inFolder = (f: Folder) => notes.list.filter((n) => n.folderId === f.id);
+  const roots = $derived(notes.folders.filter((f) => f.parentId === null));
+  const subfolders = (f: Folder) => notes.folders.filter((c) => c.parentId === f.id);
 
   let collapsed = $state<Record<string, boolean>>({});
   let noteMenu = $state<{ id: string; at: { x: number; y: number }; view: 'main' | 'move' | 'confirm' } | null>(null);
@@ -54,8 +56,61 @@
     } else await createFolder(name || 'New folder');
   }
 
+  // Dragging a note or folder onto a folder files it there; dropping it anywhere else in the list
+  // takes it to the top level. `data-drop` names the folder under the pointer, and '' is the top level.
+  type Dragged = { kind: 'note' | 'folder'; id: string; label: string; from: string | null };
+  let press: { item: Dragged; x: number; y: number } | null = null;
+  let drag = $state<{ item: Dragged; x: number; y: number; over: string | undefined } | null>(null);
+  let justDragged = false;
+
+  function grab(e: PointerEvent, item: Dragged) {
+    if (e.button === 0 && e.pointerType !== 'touch') press = { item, x: e.clientX, y: e.clientY };
+  }
+
+  const accepts = (item: Dragged, target: string) => {
+    const to = target || null;
+    if (to === item.from) return false;
+    return item.kind === 'note' || to === null || !folderWithin(to, item.id);
+  };
+
+  function track(e: PointerEvent) {
+    if (!press) return;
+    if (!drag && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4) return;
+    const zone = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-drop]');
+    const target = zone?.dataset.drop;
+    drag = { item: press.item, x: e.clientX, y: e.clientY, over: target !== undefined && accepts(press.item, target) ? target : undefined };
+  }
+
+  function drop() {
+    const d = drag;
+    press = null;
+    drag = null;
+    if (!d) return;
+    justDragged = true;
+    if (d.over === undefined) return;
+    const to = d.over || null;
+    if (to) collapsed[to] = false;
+    if (d.item.kind === 'note') void moveNote(d.item.id, to);
+    else void moveFolder(d.item.id, to);
+  }
+
+  function cancel(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !drag) return;
+    e.stopPropagation();
+    press = null;
+    drag = null;
+    justDragged = true;
+  }
+
+  function swallowClick(e: MouseEvent) {
+    if (!justDragged) return;
+    justDragged = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }
+
   const busy = () =>
-    noteMenu !== null || folderMenu !== null || settingsOpen || editing !== null ||
+    drag !== null || noteMenu !== null || folderMenu !== null || settingsOpen || editing !== null ||
     app.paletteOpen || app.customizeOpen || app.mindEditor !== null;
 
   // Leaving towards the window's left edge keeps a peek open, as does any menu or dialog in use.
@@ -69,12 +124,14 @@
   };
 </script>
 
+<svelte:window onpointermove={track} onpointerup={drop} onkeydowncapture={cancel} />
+
 <div class="edge" aria-hidden="true" onmouseenter={peekSidebar}></div>
 {#if app.sidebarOpen}
   <div class="scrim" role="presentation" onclick={() => setSidebar(false)} onmouseenter={leave}></div>
 {/if}
 
-<nav class="sidebar" class:open={app.sidebarOpen} inert={!app.sidebarOpen} aria-label="Notes" onmouseleave={leave}>
+<nav class="sidebar" class:open={app.sidebarOpen} class:dragging={drag !== null} inert={!app.sidebarOpen} aria-label="Notes" onmouseleave={leave}>
   <div class="top">
     <button class="row action" onclick={() => (app.paletteOpen = true)}>
       <Search size={15} strokeWidth={1.5} /><span>Find or start a note</span><span class="kbd">{kbd('K')}</span>
@@ -87,10 +144,14 @@
     </button>
   </div>
 
-  <div class="list">
+  <div class="list" class:drop-root={drag?.over === ''} data-drop="" onpointerdowncapture={() => (justDragged = false)} onclickcapture={swallowClick}>
     {#snippet noteRow(n: NoteMeta)}
-      <div class="row note" class:current={app.note?.id === n.id}>
-        <button class="open" onclick={() => openNote(n.id)}>
+      <div class="row note" class:current={app.note?.id === n.id} class:lifted={drag?.item.id === n.id}>
+        <button
+          class="open"
+          onpointerdown={(e) => grab(e, { kind: 'note', id: n.id, label: n.title || 'Untitled', from: n.folderId })}
+          onclick={() => openNote(n.id)}
+        >
           <FileText size={15} strokeWidth={1.5} />
           <span class="title">{n.title || 'Untitled'}</span>
           {#if n.hasOpenQuestion}<Blot size={9} />{/if}
@@ -107,8 +168,8 @@
 
     <div class="gap"></div>
 
-    {#each notes.folders as f (f.id)}
-      <div class="row folder">
+    {#snippet folderTree(f: Folder)}
+      <div class="row folder" class:drop={drag?.over === f.id} class:lifted={drag?.item.id === f.id} data-drop={f.id}>
         {#if editing?.id === f.id}
           <div class="open">
             <FolderIcon size={15} strokeWidth={1.5} />
@@ -125,7 +186,11 @@
             />
           </div>
         {:else}
-          <button class="open" aria-expanded={!collapsed[f.id]} onclick={() => (collapsed[f.id] = !collapsed[f.id])}>
+          <button
+            class="open"
+            aria-expanded={!collapsed[f.id]}
+            onpointerdown={(e) => grab(e, { kind: 'folder', id: f.id, label: f.name, from: f.parentId })}
+            onclick={() => (collapsed[f.id] = !collapsed[f.id])}>
             {#if collapsed[f.id]}<ChevronRight size={15} strokeWidth={1.5} />{:else}<ChevronDown size={15} strokeWidth={1.5} />{/if}
             <span class="title">{f.name}</span>
           </button>
@@ -135,12 +200,19 @@
         {/if}
       </div>
       {#if !collapsed[f.id]}
-        <div class="children" transition:unfold={{ duration: 200 }}>
+        <div class="children" data-drop={f.id} transition:unfold={{ duration: 200 }}>
+          {#each subfolders(f) as c (c.id)}
+            {@render folderTree(c)}
+          {/each}
           {#each inFolder(f) as n (n.id)}
             {@render noteRow(n)}
           {/each}
         </div>
       {/if}
+    {/snippet}
+
+    {#each roots as f (f.id)}
+      {@render folderTree(f)}
     {/each}
 
     {#if editing && editing.id === null}
@@ -180,6 +252,13 @@
   </div>
 </nav>
 
+{#if drag}
+  <div class="ghost" aria-hidden="true" style:transform="translate({drag.x + 14}px, {drag.y + 10}px)">
+    {#if drag.item.kind === 'folder'}<FolderIcon size={15} strokeWidth={1.5} />{:else}<FileText size={15} strokeWidth={1.5} />{/if}
+    <span class="title">{drag.item.label}</span>
+  </div>
+{/if}
+
 <Popover open={noteMenu !== null} onclose={() => (noteMenu = null)} at={noteMenu?.at} width={200} label="Note options">
   {#if noteMenu}
     {@const id = noteMenu.id}
@@ -214,7 +293,7 @@
           <button class="menu-item" role="menuitem" onclick={() => { editing = { id, name: notes.folders.find((f) => f.id === id)?.name ?? '' }; folderMenu = null; }}>Rename</button>
           <button class="menu-item" role="menuitem" onclick={() => folderMenu && (folderMenu.confirm = true)}>Delete folder</button>
         {:else}
-          <div class="empty">Notes inside stay, without a folder.</div>
+          <div class="empty">What's inside moves up a level.</div>
           <button class="menu-item danger" role="menuitem" onclick={() => { deleteFolder(id); folderMenu = null; }}>Delete folder</button>
           <button class="menu-item" role="menuitem" onclick={() => (folderMenu = null)}>Keep it</button>
         {/if}
@@ -325,6 +404,31 @@
   .empty { padding: 6px 10px; font-size: 13px; color: var(--faint); }
   .danger { color: var(--text-red); }
   .view { display: flex; flex-direction: column; }
+
+  .dragging, .dragging * { cursor: grabbing; user-select: none; }
+  .dragging .row:hover:not(.drop) { background: none; }
+  .dragging .more { opacity: 0; }
+  .lifted { opacity: 0.4; }
+  .folder.drop { background: var(--riddle-wash); color: var(--ink); box-shadow: inset 0 0 0 1px var(--riddle-line); }
+  .list.drop-root { border-radius: 8px; box-shadow: inset 0 0 0 1px var(--riddle-line); }
+  .ghost {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 220px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    background: var(--paper);
+    box-shadow: 0 0 0 1px var(--rule), 0 6px 18px rgb(0 0 0 / 0.12);
+    font-size: 13px;
+    color: var(--ink);
+    pointer-events: none;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .sidebar { transition: opacity var(--dur-drawer) var(--ease-drawer), visibility 0s linear var(--dur-drawer); }

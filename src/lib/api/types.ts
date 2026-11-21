@@ -25,6 +25,7 @@ export interface Note extends NoteMeta {
 export interface Folder {
   id: string;
   name: string;
+  parentId: string | null;
   createdAt: number;
 }
 

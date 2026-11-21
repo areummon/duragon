@@ -23,15 +23,15 @@ const RIDDLER_COLS: &str = "id,name,description,how_it_thinks,tone,frequency,bui
 impl Db {
     pub fn list_folders(&self) -> Result<Vec<Folder>> {
         let conn = self.conn();
-        let mut st = conn.prepare("SELECT id,name,created_at FROM folders ORDER BY name COLLATE NOCASE, rowid")?;
+        let mut st = conn.prepare("SELECT id,name,parent_id,created_at FROM folders ORDER BY name COLLATE NOCASE, rowid")?;
         let rows = st
-            .query_map([], |r| Ok(Folder { id: r.get(0)?, name: r.get(1)?, created_at: r.get(2)? }))?
+            .query_map([], |r| Ok(Folder { id: r.get(0)?, name: r.get(1)?, parent_id: r.get(2)?, created_at: r.get(3)? }))?
             .collect::<Result<_, _>>()?;
         Ok(rows)
     }
 
     pub fn create_folder(&self, name: &str) -> Result<Folder> {
-        let f = Folder { id: new_id(), name: name.trim().to_string(), created_at: now_ms() };
+        let f = Folder { id: new_id(), name: name.trim().to_string(), parent_id: None, created_at: now_ms() };
         self.conn().execute(
             "INSERT INTO folders(id,name,created_at) VALUES (?1,?2,?3)",
             params![f.id, f.name, f.created_at],
@@ -45,11 +45,35 @@ impl Db {
         Ok(())
     }
 
-    /// Notes in the folder move back to the top level.
-    pub fn delete_folder(&self, id: &str) -> Result<()> {
+    /// `None` moves the folder to the top level. Walking up from the new parent refuses a cycle.
+    pub fn move_folder(&self, id: &str, parent_id: Option<&str>) -> Result<()> {
         let conn = self.conn();
-        conn.execute("UPDATE notes SET folder_id=NULL WHERE folder_id=?1", [id])?;
-        conn.execute("DELETE FROM folders WHERE id=?1", [id])?;
+        let mut at = parent_id.map(str::to_owned);
+        while let Some(p) = at {
+            if p == id {
+                return Err(anyhow!("a folder can't go inside itself"));
+            }
+            let up: Option<Option<String>> = conn
+                .query_row("SELECT parent_id FROM folders WHERE id=?1", [&p], |r| r.get(0))
+                .optional()?;
+            at = up.ok_or_else(|| anyhow!("no folder {p}"))?;
+        }
+        conn.execute("UPDATE folders SET parent_id=?2 WHERE id=?1", params![id, parent_id])?;
+        Ok(())
+    }
+
+    /// Notes and folders inside move up to the deleted folder's parent.
+    pub fn delete_folder(&self, id: &str) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let parent: Option<String> = tx
+            .query_row("SELECT parent_id FROM folders WHERE id=?1", [id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        tx.execute("UPDATE notes SET folder_id=?2 WHERE folder_id=?1", params![id, parent])?;
+        tx.execute("UPDATE folders SET parent_id=?2 WHERE parent_id=?1", params![id, parent])?;
+        tx.execute("DELETE FROM folders WHERE id=?1", [id])?;
+        tx.commit()?;
         Ok(())
     }
 

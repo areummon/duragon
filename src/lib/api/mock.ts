@@ -272,7 +272,7 @@ export class MockBackend implements Backend {
     return [...this.folders.values()];
   }
   async createFolder(name: string) {
-    const f = { id: uid(), name, createdAt: now() };
+    const f: Folder = { id: uid(), name, parentId: null, createdAt: now() };
     this.folders.set(f.id, f);
     return f;
   }
@@ -280,9 +280,18 @@ export class MockBackend implements Backend {
     const f = this.folders.get(id);
     if (f) f.name = name;
   }
+  async moveFolder(id: string, parentId: string | null) {
+    for (let at = parentId; at !== null; at = this.folders.get(at)?.parentId ?? null) {
+      if (at === id) throw new Error("a folder can't go inside itself");
+    }
+    const f = this.folders.get(id);
+    if (f) f.parentId = parentId;
+  }
   async deleteFolder(id: string) {
+    const up = this.folders.get(id)?.parentId ?? null;
     this.folders.delete(id);
-    for (const n of this.notes.values()) if (n.folderId === id) n.folderId = null;
+    for (const n of this.notes.values()) if (n.folderId === id) n.folderId = up;
+    for (const f of this.folders.values()) if (f.parentId === id) f.parentId = up;
   }
 
   async listThreads(noteId: string) {

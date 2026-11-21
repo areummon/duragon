@@ -17,6 +17,7 @@ export interface Backend {
   listFolders(): Promise<Folder[]>;
   createFolder(name: string): Promise<Folder>;
   renameFolder(id: string, name: string): Promise<void>;
+  moveFolder(id: string, parentId: string | null): Promise<void>;
   deleteFolder(id: string): Promise<void>;
 
   listThreads(noteId: string): Promise<Thread[]>;

@@ -36,10 +36,25 @@ export async function renameFolder(id: string, name: string) {
   notes.folders = notes.folders.map((f) => (f.id === id ? { ...f, name } : f));
 }
 
+/** True when `id` is `ancestor` or sits somewhere inside it. */
+export function folderWithin(id: string | null, ancestor: string): boolean {
+  for (let at = id; at !== null; at = notes.folders.find((f) => f.id === at)?.parentId ?? null) {
+    if (at === ancestor) return true;
+  }
+  return false;
+}
+
+export async function moveFolder(id: string, parentId: string | null) {
+  if (parentId !== null && folderWithin(parentId, id)) return;
+  await (await getBackend()).moveFolder(id, parentId);
+  notes.folders = notes.folders.map((f) => (f.id === id ? { ...f, parentId } : f));
+}
+
 export async function deleteFolder(id: string) {
+  const up = notes.folders.find((f) => f.id === id)?.parentId ?? null;
   await (await getBackend()).deleteFolder(id);
-  notes.folders = notes.folders.filter((f) => f.id !== id);
-  notes.list = notes.list.map((n) => (n.folderId === id ? { ...n, folderId: null } : n));
+  notes.folders = notes.folders.filter((f) => f.id !== id).map((f) => (f.parentId === id ? { ...f, parentId: up } : f));
+  notes.list = notes.list.map((n) => (n.folderId === id ? { ...n, folderId: up } : n));
 }
 
 export async function saveMind(r: Riddler): Promise<Riddler> {

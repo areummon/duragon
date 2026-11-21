@@ -79,6 +79,23 @@ fn note_crud_round_trip() {
     db.delete_folder(&folder.id).unwrap();
     assert!(db.list_folders().unwrap().is_empty());
 
+    let outer = db.create_folder("Outer").unwrap();
+    let mid = db.create_folder("Mid").unwrap();
+    let inner = db.create_folder("Inner").unwrap();
+    db.move_folder(&mid.id, Some(&outer.id)).unwrap();
+    db.move_folder(&inner.id, Some(&mid.id)).unwrap();
+    assert!(db.move_folder(&outer.id, Some(&inner.id)).is_err(), "no cycles");
+    assert!(db.move_folder(&outer.id, Some(&outer.id)).is_err(), "not into itself");
+    assert!(db.move_folder(&outer.id, Some("nope")).is_err(), "parent must exist");
+    let into_mid = NoteMetaPatch { folder_id: Some(Some(mid.id.clone())), ..Default::default() };
+    db.update_note_meta(&n.meta.id, &into_mid).unwrap();
+    db.delete_folder(&mid.id).unwrap();
+    let parent_of = |id: &str| db.list_folders().unwrap().into_iter().find(|f| f.id == id).unwrap().parent_id;
+    assert_eq!(parent_of(&inner.id).as_deref(), Some(outer.id.as_str()), "children move up");
+    assert_eq!(db.get_note(&n.meta.id).unwrap().meta.folder_id.as_deref(), Some(outer.id.as_str()));
+    db.move_folder(&inner.id, None).unwrap();
+    assert_eq!(parent_of(&inner.id), None);
+
     assert!(db.get_note("nope").is_err());
 }
 
@@ -246,7 +263,10 @@ fn a_stored_sonnet_drawing_model_moves_to_opus_once() {
     db.save_settings(&s).unwrap();
     drop(db);
     // As if the database predates the move to Opus.
-    rusqlite::Connection::open(&path).unwrap().pragma_update(None, "user_version", 2).unwrap();
+    let old = rusqlite::Connection::open(&path).unwrap();
+    old.execute_batch("ALTER TABLE folders DROP COLUMN parent_id").unwrap();
+    old.pragma_update(None, "user_version", 2).unwrap();
+    drop(old);
 
     let db = Db::open(&path).unwrap();
     let s = db.get_settings().unwrap();

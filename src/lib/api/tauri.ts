@@ -20,6 +20,7 @@ export class TauriBackend implements Backend {
   listFolders = () => invoke<Folder[]>('list_folders');
   createFolder = (name: string) => invoke<Folder>('create_folder', { name });
   renameFolder = (id: string, name: string) => invoke<void>('rename_folder', { id, name });
+  moveFolder = (id: string, parentId: string | null) => invoke<void>('move_folder', { id, parentId });
   deleteFolder = (id: string) => invoke<void>('delete_folder', { id });
 
   listThreads = (noteId: string) => invoke<Thread[]>('list_threads', { noteId });

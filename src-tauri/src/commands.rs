@@ -68,6 +68,11 @@ pub async fn rename_folder(state: State<'_, AppState>, id: String, name: String)
 }
 
 #[tauri::command]
+pub async fn move_folder(state: State<'_, AppState>, id: String, parent_id: Option<String>) -> Res<()> {
+    s(state.db.move_folder(&id, parent_id.as_deref()))
+}
+
+#[tauri::command]
 pub async fn delete_folder(state: State<'_, AppState>, id: String) -> Res<()> {
     s(state.db.delete_folder(&id))
 }
@@ -255,7 +260,7 @@ pub fn wheel_scale() -> f64 {
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         list_notes, search_notes, get_note, create_note, save_note, update_note_meta, delete_note,
-        list_folders, create_folder, rename_folder, delete_folder,
+        list_folders, create_folder, rename_folder, move_folder, delete_folder,
         list_threads, set_thread_status, set_thread_pinned, set_thread_kind, thread_to_note, list_chat,
         get_settings, save_settings, list_riddlers, save_riddler, delete_riddler,
         ai_read, ai_answer, ai_reply, ai_chat, ai_ask, ai_visualize, ai_cancel_read, export_note,
