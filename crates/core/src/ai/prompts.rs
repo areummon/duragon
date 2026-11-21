@@ -446,7 +446,6 @@ pub fn chat_payload(
     if threads.is_empty() {
         s.push(Section::keep("none\n"));
     }
-    let n = threads.len();
     for (i, t) in threads.iter().enumerate() {
         let prefix = format!("[{}] ", t.status.as_str());
         let short = thread_short(t, riddler, &prefix);
@@ -454,8 +453,8 @@ pub fn chat_payload(
         s.push(if t.status == ThreadStatus::Open {
             Section::keep(text).shortened(Step(Stage::OpenThreads, i), short)
         } else {
-            Section::droppable(text, Step(Stage::ClosedThreads, n + i), Unit::Threads)
-                .shortened(Step(Stage::ClosedThreads, i), short)
+            Section::droppable(text, Step(Stage::DropClosedThreads, i), Unit::Threads)
+                .shortened(Step(Stage::ShrinkClosedThreads, i), short)
         });
     }
     if !summary.trim().is_empty() {
