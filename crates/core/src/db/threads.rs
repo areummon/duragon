@@ -5,6 +5,19 @@ use super::{new_id, now_ms, Db};
 use crate::doc;
 use crate::model::*;
 
+/// A message to store. `thread_id = None` stores a chat-panel message.
+pub struct NewMessage<'a> {
+    pub note_id: &'a str,
+    pub thread_id: Option<&'a str>,
+    pub author: Author,
+    pub text: &'a str,
+    pub drawing: DrawingState,
+    pub sources: &'a [Source],
+    pub symbols: &'a [Symbol],
+    /// The note was cut to fit the call that wrote the message.
+    pub trimmed: bool,
+}
+
 const MSG_COLS: &str = "id, note_id, thread_id, author, text, drawing, svg, sources, symbols, trimmed, created_at";
 
 fn msg_row(r: &Row) -> rusqlite::Result<Message> {
@@ -122,27 +135,16 @@ impl Db {
         text: &str,
         drawing: DrawingState,
     ) -> Result<Message> {
-        self.add_message_with(note_id, thread_id, author, text, drawing, &[], &[], false)
+        self.add_message_with(&NewMessage { note_id, thread_id, author, text, drawing, sources: &[], symbols: &[], trimmed: false })
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn add_message_with(
-        &self,
-        note_id: &str,
-        thread_id: Option<&str>,
-        author: Author,
-        text: &str,
-        drawing: DrawingState,
-        sources: &[Source],
-        symbols: &[Symbol],
-        trimmed: bool,
-    ) -> Result<Message> {
+    pub fn add_message_with(&self, m: &NewMessage) -> Result<Message> {
         let id = new_id();
         self.conn().execute(
             "INSERT INTO messages(id,note_id,thread_id,author,text,drawing,svg,sources,symbols,trimmed,created_at) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,?9,?10)",
             params![
-                id, note_id, thread_id, author.as_str(), text, drawing.as_str(),
-                serde_json::to_string(sources)?, serde_json::to_string(symbols)?, trimmed, now_ms()
+                id, m.note_id, m.thread_id, m.author.as_str(), m.text, m.drawing.as_str(),
+                serde_json::to_string(m.sources)?, serde_json::to_string(m.symbols)?, m.trimmed, now_ms()
             ],
         )?;
         self.get_message(&id)

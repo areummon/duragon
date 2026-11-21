@@ -1,4 +1,4 @@
-use duragon_core::db::Db;
+use duragon_core::db::{Db, NewMessage};
 use duragon_core::model::*;
 use serde_json::json;
 
@@ -305,7 +305,10 @@ fn an_older_database_gains_message_symbols() {
     let db = Db::open(&path).unwrap();
     assert!(db.get_message(&before.id).unwrap().symbols.is_empty());
     let sym = Symbol { tex: "v_0".into(), meaning: "starting speed".into() };
-    let m = db.add_message_with(&note, None, Author::Riddled, "$v_0$", DrawingState::None, &[], &[sym.clone()], false).unwrap();
+    let m = db.add_message_with(&NewMessage {
+        note_id: &note, thread_id: None, author: Author::Riddled, text: "$v_0$", drawing: DrawingState::None,
+        sources: &[], symbols: std::slice::from_ref(&sym), trimmed: false,
+    }).unwrap();
     assert_eq!(db.list_chat(&note).unwrap()[1].symbols, vec![sym]);
     assert_eq!(serde_json::to_value(&m).unwrap()["symbols"][0]["tex"], "v_0");
 }
@@ -325,7 +328,10 @@ fn an_older_database_gains_message_trimmed_off() {
 
     let db = Db::open(&path).unwrap();
     assert!(!db.get_message(&before.id).unwrap().trimmed);
-    let m = db.add_message_with(&note, None, Author::Riddled, "new", DrawingState::None, &[], &[], true).unwrap();
+    let m = db.add_message_with(&NewMessage {
+        note_id: &note, thread_id: None, author: Author::Riddled, text: "new", drawing: DrawingState::None,
+        sources: &[], symbols: &[], trimmed: true,
+    }).unwrap();
     assert!(db.get_message(&m.id).unwrap().trimmed);
     assert_eq!(serde_json::to_value(&m).unwrap()["trimmed"], true);
 }

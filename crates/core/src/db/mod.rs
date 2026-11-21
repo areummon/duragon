@@ -3,6 +3,8 @@ mod misc;
 mod notes;
 mod threads;
 
+pub use threads::NewMessage;
+
 use anyhow::Result;
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;

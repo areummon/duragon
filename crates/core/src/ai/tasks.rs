@@ -12,7 +12,7 @@ use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
 use super::runner::{cancel, run_claude, AiError, CancelKey, ClaudeRequest};
 use super::svg;
-use crate::db::Db;
+use crate::db::{Db, NewMessage};
 use crate::doc;
 use crate::model::*;
 
@@ -67,6 +67,44 @@ struct SayOut {
     sources: Vec<Source>,
     #[serde(default)]
     symbols: Vec<Symbol>,
+}
+
+impl SayOut {
+    fn reply(&self, trimmed: bool) -> Reply<'_> {
+        Reply { text: &self.message, drawing: self.drawing, sources: &self.sources, symbols: &self.symbols, trimmed }
+    }
+}
+
+/// A task's parsed output, and whether the note was cut to fit the task's budget.
+struct Called<T> {
+    out: T,
+    trimmed: bool,
+}
+
+/// What Riddled says, as `deliver` stores it.
+struct Reply<'a> {
+    text: &'a str,
+    drawing: bool,
+    sources: &'a [Source],
+    symbols: &'a [Symbol],
+    trimmed: bool,
+}
+
+/// Where a reply goes, which decides how it is announced: a new thread arrives whole as `ai:thread`,
+/// anything else as `ai:message`.
+enum Lands<'a> {
+    NewThread(&'a Thread),
+    InThread(&'a Thread),
+    InChat,
+}
+
+impl Lands<'_> {
+    fn thread(&self) -> Option<&Thread> {
+        match self {
+            Lands::NewThread(t) | Lands::InThread(t) => Some(t),
+            Lands::InChat => None,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -230,7 +268,7 @@ impl Ai {
 
     /// Runs one task on its payload cut to the task's budget, and says whether the note itself was cut.
     /// Emits `ai:error` and returns `None` on failure; cancellation is silent.
-    async fn call<T: DeserializeOwned>(&self, ctx: &Ctx, task: AiTask, payload: Vec<Section>) -> Option<(T, bool)> {
+    async fn call<T: DeserializeOwned>(&self, ctx: &Ctx, task: AiTask, payload: Vec<Section>) -> Option<Called<T>> {
         let note_id = &ctx.note.meta.id;
         let (payload, cut) = fit(&payload, task.spec().budget);
         let trimmed = cut.contains(&Stage::DistantNote);
@@ -243,7 +281,7 @@ impl Ai {
             }
         };
         match serde_json::from_value(out) {
-            Ok(v) => Some((v, trimmed)),
+            Ok(out) => Some(Called { out, trimmed }),
             Err(e) => {
                 self.error(note_id, task, &format!("unexpected {} output: {e}", task.as_str()));
                 None
@@ -270,35 +308,23 @@ impl Ai {
 
     /// Persists Riddled's message, announces it, and chains a drawing of it when asked: as in Riddled,
     /// the message shown beside a sketch is the brief it was drawn from.
-    /// `announce_thread` emits `ai:thread` (new thread) instead of `ai:message`.
-    async fn deliver(
-        &self,
-        ctx: &Ctx,
-        thread: Option<&Thread>,
-        announce_thread: bool,
-        text: &str,
-        drawing: bool,
-        sources: &[Source],
-        symbols: &[Symbol],
-        trimmed: bool,
-    ) -> Result<()> {
-        let state = if drawing { DrawingState::Pending } else { DrawingState::None };
-        let text = text.trim();
-        let msg = self.db.add_message_with(
-            &ctx.note.meta.id,
-            thread.map(|t| t.id.as_str()),
-            Author::Riddled,
+    async fn deliver(&self, ctx: &Ctx, to: Lands<'_>, reply: Reply<'_>) -> Result<()> {
+        let text = reply.text.trim();
+        let msg = self.db.add_message_with(&NewMessage {
+            note_id: &ctx.note.meta.id,
+            thread_id: to.thread().map(|t| t.id.as_str()),
+            author: Author::Riddled,
             text,
-            state,
-            &clean_sources(sources),
-            &clean_symbols(text, symbols),
-            trimmed,
-        )?;
-        match thread {
-            Some(t) if announce_thread => self.emit("ai:thread", &self.db.get_thread(&t.id)?),
-            _ => self.emit("ai:message", &msg),
+            drawing: if reply.drawing { DrawingState::Pending } else { DrawingState::None },
+            sources: &clean_sources(reply.sources),
+            symbols: &clean_symbols(text, reply.symbols),
+            trimmed: reply.trimmed,
+        })?;
+        match to {
+            Lands::NewThread(t) => self.emit("ai:thread", &self.db.get_thread(&t.id)?),
+            Lands::InThread(_) | Lands::InChat => self.emit("ai:message", &msg),
         }
-        if drawing {
+        if reply.drawing {
             self.draw(ctx, &msg).await?;
         }
         Ok(())
@@ -308,7 +334,7 @@ impl Ai {
         let note_id = &ctx.note.meta.id;
         self.thinking(note_id, &msg.text, AiTask::Draw);
         let payload = prompts::draw_payload(&ctx.note.meta.title, &doc::blocks(&ctx.note.doc), &msg.text);
-        let clean = self.call::<DrawOut>(ctx, AiTask::Draw, payload).await.and_then(|(out, _)| {
+        let clean = self.call::<DrawOut>(ctx, AiTask::Draw, payload).await.and_then(|Called { out, .. }| {
             svg::sanitize(&out.svg).map_err(|m| self.error(note_id, AiTask::Draw, &m)).ok()
         });
         let updated = match clean {
@@ -342,7 +368,7 @@ impl Ai {
             &threads,
             &ctx.riddler.name,
         );
-        let Some((out, trimmed)) = self.call::<ReadOut>(&ctx, AiTask::Read, payload).await else {
+        let Some(Called { out, trimmed }) = self.call::<ReadOut>(&ctx, AiTask::Read, payload).await else {
             return Ok(());
         };
         let quote = match out.kind {
@@ -355,7 +381,8 @@ impl Ai {
             return Ok(());
         };
         let thread = self.db.create_thread(note_id, out.kind, &quote)?;
-        self.deliver(&ctx, Some(&thread), true, message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
+        let reply = Reply { text: message, drawing: out.drawing, sources: &out.sources, symbols: &out.symbols, trimmed };
+        self.deliver(&ctx, Lands::NewThread(&thread), reply).await?;
         if out.kind == ThreadKind::Reply {
             self.spawn_learn(&ctx, target);
         }
@@ -374,7 +401,7 @@ impl Ai {
             &threads,
             &ctx.riddler.name,
         );
-        let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Answer, payload).await else {
+        let Some(Called { out, trimmed }) = self.call::<SayOut>(&ctx, AiTask::Answer, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
@@ -382,7 +409,7 @@ impl Ai {
             return Ok(());
         }
         let thread = self.db.create_thread(note_id, ThreadKind::Reply, target.trim_end())?;
-        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
+        self.deliver(&ctx, Lands::NewThread(&thread), out.reply(trimmed)).await?;
         self.spawn_learn(&ctx, target);
         Ok(())
     }
@@ -400,14 +427,14 @@ impl Ai {
             &thread,
             &ctx.riddler.name,
         );
-        let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Reply, payload).await else {
+        let Some(Called { out, trimmed }) = self.call::<SayOut>(&ctx, AiTask::Reply, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
             self.error(&note_id, AiTask::Reply, "empty reply");
             return Ok(());
         }
-        self.deliver(&ctx, Some(&thread), false, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
+        self.deliver(&ctx, Lands::InThread(&thread), out.reply(trimmed)).await?;
         self.spawn_learn(&ctx, text);
         Ok(())
     }
@@ -427,14 +454,14 @@ impl Ai {
             &ctx.riddler.name,
             near,
         );
-        let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Chat, payload).await else {
+        let Some(Called { out, trimmed }) = self.call::<SayOut>(&ctx, AiTask::Chat, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
             self.error(note_id, AiTask::Chat, "empty reply");
             return Ok(());
         }
-        self.deliver(&ctx, None, false, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
+        self.deliver(&ctx, Lands::InChat, out.reply(trimmed)).await?;
         self.spawn_learn(&ctx, text);
         self.spawn_summarize(note_id);
         Ok(())
@@ -587,7 +614,7 @@ impl Ai {
             &self.db.list_threads(note_id)?,
             &ctx.riddler.name,
         );
-        let Some((out, trimmed)) = self.call::<AskOut>(&ctx, AiTask::Ask, payload).await else {
+        let Some(Called { out, trimmed }) = self.call::<AskOut>(&ctx, AiTask::Ask, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
@@ -599,7 +626,8 @@ impl Ai {
         if let Some(q) = question {
             self.db.add_message(note_id, Some(&thread.id), Author::You, q, DrawingState::None)?;
         }
-        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources, &out.symbols, trimmed).await?;
+        let reply = Reply { text: &out.message, drawing: out.drawing, sources: &out.sources, symbols: &out.symbols, trimmed };
+        self.deliver(&ctx, Lands::NewThread(&thread), reply).await?;
         if let Some(q) = question {
             self.spawn_learn(&ctx, q);
         }
@@ -610,7 +638,7 @@ impl Ai {
         let ctx = self.ctx(note_id)?;
         self.thinking(note_id, target, AiTask::Visualize);
         let payload = prompts::visualize_payload(&ctx.note.meta.title, &doc::blocks(&ctx.note.doc), target);
-        let Some((out, trimmed)) = self.call::<SayOut>(&ctx, AiTask::Visualize, payload).await else {
+        let Some(Called { out, trimmed }) = self.call::<SayOut>(&ctx, AiTask::Visualize, payload).await else {
             return Ok(());
         };
         if out.message.trim().is_empty() {
@@ -618,6 +646,7 @@ impl Ai {
             return Ok(());
         }
         let thread = self.db.create_thread(note_id, ThreadKind::Question, target.trim())?;
-        self.deliver(&ctx, Some(&thread), true, &out.message, true, &[], &[], trimmed).await
+        let reply = Reply { text: &out.message, drawing: true, sources: &[], symbols: &[], trimmed };
+        self.deliver(&ctx, Lands::NewThread(&thread), reply).await
     }
 }
