@@ -164,3 +164,24 @@ async fn real_chat_recalls_another_note() {
     assert_eq!(reply.author, Author::Riddled);
     assert!(reply.text.to_lowercase().contains("marmalade"), "{}", reply.text);
 }
+
+#[tokio::test]
+#[ignore]
+async fn real_chat_explains_formula_symbols() {
+    let db = Db::open_in_memory().unwrap();
+    let mut s = db.get_settings().unwrap();
+    s.chat_model = "haiku".into();
+    s.learn_about_you = false;
+    s.explain_symbols = true;
+    db.save_settings(&s).unwrap();
+    let note = db.create_note(Some("Mechanics")).unwrap();
+    let ai = Ai::new(db.clone(), Arc::new(Capture::default()));
+    ai.chat(&note.meta.id, "My textbook says kinetic energy is $E_k = m v^2$. That looks wrong to me, what is the correct formula?", "").await.unwrap();
+    let reply = db.list_chat(&note.meta.id).unwrap().pop().unwrap();
+    println!("MESSAGE: {}\nSYMBOLS: {}", reply.text, serde_json::to_string(&reply.symbols).unwrap());
+    assert_eq!(reply.author, Author::Riddled);
+    assert!(!reply.symbols.is_empty());
+    for sym in &reply.symbols {
+        assert!(reply.text.contains(&sym.tex), "{sym:?}");
+    }
+}

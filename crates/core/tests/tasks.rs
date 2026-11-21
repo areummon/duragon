@@ -363,3 +363,84 @@ async fn only_the_side_chat_searches_other_notes_and_only_when_turned_on() {
     fx.ai.chat(&fx.note, "hi", "").await.unwrap();
     assert!(!has_server(&last_args(&args_file)), "nothing to serve it");
 }
+
+fn explain_symbols(fx: &Fx, on: bool) {
+    let mut s = fx.ai.db.get_settings().unwrap();
+    s.explain_symbols = on;
+    fx.ai.db.save_settings(&s).unwrap();
+}
+
+fn arg(a: &[String], flag: &str) -> String {
+    a[a.iter().position(|x| x == flag).unwrap() + 1].clone()
+}
+
+#[tokio::test]
+async fn symbols_are_asked_for_only_when_turned_on_and_only_for_prose() {
+    use duragon_core::ai::prompts::{schema, system_prompt};
+    let mut fx = setup(json!({}), json!({}));
+    disable_learn(&fx);
+    let args_file = record_args(&mut fx);
+    let asks = |a: &[String]| arg(a, "--json-schema").contains("\"symbols\"") || arg(a, "--system-prompt").contains("\"symbols\"");
+
+    assert!(!fx.ai.db.get_settings().unwrap().explain_symbols, "off by default");
+    fx.ai.chat(&fx.note, "kinetic energy?", "").await.unwrap();
+    let off = last_args(&args_file);
+    let riddler = fx.ai.db.get_riddler(BUILTIN_RIDDLER_ID).unwrap();
+    assert_eq!(arg(&off, "--system-prompt"), system_prompt(AiTask::Chat, &riddler, "", "", false), "prompt unchanged when off");
+    assert_eq!(arg(&off, "--json-schema"), schema(AiTask::Chat, false).to_string(), "schema unchanged when off");
+
+    explain_symbols(&fx, true);
+    let thread = fx.ai.db.create_thread(&fx.note, ThreadKind::Question, "mitochondria").unwrap();
+    fx.ai.chat(&fx.note, "kinetic energy?", "").await.unwrap();
+    assert!(asks(&last_args(&args_file)), "chat");
+    fx.ai.answer(&fx.note, TARGET).await.unwrap();
+    assert!(asks(&last_args(&args_file)), "answer");
+    fx.ai.reply(&thread.id, "why?").await.unwrap();
+    assert!(asks(&last_args(&args_file)), "reply");
+    fx.ai.read(&fx.note, TARGET).await.unwrap();
+    assert!(asks(&last_args(&args_file)), "read");
+    fx.ai.ask_selection(&fx.note, TARGET, None).await.unwrap();
+    assert!(asks(&last_args(&args_file)), "ask");
+    let a = last_args(&args_file);
+    assert!(arg(&a, "--system-prompt").contains("mass of the falling object"));
+    assert_eq!(schema(AiTask::Chat, false)["properties"].get("symbols"), None);
+
+    fx.ai.visualize(&fx.note, TARGET).await.unwrap();
+    assert!(!asks(&last_args(&args_file)), "the sketch call after a brief never asks");
+}
+
+#[tokio::test]
+async fn returned_symbols_are_cleaned_persisted_emitted_and_listed_back() {
+    let fx = setup(
+        json!({"message":"It falls $h = \\frac{1}{2} g t^2$ after $t$ seconds.","symbols":[
+            {"tex":"h","meaning":"height fallen"},
+            {"tex":" g ","meaning":" gravitational acceleration "},
+            {"tex":"g","meaning":"duplicate"},
+            {"tex":"t","meaning":"  "},
+            {"tex":"","meaning":"blank"},
+            {"tex":"\\omega","meaning":"not in the message"}]}),
+        json!({}),
+    );
+    disable_learn(&fx);
+    explain_symbols(&fx, true);
+    fx.ai.chat(&fx.note, "how far does it fall?", "").await.unwrap();
+    let want = json!([{"tex":"h","meaning":"height fallen"},{"tex":"g","meaning":"gravitational acceleration"}]);
+    let emitted = fx.cap.all().into_iter().rfind(|(n, _)| n == "ai:message").unwrap().1;
+    assert_eq!(emitted["symbols"], want);
+    let chat = fx.ai.db.list_chat(&fx.note).unwrap();
+    assert_eq!(serde_json::to_value(&chat[1].symbols).unwrap(), want);
+    assert!(chat[0].symbols.is_empty(), "the writer's message has none");
+}
+
+#[tokio::test]
+async fn at_most_sixteen_symbols_are_kept() {
+    let letters: Vec<String> = ('a'..='z').map(String::from).collect();
+    let symbols: Vec<Value> = letters.iter().map(|l| json!({"tex": l, "meaning": "a letter"})).collect();
+    let fx = setup(json!({"message": format!("${}$", letters.join("+")), "symbols": symbols}), json!({}));
+    disable_learn(&fx);
+    explain_symbols(&fx, true);
+    fx.ai.answer(&fx.note, "Duragon, the alphabet?").await.unwrap();
+    let t = &fx.ai.db.list_threads(&fx.note).unwrap()[0];
+    assert_eq!(t.messages[0].symbols.len(), 16);
+    assert_eq!(t.messages[0].symbols[15].tex, "p");
+}

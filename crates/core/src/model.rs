@@ -97,6 +97,9 @@ pub struct Message {
     /// Pages the model used when web was on; empty otherwise.
     #[serde(default)]
     pub sources: Vec<Source>,
+    /// What the symbols in the message's formulas stand for, when the writer turned that on; empty otherwise.
+    #[serde(default)]
+    pub symbols: Vec<Symbol>,
     pub created_at: i64,
 }
 
@@ -104,6 +107,13 @@ pub struct Message {
 pub struct Source {
     pub url: String,
     pub title: String,
+}
+
+/// `tex` is the symbol's source exactly as written in a formula of the message.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Symbol {
+    pub tex: String,
+    pub meaning: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -151,6 +161,7 @@ pub struct Settings {
     pub about_you: String,
     pub learn_about_you: bool,
     pub search_my_notes: bool,
+    pub explain_symbols: bool,
     pub read_model: String,
     pub chat_model: String,
     pub draw_model: String,
@@ -177,6 +188,7 @@ impl Default for Settings {
             about_you: String::new(),
             learn_about_you: true,
             search_my_notes: false,
+            explain_symbols: false,
             read_model: "sonnet".into(),
             chat_model: "sonnet".into(),
             draw_model: "opus".into(),

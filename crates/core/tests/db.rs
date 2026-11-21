@@ -264,7 +264,7 @@ fn a_stored_sonnet_drawing_model_moves_to_opus_once() {
     drop(db);
     // As if the database predates the move to Opus.
     let old = rusqlite::Connection::open(&path).unwrap();
-    old.execute_batch("ALTER TABLE folders DROP COLUMN parent_id").unwrap();
+    old.execute_batch("ALTER TABLE folders DROP COLUMN parent_id; ALTER TABLE messages DROP COLUMN symbols").unwrap();
     old.pragma_update(None, "user_version", 2).unwrap();
     drop(old);
 
@@ -287,4 +287,25 @@ fn an_older_database_gets_the_builtin_minds_way_of_thinking() {
     rusqlite::Connection::open(&path).unwrap().execute("UPDATE riddlers SET how_it_thinks='' WHERE builtin=1", []).unwrap();
     let b = Db::open(&path).unwrap().get_riddler(BUILTIN_RIDDLER_ID).unwrap();
     assert!(b.how_it_thinks.contains("curious, careful friend"));
+}
+
+#[test]
+fn an_older_database_gains_message_symbols() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("d.db");
+    let db = Db::open(&path).unwrap();
+    let note = db.list_notes().unwrap()[0].id.clone();
+    let before = db.add_message(&note, None, Author::Riddled, "old", DrawingState::None).unwrap();
+    drop(db);
+    let old = rusqlite::Connection::open(&path).unwrap();
+    old.execute_batch("ALTER TABLE messages DROP COLUMN symbols").unwrap();
+    old.pragma_update(None, "user_version", 4).unwrap();
+    drop(old);
+
+    let db = Db::open(&path).unwrap();
+    assert!(db.get_message(&before.id).unwrap().symbols.is_empty());
+    let sym = Symbol { tex: "v_0".into(), meaning: "starting speed".into() };
+    let m = db.add_message_with(&note, None, Author::Riddled, "$v_0$", DrawingState::None, &[], &[sym.clone()]).unwrap();
+    assert_eq!(db.list_chat(&note).unwrap()[1].symbols, vec![sym]);
+    assert_eq!(serde_json::to_value(&m).unwrap()["symbols"][0]["tex"], "v_0");
 }

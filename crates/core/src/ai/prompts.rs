@@ -119,6 +119,33 @@ const WEB_SOURCES: &str = r#"
 
 Web access is on. When you used WebSearch or WebFetch for your answer, also return "sources": the pages you actually used, each as {"url", "title"}, copied from your WebSearch or WebFetch results. Never invent or guess a source. If you used no page, leave "sources" out or empty."#;
 
+/// Appended to the prompt of a task that writes to the writer when they turned on symbol explanations.
+pub const EXPLAIN_SYMBOLS: &str = r#"
+
+When your message contains a formula, also return "symbols": each distinct symbol and constant in its formulas, meaning variables, Greek letters, named constants such as $g$ or $c$, and subscripted quantities such as $v_0$, but not operators, digits or function names such as \sin. Copy "tex" exactly as it is written in the formula, and make "meaning" a plain phrase of at most 8 words saying what it stands for here (for example {"tex": "m", "meaning": "mass of the falling object"}). With no formula, leave "symbols" out or empty."#;
+
+/// The tasks whose message the writer reads as prose, so its formulas can carry symbol explanations.
+pub fn explains_symbols(task: AiTask) -> bool {
+    matches!(task, AiTask::Read | AiTask::Answer | AiTask::Reply | AiTask::Chat | AiTask::Ask)
+}
+
+pub fn add_symbols(schema: &mut Value) {
+    let s = |d: &str| json!({ "type": "string", "description": d });
+    schema["properties"]["symbols"] = json!({
+        "type": "array",
+        "description": "Each distinct symbol and constant in the message's formulas, with what it stands for here",
+        "items": {
+            "type": "object",
+            "properties": {
+                "tex": s("The symbol's LaTeX, exactly as written in the formula"),
+                "meaning": s("What it stands for here, at most 8 words"),
+            },
+            "required": ["tex", "meaning"],
+            "additionalProperties": false
+        }
+    });
+}
+
 /// Appended to the chat prompt when the writer lets the mind search their other notes.
 pub const NOTES_SEARCH: &str = r#"
 

@@ -46,6 +46,8 @@ struct ReadOut {
     drawing: bool,
     #[serde(default)]
     sources: Vec<Source>,
+    #[serde(default)]
+    symbols: Vec<Symbol>,
 }
 
 fn question_kind() -> ThreadKind {
@@ -59,6 +61,8 @@ struct SayOut {
     drawing: bool,
     #[serde(default)]
     sources: Vec<Source>,
+    #[serde(default)]
+    symbols: Vec<Symbol>,
 }
 
 #[derive(Deserialize)]
@@ -178,10 +182,15 @@ impl Ai {
         if notes.is_some() {
             system_prompt.push_str(prompts::NOTES_SEARCH);
         }
+        let mut schema = prompts::schema(task, web);
+        if ctx.settings.explain_symbols && prompts::explains_symbols(task) {
+            system_prompt.push_str(prompts::EXPLAIN_SYMBOLS);
+            prompts::add_symbols(&mut schema);
+        }
         ClaudeRequest {
             model: model.clone(),
             system_prompt,
-            schema: prompts::schema(task, web),
+            schema,
             payload,
             web,
             timeout: Duration::from_secs(if task == AiTask::Draw { 180 } else { 120 }),
@@ -222,16 +231,18 @@ impl Ai {
         text: &str,
         drawing: bool,
         sources: &[Source],
+        symbols: &[Symbol],
     ) -> Result<()> {
         let state = if drawing { DrawingState::Pending } else { DrawingState::None };
-        let sources = clean_sources(sources);
-        let msg = self.db.add_message_with_sources(
+        let text = text.trim();
+        let msg = self.db.add_message_with(
             &ctx.note.meta.id,
             thread.map(|t| t.id.as_str()),
             Author::Riddled,
-            text.trim(),
+            text,
             state,
-            &sources,
+            &clean_sources(sources),
+            &clean_symbols(text, symbols),
         )?;
         match thread {
             Some(t) if announce_thread => self.emit("ai:thread", &self.db.get_thread(&t.id)?),
@@ -295,7 +306,7 @@ impl Ai {
             return Ok(());
         };
         let thread = self.db.create_thread(note_id, out.kind, &quote)?;
-        self.deliver(&ctx, Some(&thread), true, message, out.drawing, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), true, message, out.drawing, &out.sources, &out.symbols).await?;
         if out.kind == ThreadKind::Reply {
             self.spawn_learn(&ctx, target);
         }
@@ -321,7 +332,7 @@ impl Ai {
             return Ok(());
         }
         let thread = self.db.create_thread(note_id, ThreadKind::Reply, target.trim_end())?;
-        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources, &out.symbols).await?;
         self.spawn_learn(&ctx, target);
         Ok(())
     }
@@ -346,7 +357,7 @@ impl Ai {
             self.error(&note_id, AiTask::Reply, "empty reply");
             return Ok(());
         }
-        self.deliver(&ctx, Some(&thread), false, &out.message, out.drawing, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), false, &out.message, out.drawing, &out.sources, &out.symbols).await?;
         self.spawn_learn(&ctx, text);
         Ok(())
     }
@@ -370,7 +381,7 @@ impl Ai {
             self.error(note_id, AiTask::Chat, "empty reply");
             return Ok(());
         }
-        self.deliver(&ctx, None, false, &out.message, out.drawing, &out.sources).await?;
+        self.deliver(&ctx, None, false, &out.message, out.drawing, &out.sources, &out.symbols).await?;
         self.spawn_learn(&ctx, text);
         Ok(())
     }
@@ -432,6 +443,24 @@ fn clean_sources(sources: &[Source]) -> Vec<Source> {
     out
 }
 
+const SYMBOLS_MAX: usize = 16;
+
+/// Keeps symbols that appear in the message, once each, with blanks trimmed.
+fn clean_symbols(text: &str, symbols: &[Symbol]) -> Vec<Symbol> {
+    let mut out: Vec<Symbol> = Vec::new();
+    for s in symbols {
+        let (tex, meaning) = (s.tex.trim(), s.meaning.trim());
+        if tex.is_empty() || meaning.is_empty() || !text.contains(tex) || out.iter().any(|o| o.tex == tex) {
+            continue;
+        }
+        out.push(Symbol { tex: tex.into(), meaning: meaning.into() });
+        if out.len() == SYMBOLS_MAX {
+            break;
+        }
+    }
+    out
+}
+
 fn fallback_riddler() -> Riddler {
     Riddler {
         id: BUILTIN_RIDDLER_ID.into(),
@@ -456,6 +485,8 @@ struct AskOut {
     drawing: bool,
     #[serde(default)]
     sources: Vec<Source>,
+    #[serde(default)]
+    symbols: Vec<Symbol>,
 }
 
 impl Ai {
@@ -484,7 +515,7 @@ impl Ai {
         if let Some(q) = question {
             self.db.add_message(note_id, Some(&thread.id), Author::You, q, DrawingState::None)?;
         }
-        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources).await?;
+        self.deliver(&ctx, Some(&thread), true, &out.message, out.drawing, &out.sources, &out.symbols).await?;
         if let Some(q) = question {
             self.spawn_learn(&ctx, q);
         }
@@ -503,6 +534,6 @@ impl Ai {
             return Ok(());
         }
         let thread = self.db.create_thread(note_id, ThreadKind::Question, target.trim())?;
-        self.deliver(&ctx, Some(&thread), true, &out.message, true, &[]).await
+        self.deliver(&ctx, Some(&thread), true, &out.message, true, &[], &[]).await
     }
 }

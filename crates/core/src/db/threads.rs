@@ -5,12 +5,13 @@ use super::{new_id, now_ms, Db};
 use crate::doc;
 use crate::model::*;
 
-const MSG_COLS: &str = "id, note_id, thread_id, author, text, drawing, svg, sources, created_at";
+const MSG_COLS: &str = "id, note_id, thread_id, author, text, drawing, svg, sources, symbols, created_at";
 
 fn msg_row(r: &Row) -> rusqlite::Result<Message> {
     let author: String = r.get(3)?;
     let drawing: String = r.get(5)?;
     let sources: String = r.get(7)?;
+    let symbols: String = r.get(8)?;
     Ok(Message {
         id: r.get(0)?,
         note_id: r.get(1)?,
@@ -20,7 +21,8 @@ fn msg_row(r: &Row) -> rusqlite::Result<Message> {
         drawing: DrawingState::parse(&drawing).unwrap_or(DrawingState::None),
         svg: r.get(6)?,
         sources: serde_json::from_str(&sources).unwrap_or_default(),
-        created_at: r.get(8)?,
+        symbols: serde_json::from_str(&symbols).unwrap_or_default(),
+        created_at: r.get(9)?,
     })
 }
 
@@ -99,10 +101,11 @@ impl Db {
         text: &str,
         drawing: DrawingState,
     ) -> Result<Message> {
-        self.add_message_with_sources(note_id, thread_id, author, text, drawing, &[])
+        self.add_message_with(note_id, thread_id, author, text, drawing, &[], &[])
     }
 
-    pub fn add_message_with_sources(
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_message_with(
         &self,
         note_id: &str,
         thread_id: Option<&str>,
@@ -110,11 +113,15 @@ impl Db {
         text: &str,
         drawing: DrawingState,
         sources: &[Source],
+        symbols: &[Symbol],
     ) -> Result<Message> {
         let id = new_id();
         self.conn().execute(
-            "INSERT INTO messages(id,note_id,thread_id,author,text,drawing,svg,sources,created_at) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8)",
-            params![id, note_id, thread_id, author.as_str(), text, drawing.as_str(), serde_json::to_string(sources)?, now_ms()],
+            "INSERT INTO messages(id,note_id,thread_id,author,text,drawing,svg,sources,symbols,created_at) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,?9)",
+            params![
+                id, note_id, thread_id, author.as_str(), text, drawing.as_str(),
+                serde_json::to_string(sources)?, serde_json::to_string(symbols)?, now_ms()
+            ],
         )?;
         self.get_message(&id)
     }
