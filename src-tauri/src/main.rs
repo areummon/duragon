@@ -51,7 +51,7 @@ pub struct AppState {
 
 /// `duragon --notes-mcp <db> <open note id>`: the side chat's notes search server, spawned by the `claude` CLI.
 fn serve_notes_mcp(db: &str, exclude: &str) -> anyhow::Result<()> {
-    let db = Db::open(std::path::Path::new(db))?;
+    let db = Db::open_read_only(std::path::Path::new(db))?;
     notes_mcp::serve(&db, exclude, std::io::stdin().lock(), std::io::stdout().lock())
 }
 

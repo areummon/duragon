@@ -4,7 +4,7 @@ mod notes;
 mod threads;
 
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -78,6 +78,12 @@ impl Db {
             std::fs::create_dir_all(dir)?;
         }
         Self::init(Connection::open(path)?)
+    }
+
+    /// For a second process that only reads, such as the notes search server: no migrations, no seeding, no writes.
+    pub fn open_read_only(path: &Path) -> Result<Self> {
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 
     pub fn open_in_memory() -> Result<Self> {
