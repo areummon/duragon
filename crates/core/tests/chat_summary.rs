@@ -1,12 +1,10 @@
 mod common;
-use common::{fake_claude, fixture, wrap, Capture};
+use common::{fake_claude, fixture, recording_claude, Capture};
 use duragon_core::ai::tasks::{SUMMARIZE_AFTER, SUMMARIZE_FOLD};
 use duragon_core::ai::Ai;
 use duragon_core::db::Db;
 use duragon_core::model::*;
-use serde_json::{json, Value};
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,18 +26,6 @@ fn setup() -> Fx {
     Fx { ai: Ai::new(db, cap.clone()), cap, note, dir }
 }
 
-/// A fake `claude` that records each stdin (appending) and answers `out` after `delay` seconds.
-fn claude(dir: &Path, out: &Value, delay: &str) -> PathBuf {
-    let path = dir.join("claude");
-    let script = format!(
-        "#!/bin/sh\ncat >> \"$0.stdin\"\necho call >> \"$0.calls\"\nsleep {delay}\ncat <<'DURAGON_EOF'\n{}\nDURAGON_EOF\n",
-        wrap(out.clone())
-    );
-    std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    path
-}
-
 fn seed_chat(fx: &Fx, n: usize) -> Vec<Message> {
     (0..n)
         .map(|i| {
@@ -55,7 +41,7 @@ async fn the_chat_sends_the_summary_instead_of_the_messages_it_covers() {
     let chat = seed_chat(&fx, 20);
     let summary = ChatSummary { text: "The writer decided on the chloroplast.".into(), through: Some(chat[11].id.clone()) };
     assert!(fx.ai.db.fold_chat_summary(&fx.note, &ChatSummary::default(), &summary).unwrap());
-    let bin = claude(fx.dir.path(), &json!({"message":"Yes."}), "0");
+    let bin = recording_claude(fx.dir.path(), &json!({"message":"Yes."}), "0");
     fx.ai.bin = Some(bin.clone());
 
     fx.ai.chat(&fx.note, "What did we decide?", "").await.unwrap();
@@ -70,7 +56,7 @@ async fn the_chat_sends_the_summary_instead_of_the_messages_it_covers() {
 async fn summarizing_folds_the_oldest_eight_and_advances_the_watermark() {
     let mut fx = setup();
     let chat = seed_chat(&fx, SUMMARIZE_AFTER);
-    let bin = claude(fx.dir.path(), &json!({"summary":"  They settled on light.  "}), "0");
+    let bin = recording_claude(fx.dir.path(), &json!({"summary":"  They settled on light.  "}), "0");
     fx.ai.bin = Some(bin.clone());
     assert!(!fx.ai.summarize(&fx.note).await.unwrap(), "16 unsummarized is not yet over the line");
     assert!(!bin.with_extension("calls").exists(), "no call made");
@@ -92,7 +78,7 @@ async fn summarizing_folds_the_oldest_eight_and_advances_the_watermark() {
 async fn only_one_summary_runs_per_note_at_a_time() {
     let mut fx = setup();
     seed_chat(&fx, 30);
-    let bin = claude(fx.dir.path(), &json!({"summary":"Once."}), "0.4");
+    let bin = recording_claude(fx.dir.path(), &json!({"summary":"Once."}), "0.4");
     fx.ai.bin = Some(bin.clone());
     let (a, b) = tokio::join!(fx.ai.summarize(&fx.note), fx.ai.summarize(&fx.note));
     assert_eq!([a.unwrap(), b.unwrap()].iter().filter(|x| **x).count(), 1);
@@ -109,7 +95,7 @@ async fn a_failed_summary_changes_nothing_and_the_next_run_retries() {
     assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap(), ChatSummary::default());
     assert!(!fx.cap.names().contains(&"ai:error".to_string()), "background failures are silent");
 
-    fx.ai.bin = Some(claude(fx.dir.path(), &json!({"summary":"Second try."}), "0"));
+    fx.ai.bin = Some(recording_claude(fx.dir.path(), &json!({"summary":"Second try."}), "0"));
     assert!(fx.ai.summarize(&fx.note).await.unwrap());
     assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap().through, Some(chat[7].id.clone()));
 }
@@ -118,7 +104,7 @@ async fn a_failed_summary_changes_nothing_and_the_next_run_retries() {
 async fn a_summary_never_overwrites_an_edit_made_while_it_ran() {
     let mut fx = setup();
     seed_chat(&fx, 20);
-    fx.ai.bin = Some(claude(fx.dir.path(), &json!({"summary":"Stale."}), "0.3"));
+    fx.ai.bin = Some(recording_claude(fx.dir.path(), &json!({"summary":"Stale."}), "0.3"));
     let ai = fx.ai.clone();
     let note = fx.note.clone();
     let run = tokio::spawn(async move { ai.summarize(&note).await.unwrap() });
@@ -161,7 +147,7 @@ async fn clearing_the_chat_forgets_it_for_good_and_keeps_margin_threads() {
     assert_eq!(fx.ai.db.get_chat_summary(&fx.note).unwrap(), ChatSummary::default());
     assert_eq!(fx.ai.db.list_threads(&fx.note).unwrap()[0].messages.len(), 1, "margin threads are not the chat");
 
-    let bin = claude(fx.dir.path(), &json!({"message":"Fresh start."}), "0");
+    let bin = recording_claude(fx.dir.path(), &json!({"message":"Fresh start."}), "0");
     fx.ai.bin = Some(bin.clone());
     fx.ai.chat(&fx.note, "Hello again", "").await.unwrap();
     let sent = std::fs::read_to_string(bin.with_extension("stdin")).unwrap();
@@ -172,7 +158,7 @@ async fn clearing_the_chat_forgets_it_for_good_and_keeps_margin_threads() {
 async fn a_summary_running_when_the_chat_is_cleared_saves_nothing() {
     let mut fx = setup();
     seed_chat(&fx, 20);
-    fx.ai.bin = Some(claude(fx.dir.path(), &json!({"summary":"About the cleared chat."}), "0.3"));
+    fx.ai.bin = Some(recording_claude(fx.dir.path(), &json!({"summary":"About the cleared chat."}), "0.3"));
     let ai = fx.ai.clone();
     let note = fx.note.clone();
     let run = tokio::spawn(async move { ai.summarize(&note).await.unwrap() });
@@ -212,7 +198,7 @@ async fn a_long_chat_on_a_short_note_is_not_marked_as_a_trimmed_note() {
         let author = if i % 2 == 0 { Author::You } else { Author::Riddled };
         fx.ai.db.add_message(&fx.note, None, author, &long, DrawingState::None).unwrap();
     }
-    fx.ai.bin = Some(claude(fx.dir.path(), &json!({"message":"Sure."}), "0"));
+    fx.ai.bin = Some(recording_claude(fx.dir.path(), &json!({"message":"Sure."}), "0"));
     fx.ai.chat(&fx.note, "And now?", "").await.unwrap();
     let (_, m) = fx.cap.all().into_iter().find(|(n, _)| n == "ai:message").expect("replied");
     assert_eq!(m["trimmed"], false, "only old messages were cut, not the note");
@@ -221,7 +207,7 @@ async fn a_long_chat_on_a_short_note_is_not_marked_as_a_trimmed_note() {
 #[tokio::test]
 async fn clearing_the_chat_cancels_the_reply_on_its_way() {
     let mut fx = setup();
-    fx.ai.bin = Some(claude(fx.dir.path(), &json!({"message":"An answer to a cleared question."}), "1"));
+    fx.ai.bin = Some(recording_claude(fx.dir.path(), &json!({"message":"An answer to a cleared question."}), "1"));
     let ai = fx.ai.clone();
     let note = fx.note.clone();
     let run = tokio::spawn(async move { ai.chat(&note, "A question I then clear", "").await });

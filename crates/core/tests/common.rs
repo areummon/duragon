@@ -43,3 +43,16 @@ pub fn fake_claude(dir: &Path, other: &Value, draw: &Value) -> PathBuf {
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     path
 }
+
+/// A fake `claude` that appends each call's stdin to `<bin>.stdin` and a line to `<bin>.calls`,
+/// then answers `out` after `delay` seconds.
+pub fn recording_claude(dir: &Path, out: &Value, delay: &str) -> PathBuf {
+    let path = dir.join("claude-rec");
+    let script = format!(
+        "#!/bin/sh\ncat >> \"$0.stdin\"\necho call >> \"$0.calls\"\nsleep {delay}\ncat <<'DURAGON_EOF'\n{}\nDURAGON_EOF\n",
+        wrap(out.clone())
+    );
+    std::fs::write(&path, script).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}

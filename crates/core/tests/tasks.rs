@@ -1,5 +1,5 @@
 mod common;
-use common::{fake_claude, fixture, Capture};
+use common::{fake_claude, fixture, recording_claude, Capture};
 use duragon_core::ai::tasks::resolve_quote;
 use duragon_core::ai::Ai;
 use duragon_core::db::Db;
@@ -462,22 +462,12 @@ async fn at_most_sixteen_symbols_are_kept() {
     assert_eq!(t.messages[0].symbols[15].tex, "p");
 }
 
-/// A fake `claude` that records its stdin next to itself and answers `out`.
-fn recording_claude(dir: &std::path::Path, out: &Value) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let path = dir.join("claude-rec");
-    let script = format!("#!/bin/sh\ncat > \"$0.stdin\"\ncat <<'DURAGON_EOF'\n{}\nDURAGON_EOF\n", common::wrap(out.clone()));
-    std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    path
-}
-
 #[tokio::test]
 async fn a_huge_note_is_cut_to_budget_around_the_target_and_the_message_says_so() {
     use duragon_core::ai::budget::tokens;
     let mut fx = setup(json!({}), json!({}));
     disable_learn(&fx);
-    let bin = recording_claude(fx._dir.path(), &json!({"message":"Look near here."}));
+    let bin = recording_claude(fx._dir.path(), &json!({"message":"Look near here."}), "0");
     fx.ai.bin = Some(bin.clone());
     let paras: Vec<String> = (0..3000).map(|i| format!("Paragraph {i} says something about cells at some length, padded out to be long.")).collect();
     let target = paras[1500].clone();
