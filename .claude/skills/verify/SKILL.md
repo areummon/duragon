@@ -53,7 +53,7 @@ Use `agent-browser` with `AGENT_BROWSER_SESSION=duragon-verify`, so this run's b
 - **Note header row.** It holds the mind picker (button named after the mind, e.g. `Duragon`), `Tell Duragon`, the mode picker (`Thinks with you`), the switches `Voice` and `Web`, and `Export`.
 - **Editor.** The textbox is `Note`, and the title is the level-1 heading.
 - **Side chat.** The input is `Ask about this note`, plus the buttons `Send`, `Copy`, `Clear`, `Pin open while you write` and `Close`.
-- **Sidebar.** The navigation is `Notes`, with `Find or start a note`, `New note`, `New folder`, `Settings`, one button per note title and `Note options` per row.
+- **Sidebar.** The navigation is `Notes`, with `Find or start a note Ctrl K`, `New note`, `New folder`, `Settings`, one button per note title and `Note options` per row. Entries in popover menus are `menuitem`, not `button`.
 - **Customize.** Press `Control+,`. You get the navigation `Settings sections` (`Customize Duragon`, `Minds`, `About you`, `Voice models`, `Help`), the searchbox `Search settings` and `Close`.
 
 Useful patterns:

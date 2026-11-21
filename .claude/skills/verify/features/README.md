@@ -26,7 +26,7 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 
 | File | Feature | Last proven |
 | --- | --- | --- |
-| [side-chat.md](side-chat.md) | Side chat: ask, reply, copy, clear | 2026-11-21, cb7458c, `chat-ask` and `chat-clear` |
-| [margin-threads.md](margin-threads.md) | Margin questions and thread replies | not yet run |
-| [customize.md](customize.md) | Customize dialog and its switches | not yet run |
-| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, create, rename, delete | not yet run |
+| [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear | 2026-11-21, 70ed6ac, all but `chat-copy` |
+| [margin-threads.md](margin-threads.md) | Margin questions and thread replies | 2026-11-21, 70ed6ac, open, reply, resolve, read |
+| [customize.md](customize.md) | Customize dialog and its switches | 2026-11-21, 70ed6ac, all |
+| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, delete, folders | 2026-11-21, 70ed6ac, all |
