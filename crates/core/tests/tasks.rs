@@ -474,7 +474,7 @@ fn recording_claude(dir: &std::path::Path, out: &Value) -> std::path::PathBuf {
 
 #[tokio::test]
 async fn a_huge_note_is_cut_to_budget_around_the_target_and_the_message_says_so() {
-    use duragon_core::ai::budget::{tokens, TASK_BUDGET};
+    use duragon_core::ai::budget::tokens;
     let mut fx = setup(json!({}), json!({}));
     disable_learn(&fx);
     let bin = recording_claude(fx._dir.path(), &json!({"message":"Look near here."}));
@@ -485,12 +485,12 @@ async fn a_huge_note_is_cut_to_budget_around_the_target_and_the_message_says_so(
     content.extend(paras.iter().map(|p| json!({"type":"paragraph","content":[{"type":"text","text":p}]})));
     let doc = json!({"type":"doc","content":content});
     let plain = duragon_core::doc::plain_text(&doc);
-    assert!(tokens(&plain) > TASK_BUDGET, "the note alone is over budget");
+    assert!(tokens(&plain) > AiTask::Answer.spec().budget, "the note alone is over budget");
     fx.ai.db.save_note(&fx.note, "Cells", &doc, &plain).unwrap();
 
     fx.ai.answer(&fx.note, &target).await.unwrap();
     let sent = std::fs::read_to_string(bin.with_extension("stdin")).unwrap();
-    assert!(tokens(&sent) <= TASK_BUDGET, "{} tokens", tokens(&sent));
+    assert!(tokens(&sent) <= AiTask::Answer.spec().budget, "{} tokens", tokens(&sent));
     assert!(sent.contains(&paras[1499]) && sent.contains(&paras[1501]), "the target's neighbours stay");
     assert!(sent.contains("words omitted …]"));
     assert!(sent.ends_with(&format!("TARGET (the line addressed to you):\n{target}\n")));

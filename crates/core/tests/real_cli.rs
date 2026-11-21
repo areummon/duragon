@@ -59,7 +59,7 @@ async fn real_draw() {
                 ])),
                 "Show light, water and CO2 going into a chloroplast, and sugar and oxygen coming out.",
             ),
-            budget::DRAW_BUDGET,
+            AiTask::Draw.spec().budget,
         )
         .0,
         web: false,

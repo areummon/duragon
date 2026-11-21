@@ -2,21 +2,6 @@
 //! `fit` cuts them in that order until the text fits.
 use std::collections::BTreeSet;
 
-use crate::model::AiTask;
-
-/// Tunable. Payload only: the system prompt is not counted.
-pub const TASK_BUDGET: usize = 30_000;
-pub const CHAT_BUDGET: usize = 80_000;
-pub const DRAW_BUDGET: usize = 30_000;
-
-pub fn budget_tokens(task: AiTask) -> usize {
-    match task {
-        AiTask::Chat => CHAT_BUDGET,
-        AiTask::Draw => DRAW_BUDGET,
-        _ => TASK_BUDGET,
-    }
-}
-
 /// Chars / 4, rounded up: more than the tokenizer counts for most text, so a fitted payload stays under.
 pub fn tokens(s: &str) -> usize {
     s.chars().count().div_ceil(4)

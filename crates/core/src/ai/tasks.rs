@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use super::budget::{budget_tokens, fit, Section, Stage};
+use super::budget::{fit, Section, Stage};
 use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
 use super::runner::{cancel, run_claude, AiError, CancelKey, ClaudeRequest};
@@ -192,14 +192,10 @@ impl Ai {
     }
 
     fn request(&self, ctx: &Ctx, task: AiTask, payload: String) -> ClaudeRequest {
-        let model = match task {
-            AiTask::Chat | AiTask::Visualize => &ctx.settings.chat_model,
-            AiTask::Draw => &ctx.settings.draw_model,
-            _ => &ctx.settings.read_model,
-        };
-        let web = ctx.note.web_on && !matches!(task, AiTask::Draw | AiTask::Learn);
+        let spec = task.spec();
+        let web = ctx.note.web_on && spec.web;
         let notes = match &self.notes_search {
-            Some(server) if task == AiTask::Chat && ctx.settings.search_my_notes => {
+            Some(server) if spec.notes && ctx.settings.search_my_notes => {
                 Some(NotesTool { server: server.clone(), open_note_id: ctx.note.meta.id.clone() })
             }
             _ => None,
@@ -215,17 +211,17 @@ impl Ai {
             system_prompt.push_str(prompts::NOTES_SEARCH);
         }
         let mut schema = prompts::schema(task, web);
-        if ctx.settings.explain_symbols && prompts::explains_symbols(task) {
+        if ctx.settings.explain_symbols && spec.symbols {
             system_prompt.push_str(prompts::EXPLAIN_SYMBOLS);
             prompts::add_symbols(&mut schema);
         }
         ClaudeRequest {
-            model: model.clone(),
+            model: spec.model.of(&ctx.settings).to_string(),
             system_prompt,
             schema,
             payload,
             web,
-            timeout: Duration::from_secs(if task == AiTask::Draw { 180 } else { 120 }),
+            timeout: spec.timeout,
             cancel: Some(CancelKey { note_id: ctx.note.meta.id.clone(), task }),
             bin: self.bin.clone(),
             notes,
@@ -236,7 +232,7 @@ impl Ai {
     /// Emits `ai:error` and returns `None` on failure; cancellation is silent.
     async fn call<T: DeserializeOwned>(&self, ctx: &Ctx, task: AiTask, payload: Vec<Section>) -> Option<(T, bool)> {
         let note_id = &ctx.note.meta.id;
-        let (payload, cut) = fit(&payload, budget_tokens(task));
+        let (payload, cut) = fit(&payload, task.spec().budget);
         let trimmed = cut.contains(&Stage::DistantNote);
         let out = match run_claude(self.request(ctx, task, payload)).await {
             Ok(v) => v,
@@ -295,7 +291,7 @@ impl Ai {
         let note_id = &ctx.note.meta.id;
         self.thinking(note_id, &msg.text, AiTask::Draw);
         let payload = prompts::draw_payload(&ctx.note.meta.title, &blocks_of(&ctx.note), &msg.text);
-        let (payload, _) = fit(&payload, budget_tokens(AiTask::Draw));
+        let (payload, _) = fit(&payload, AiTask::Draw.spec().budget);
         let result = match run_claude(self.request(ctx, AiTask::Draw, payload)).await {
             Ok(v) => serde_json::from_value::<DrawOut>(v)
                 .map_err(|e| format!("unexpected draw output: {e}"))

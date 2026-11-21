@@ -206,10 +206,9 @@ async fn an_edited_summary_is_capped_like_a_folded_one() {
 
 #[tokio::test]
 async fn a_long_chat_on_a_short_note_is_not_marked_as_a_trimmed_note() {
-    use duragon_core::ai::budget::CHAT_BUDGET;
     let mut fx = setup();
     let long = "word ".repeat(4_000);
-    for i in 0..(CHAT_BUDGET * 4 / long.len() + 4) {
+    for i in 0..(AiTask::Chat.spec().budget * 4 / long.len() + 4) {
         let author = if i % 2 == 0 { Author::You } else { Author::Riddled };
         fx.ai.db.add_message(&fx.note, None, author, &long, DrawingState::None).unwrap();
     }

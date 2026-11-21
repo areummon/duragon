@@ -126,11 +126,6 @@ pub const EXPLAIN_SYMBOLS: &str = r#"
 
 When your message contains a formula, also return "symbols": each distinct symbol and constant in its formulas, meaning variables, Greek letters, named constants such as $g$ or $c$, and subscripted quantities such as $v_0$, but not operators, digits or function names such as \sin. Copy "tex" exactly as it is written in the formula, and make "meaning" a plain phrase of at most 8 words saying what it stands for here (for example {"tex": "m", "meaning": "mass of the falling object"}). With no formula, leave "symbols" out or empty."#;
 
-/// The tasks whose message the writer reads as prose, so its formulas can carry symbol explanations.
-pub fn explains_symbols(task: AiTask) -> bool {
-    matches!(task, AiTask::Read | AiTask::Answer | AiTask::Reply | AiTask::Chat | AiTask::Ask)
-}
-
 pub fn add_symbols(schema: &mut Value) {
     let s = |d: &str| json!({ "type": "string", "description": d });
     schema["properties"]["symbols"] = json!({
@@ -181,12 +176,17 @@ fn frequency_rule(f: Frequency) -> &'static str {
 }
 
 pub fn system_prompt(task: AiTask, riddler: &Riddler, brief: &str, about_you: &str, web: bool) -> String {
-    match task {
+    let job = match task {
         AiTask::Draw => return DRAW.to_string(),
         AiTask::Learn => return LEARN.to_string(),
         AiTask::Summarize => return SUMMARIZE.to_string(),
-        _ => {}
-    }
+        AiTask::Read => READ.replace("{frequency_rule}", frequency_rule(riddler.frequency)),
+        AiTask::Answer => ANSWER.replace("{name}", &riddler.name),
+        AiTask::Reply => REPLY.to_string(),
+        AiTask::Ask => ASK.to_string(),
+        AiTask::Visualize => VISUALIZE.to_string(),
+        AiTask::Chat => CHAT.to_string(),
+    };
     let mut p = CORE.replace("{name}", &riddler.name);
     p.push_str("\n\nHow you think:\n");
     if !riddler.description.trim().is_empty() {
@@ -204,18 +204,9 @@ pub fn system_prompt(task: AiTask, riddler: &Riddler, brief: &str, about_you: &s
         p.push_str("\n\nAbout the writer:\n");
         p.push_str(about_you.trim());
     }
-    let job = match task {
-        AiTask::Read => READ
-            .replace("{frequency_rule}", frequency_rule(riddler.frequency)),
-        AiTask::Answer => ANSWER.replace("{name}", &riddler.name),
-        AiTask::Reply => REPLY.to_string(),
-        AiTask::Ask => ASK.to_string(),
-        AiTask::Visualize => VISUALIZE.to_string(),
-        _ => CHAT.to_string(),
-    };
     p.push('\n');
     p.push_str(&job.replace("{asked_to_draw}", ASKED_TO_DRAW).replace("{sketch_brief}", SKETCH_BRIEF));
-    if web && !matches!(task, AiTask::Visualize) {
+    if web && task.spec().sources {
         p.push_str(WEB_SOURCES);
     }
     p
@@ -265,8 +256,7 @@ pub fn schema(task: AiTask, web: bool) -> Value {
         ),
         AiTask::Summarize => (json!({ "summary": s("The updated summary, plain text, at most about 180 words") }), vec!["summary"]),
     };
-    let takes_sources = web && !matches!(task, AiTask::Draw | AiTask::Learn | AiTask::Summarize | AiTask::Visualize);
-    if takes_sources {
+    if web && task.spec().sources {
         props["sources"] = json!({
             "type": "array",
             "description": "Pages actually used from WebSearch/WebFetch results; never invented",
