@@ -108,12 +108,20 @@ export function symbolTips(node: HTMLElement, initial: SymbolTipsParams | null) 
   };
 }
 
-/** Makes each marked symbol in KaTeX HTML a focusable button named by what it stands for. */
+/**
+ * Makes each marked symbol in KaTeX HTML a button named by what it stands for. Only its first occurrence is a tab
+ * stop, so a dense formula costs one stop per symbol, not one per glyph.
+ */
 export function symbolButtons(html: string, symbols: MathSymbol[]): string {
   const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const stops = new Set<number>();
   return html.replace(/data-sym="(\d+)"/g, (m, i: string) => {
-    const s = symbols[Number(i)];
-    return s ? `${m} tabindex="0" role="button" aria-label="${attr(s.meaning)}"` : m;
+    const n = Number(i);
+    const s = symbols[n];
+    if (!s) return m;
+    const tab = stops.has(n) ? '' : ' tabindex="0"';
+    stops.add(n);
+    return `${m}${tab} role="button" aria-label="${attr(s.meaning)}"`;
   });
 }
 
