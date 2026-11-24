@@ -1,4 +1,5 @@
 //! Agent Client Protocol (ACP) client over JSON-RPC 2.0 stdio (`agy acp` and any generic ACP agent).
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -7,6 +8,18 @@ use tokio::process::Command;
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, json_instruction};
 use crate::model::ThinkingLevel;
+use crate::private::WorkDir;
+
+/// The notes server's name here. Agents also load the writer's own servers, and one called "notes" is likely.
+const NOTES_SERVER: &str = "duragon_notes";
+
+/// The notes tools as agents name them: `mcp__server__tool` or `mcp_server_tool`.
+const NOTES_TOOLS: [&str; 4] = [
+    "mcp__duragon_notes__search_notes",
+    "mcp__duragon_notes__read_note",
+    "mcp_duragon_notes_search_notes",
+    "mcp_duragon_notes_read_note",
+];
 
 fn fail<T>(msg: impl Into<String>) -> Result<T, AiError> {
     Err(AiError::Failed(msg.into()))
@@ -26,8 +39,13 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
         req.provider.args.clone()
     };
 
+    let grants = Grants { web: req.web, notes: req.notes.is_some() };
+    // Before the child, so it is dropped after it.
+    let cwd = WorkDir::new().map_err(|e| AiError::Failed(format!("could not make a folder for {command}: {e}")))?;
+
     let mut child = Command::new(command)
         .args(&args)
+        .current_dir(cwd.path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -88,13 +106,12 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
         }),
     )
     .await?;
-    let _init = wait_for_response(&mut reader, &mut stdin, init_id, req.web, None).await?;
+    let _init = wait_for_response(&mut reader, &mut stdin, init_id, grants, None).await?;
 
     // 2. session/new
-    let cwd = std::env::temp_dir();
     let mcp_servers: Vec<Value> = match &req.notes {
         Some(notes) => vec![json!({
-            "name": "notes",
+            "name": NOTES_SERVER,
             "command": notes.server.exe.to_string_lossy(),
             "args": ["--notes-mcp", notes.server.db.to_string_lossy(), notes.open_note_id],
             "env": []
@@ -110,13 +127,13 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
             "id": new_id,
             "method": "session/new",
             "params": {
-                "cwd": cwd.to_string_lossy(),
+                "cwd": cwd.path().to_string_lossy(),
                 "mcpServers": mcp_servers
             }
         }),
     )
     .await?;
-    let session_res = wait_for_response(&mut reader, &mut stdin, new_id, req.web, None).await?;
+    let session_res = wait_for_response(&mut reader, &mut stdin, new_id, grants, None).await?;
     let session_id = session_res
         .get("sessionId")
         .and_then(Value::as_str)
@@ -138,7 +155,7 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
             }),
         )
         .await?;
-        if wait_for_response(&mut reader, &mut stdin, model_id, req.web, None).await.is_err() {
+        if wait_for_response(&mut reader, &mut stdin, model_id, grants, None).await.is_err() {
             let cfg_id = next_id;
             next_id += 1;
             send_rpc(
@@ -151,7 +168,7 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
                 }),
             )
             .await?;
-            let _ = wait_for_response(&mut reader, &mut stdin, cfg_id, req.web, None).await;
+            let _ = wait_for_response(&mut reader, &mut stdin, cfg_id, grants, None).await;
         }
     }
 
@@ -173,7 +190,7 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
             }),
         )
         .await?;
-        let _ = wait_for_response(&mut reader, &mut stdin, think_id, req.web, None).await;
+        let _ = wait_for_response(&mut reader, &mut stdin, think_id, grants, None).await;
     }
 
     // 4. session/prompt
@@ -199,7 +216,7 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
     .await?;
 
     let mut text = String::new();
-    let prompt_res = wait_for_response(&mut reader, &mut stdin, prompt_id, req.web, Some(&mut text)).await;
+    let prompt_res = wait_for_response(&mut reader, &mut stdin, prompt_id, grants, Some(&mut text)).await;
     let _ = child.kill().await;
     let stderr = stderr_task.await.unwrap_or_default();
 
@@ -247,7 +264,7 @@ async fn wait_for_response(
     lines: &mut tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
     stdin: &mut tokio::process::ChildStdin,
     expected_id: u64,
-    allow_web: bool,
+    grants: Grants,
     mut sink: Option<&mut String>,
 ) -> Result<Value, AiError> {
     while let Some(line) = lines
@@ -275,13 +292,7 @@ async fn wait_for_response(
 
         // Incoming request from agent -> client (e.g. session/request_permission)
         if let Some(method) = msg.get("method").and_then(Value::as_str) {
-            let req_id = msg["id"].clone();
-            let reply = handle_agent_request(method, &msg["params"], allow_web);
-            send_rpc(
-                stdin,
-                &json!({ "jsonrpc": "2.0", "id": req_id, "result": reply }),
-            )
-            .await?;
+            send_rpc(stdin, &answer(&msg["id"], method, &msg["params"], grants)).await?;
             continue;
         }
 
@@ -318,50 +329,88 @@ fn collect_update_text(params: &Value, out: &mut String) {
     }
 }
 
-/// Approves safe read-only tools (notes MCP search/read, and web search/fetch when enabled);
-/// rejects filesystem writes, shell execution, or anything else.
-fn handle_agent_request(method: &str, params: &Value, allow_web: bool) -> Value {
-    if method != "session/request_permission" {
-        return json!({});
+/// What the writer lets the agent use in this call.
+#[derive(Debug, Clone, Copy)]
+struct Grants {
+    web: bool,
+    notes: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PermissionRequest {
+    tool_call: ToolCall,
+    options: Vec<PermissionOption>,
+}
+
+/// The fields the agent program fills in. The title is left out: the model can word it.
+#[derive(Debug, Deserialize)]
+struct ToolCall {
+    kind: Option<ToolKind>,
+    name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ToolKind {
+    Fetch,
+    Read,
+    Search,
+    Other,
+    /// Edits, deletes, moves, commands, and any kind not known here.
+    #[serde(other)]
+    Ungranted,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PermissionOption {
+    option_id: String,
+    kind: OptionKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum OptionKind {
+    AllowOnce,
+    AllowAlways,
+    RejectOnce,
+    RejectAlways,
+    #[serde(other)]
+    Unknown,
+}
+
+/// `search` covers the writer's files as well as the web, so web access doesn't grant it.
+fn granted(call: &ToolCall, grants: Grants) -> bool {
+    let notes_tool = call.name.as_deref().is_some_and(|n| NOTES_TOOLS.contains(&n));
+    match call.kind {
+        Some(ToolKind::Fetch) => grants.web,
+        Some(ToolKind::Read | ToolKind::Search | ToolKind::Other) | None => grants.notes && notes_tool,
+        Some(ToolKind::Ungranted) => false,
     }
-    let tool_title = params["toolCall"]
-        .get("title")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_lowercase();
-    let tool_kind = params["toolCall"]
-        .get("kind")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_lowercase();
+}
 
-    let is_notes = tool_title.contains("search_notes") || tool_title.contains("read_note");
-    let is_web = allow_web
-        && (tool_kind == "fetch"
-            || tool_kind == "search"
-            || tool_title.contains("web")
-            || tool_title.contains("search")
-            || tool_title.contains("fetch"));
-
-    let options = params.get("options").and_then(Value::as_array);
-    let pick = |wanted: &[&str]| -> Option<String> {
-        options?.iter().find_map(|o| {
-            let k = o.get("kind").and_then(Value::as_str)?;
-            if wanted.contains(&k) {
-                o.get("optionId").and_then(Value::as_str).map(String::from)
-            } else {
-                None
-            }
-        })
+fn decide(request: &PermissionRequest, grants: Grants) -> Option<&str> {
+    let order = if granted(&request.tool_call, grants) {
+        [OptionKind::AllowOnce, OptionKind::AllowAlways]
+    } else {
+        [OptionKind::RejectOnce, OptionKind::RejectAlways]
     };
+    order
+        .iter()
+        .find_map(|kind| request.options.iter().find(|o| o.kind == *kind))
+        .map(|o| o.option_id.as_str())
+}
 
-    if is_notes || is_web {
-        if let Some(id) = pick(&["allow_once", "allow_always"]) {
-            return json!({ "outcome": { "outcome": "selected", "optionId": id } });
-        }
+fn answer(id: &Value, method: &str, params: &Value, grants: Grants) -> Value {
+    if method != "session/request_permission" {
+        let error = json!({ "code": -32601, "message": format!("method not found: {method}") });
+        return json!({ "jsonrpc": "2.0", "id": id, "error": error });
     }
-    if let Some(id) = pick(&["reject_once", "reject_always"]) {
-        return json!({ "outcome": { "outcome": "selected", "optionId": id } });
-    }
-    json!({ "outcome": { "outcome": "cancelled" } })
+    let request = PermissionRequest::deserialize(params).ok();
+    let outcome = match request.as_ref().and_then(|r| decide(r, grants)) {
+        Some(option) => json!({ "outcome": "selected", "optionId": option }),
+        None => json!({ "outcome": "cancelled" }),
+    };
+    json!({ "jsonrpc": "2.0", "id": id, "result": { "outcome": outcome } })
 }

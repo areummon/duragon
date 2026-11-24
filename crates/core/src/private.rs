@@ -1,7 +1,7 @@
 //! Files and folders only the writer's own account can open.
 use std::fs::{self, OpenOptions};
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Opens files it creates for the owner alone, from the start.
 pub(crate) fn options() -> OpenOptions {
@@ -22,6 +22,30 @@ pub(crate) fn dir(path: &Path) -> io::Result<()> {
 /// Closes a file an older Duragon may have left open to others.
 pub(crate) fn file(path: &Path) {
     tighten(path, 0o600);
+}
+
+/// A new empty folder for one AI call to work in, removed with what the call left there.
+pub(crate) struct WorkDir(PathBuf);
+
+impl WorkDir {
+    pub(crate) fn new() -> io::Result<Self> {
+        let path = std::env::temp_dir().join(format!("duragon-{}", uuid::Uuid::new_v4()));
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        builder.create(&path)?;
+        Ok(Self(path))
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for WorkDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
 }
 
 // Some disks have no modes to set. The notes must open there all the same.
