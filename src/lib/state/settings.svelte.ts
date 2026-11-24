@@ -7,7 +7,7 @@ const DEFAULTS: Settings = {
   appearance: 'system', textSize: 'default', pageWidth: null, lettering: 'own',
   inkColour: 'ink', justMyWords: false, aboutYou: '',
   learnAboutYou: true, searchMyNotes: false, explainSymbols: false, readModel: 'sonnet', chatModel: 'sonnet', drawModel: 'opus',
-  sidebarOpen: false,
+  sidebarOpen: false, deletedNotes: 'duragon',
 };
 
 export const PAGE_WIDTH_DEFAULT = 690;

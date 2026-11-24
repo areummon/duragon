@@ -1,6 +1,6 @@
 import type {
-  BackendEvents, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
-  Riddler, Settings, Thread, ThreadKind, ThreadStatus, VoiceOption, VoiceStatus,
+  BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
+  Riddler, Settings, Thread, ThreadKind, ThreadStatus, TrashList, VoiceOption, VoiceStatus,
 } from './types';
 
 export type Unsubscribe = () => void;
@@ -12,7 +12,14 @@ export interface Backend {
   createNote(title?: string): Promise<Note>;
   saveNote(id: string, title: string, doc: unknown, plain: string): Promise<NoteMeta>;
   updateNoteMeta(id: string, patch: NoteMetaPatch): Promise<Note>;
-  deleteNote(id: string): Promise<void>;
+  /** Where the note went: 'duragon' when the system trash refused it. */
+  deleteNote(id: string, mode: DeleteMode): Promise<DeleteMode>;
+
+  listTrash(): Promise<TrashList>;
+  /** Puts a note back with everything it had. One that is already live is returned as it is. */
+  restoreNote(id: string): Promise<NoteMeta>;
+  /** Deletes these notes from the trash for good, passing over any that is live. */
+  deleteTrashed(ids: string[]): Promise<void>;
 
   listFolders(): Promise<Folder[]>;
   createFolder(name: string): Promise<Folder>;

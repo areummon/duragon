@@ -104,6 +104,23 @@ export interface Settings {
   chatModel: string;
   drawModel: string;
   sidebarOpen: boolean;
+  deletedNotes: DeleteMode;
+}
+
+/** Where a deleted note goes: Duragon's own trash, the system's, or nowhere. */
+export type DeleteMode = 'duragon' | 'system' | 'permanent';
+
+export interface TrashedNote {
+  id: string;
+  title: string;
+  deletedAt: number;
+}
+
+export interface TrashList {
+  /** Newest first. */
+  notes: TrashedNote[];
+  /** Files that are broken or from a newer Duragon, left as they are. */
+  unreadable: number;
 }
 
 export interface NoteMetaPatch {

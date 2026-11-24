@@ -2,8 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Backend, Unsubscribe } from './backend';
 import type {
-  BackendEvents, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
-  Riddler, Settings, Thread, ThreadKind, ThreadStatus, VoiceOption, VoiceStatus,
+  BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
+  Riddler, Settings, Thread, ThreadKind, ThreadStatus, TrashList, VoiceOption, VoiceStatus,
 } from './types';
 
 export class TauriBackend implements Backend {
@@ -15,7 +15,11 @@ export class TauriBackend implements Backend {
     invoke<NoteMeta>('save_note', { id, title, doc, plain });
   updateNoteMeta = (id: string, patch: NoteMetaPatch) =>
     invoke<Note>('update_note_meta', { id, patch });
-  deleteNote = (id: string) => invoke<void>('delete_note', { id });
+  deleteNote = (id: string, mode: DeleteMode) => invoke<DeleteMode>('delete_note', { id, mode });
+
+  listTrash = () => invoke<TrashList>('list_trash');
+  restoreNote = (id: string) => invoke<NoteMeta>('restore_note', { id });
+  deleteTrashed = (ids: string[]) => invoke<void>('delete_trashed', { ids });
 
   listFolders = () => invoke<Folder[]>('list_folders');
   createFolder = (name: string) => invoke<Folder>('create_folder', { name });

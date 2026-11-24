@@ -3,9 +3,9 @@ import { BUILTIN_RIDDLER } from './presets';
 import { CHAT_BUDGET, SUMMARIZE_AFTER, SUMMARIZE_FOLD, SUMMARY_MAX_CHARS, TASK_BUDGET } from './limits';
 import {
   BUILTIN_RIDDLER_ID,
-  type AiTask, type BackendEvents, type MathSymbol, type ExportFormat, type Folder, type Message,
+  type AiTask, type BackendEvents, type DeleteMode, type MathSymbol, type ExportFormat, type Folder, type Message,
   type Note, type NoteMeta, type NoteMetaPatch, type Riddler, type Settings,
-  type Thread, type ThreadKind, type ThreadStatus, type VoiceOption, type VoiceStatus,
+  type Thread, type ThreadKind, type ThreadStatus, type TrashList, type VoiceOption, type VoiceStatus,
 } from './types';
 
 const QUOTE = 'Photosynthesis happens in the mitochondria.';
@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS: Settings = {
   chatModel: 'sonnet',
   drawModel: 'opus',
   sidebarOpen: false,
+  deletedNotes: 'duragon',
 };
 
 const uid = () => crypto.randomUUID();
@@ -136,16 +137,39 @@ const VOICES: VoiceOption[] = [
   { id: 'af_heart', name: 'Heart', description: 'Warm, friendly' },
 ];
 
+/** What one trash file holds. */
+interface Trashed {
+  note: Note;
+  threads: Thread[];
+  chat: Message[];
+  summary: { text: string; through: string | null } | undefined;
+  deletedAt: number;
+}
+
 export class MockBackend implements Backend {
   private notes = new Map<string, Note>();
   private folders = new Map<string, Folder>();
   private threads = new Map<string, Thread>();
   private chat = new Map<string, Message[]>();
   private summaries = new Map<string, { text: string; through: string | null }>();
+  private trash = new Map<string, Trashed>();
+  private systemTrash = new Map<string, Trashed>();
   private riddlers = new Map<string, Riddler>([[BUILTIN_RIDDLER_ID, BUILTIN_RIDDLER]]);
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private handlers = new Map<string, Set<(p: any) => void>>();
   private timers = new Map<string, number[]>();
+
+  /** Test hook: the system trash takes nothing. */
+  failSystemTrash = false;
+  /** Test hook: how many files in the trash can't be read. */
+  unreadableTrash = 0;
+  /** Test hook: the user takes the note back out of the system trash. */
+  restoreFromSystem(id: string) {
+    const file = this.systemTrash.get(id);
+    if (!file) throw new Error(`not in the system trash: ${id}`);
+    this.systemTrash.delete(id);
+    this.trash.set(id, file);
+  }
 
   constructor() {
     this.seed();
@@ -273,10 +297,52 @@ export class MockBackend implements Backend {
     Object.assign(n, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
     return this.getNote(id);
   }
-  async deleteNote(id: string) {
-    this.notes.delete(id);
-    for (const [tid, t] of this.threads) if (t.noteId === id) this.threads.delete(tid);
-    this.chat.delete(id);
+  /** Like Trash::delete. */
+  async deleteNote(id: string, mode: DeleteMode): Promise<DeleteMode> {
+    const note = this.notes.get(id);
+    if (note) {
+      const threads = [...this.threads.values()].filter((t) => t.noteId === id);
+      if (mode === 'permanent') this.trash.delete(id);
+      else this.trash.set(id, { note, threads, chat: this.chat.get(id) ?? [], summary: this.summaries.get(id), deletedAt: now() });
+      this.notes.delete(id);
+      for (const t of threads) this.threads.delete(t.id);
+      this.chat.delete(id);
+      this.summaries.delete(id);
+    }
+    const file = this.trash.get(id);
+    if (mode !== 'system' || !file) return mode;
+    if (this.failSystemTrash) return 'duragon';
+    this.trash.delete(id);
+    this.systemTrash.set(id, file);
+    return 'system';
+  }
+
+  async listTrash(): Promise<TrashList> {
+    const notes = [...this.trash.values()]
+      .filter((f) => !this.notes.has(f.note.id))
+      .sort((a, b) => b.deletedAt - a.deletedAt)
+      .map((f) => ({ id: f.note.id, title: f.note.title, deletedAt: f.deletedAt }));
+    return { notes, unreadable: this.unreadableTrash };
+  }
+  /** Like Trash::restore. */
+  async restoreNote(id: string) {
+    const live = this.notes.get(id);
+    if (live) return this.meta(live);
+    const file = this.trash.get(id);
+    if (!file) throw new Error('that note is not in the trash');
+    const { note, threads, chat, summary } = file;
+    if (note.folderId && !this.folders.has(note.folderId)) note.folderId = null;
+    if (!this.riddlers.has(note.riddlerId)) note.riddlerId = BUILTIN_RIDDLER_ID;
+    for (const m of [...threads.flatMap((t) => t.messages), ...chat]) if (m.drawing === 'pending') m.drawing = 'failed';
+    this.notes.set(id, note);
+    for (const t of threads) this.threads.set(t.id, t);
+    this.chat.set(id, chat);
+    if (summary) this.summaries.set(id, summary);
+    this.trash.delete(id);
+    return this.meta(note);
+  }
+  async deleteTrashed(ids: string[]) {
+    for (const id of ids) if (!this.notes.has(id)) this.trash.delete(id);
   }
 
   async listFolders() {
@@ -408,6 +474,7 @@ export class MockBackend implements Backend {
   }
 
   private openThread(noteId: string, kind: Thread['kind'], quote: string, text: string, wantsDrawing: boolean, topic: string) {
+    if (!this.notes.has(noteId)) return;
     const th: Thread = { id: uid(), noteId, kind, quote, status: 'open', pinned: false, createdAt: now(), messages: [] };
     const m = this.msg(noteId, th.id, text, wantsDrawing ? 'pending' : 'none');
     th.messages.push(m);

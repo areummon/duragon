@@ -48,8 +48,27 @@ pub async fn update_note_meta(state: State<'_, AppState>, id: String, patch: Not
 }
 
 #[tauri::command]
-pub async fn delete_note(state: State<'_, AppState>, id: String) -> Res<()> {
-    s(state.db.delete_note(&id))
+pub async fn delete_note(state: State<'_, AppState>, id: NoteId, mode: DeleteMode) -> Res<DeleteMode> {
+    let trash = state.trash.clone();
+    blocking(move || trash.delete(&id, mode)).await
+}
+
+#[tauri::command]
+pub async fn list_trash(state: State<'_, AppState>) -> Res<TrashList> {
+    let trash = state.trash.clone();
+    blocking(move || trash.list()).await
+}
+
+#[tauri::command]
+pub async fn restore_note(state: State<'_, AppState>, id: NoteId) -> Res<NoteMeta> {
+    let trash = state.trash.clone();
+    blocking(move || trash.restore(&id)).await
+}
+
+#[tauri::command]
+pub async fn delete_trashed(state: State<'_, AppState>, ids: Vec<NoteId>) -> Res<()> {
+    let trash = state.trash.clone();
+    blocking(move || trash.delete_forever(&ids)).await
 }
 
 #[tauri::command]
@@ -228,7 +247,7 @@ pub async fn list_voices(state: State<'_, AppState>) -> Res<Vec<duragon_voice::V
     Ok(state.voice.voices())
 }
 
-/// Model loading and transcription block, so voice work runs off the async runtime.
+/// Model loading, transcription and the trash's files block, so they run off the async runtime.
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> anyhow::Result<T> + Send + 'static) -> Res<T> {
     s(tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?)
 }
@@ -265,6 +284,7 @@ pub async fn stop_speaking(state: State<'_, AppState>) -> Res<()> {
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         list_notes, search_notes, get_note, create_note, save_note, update_note_meta, delete_note,
+        list_trash, restore_note, delete_trashed,
         list_folders, create_folder, rename_folder, move_folder, delete_folder,
         list_threads, set_thread_status, set_thread_pinned, set_thread_kind, thread_to_note, list_chat,
         get_chat_summary, save_chat_summary, clear_chat,

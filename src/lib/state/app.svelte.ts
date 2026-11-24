@@ -74,7 +74,7 @@ export async function deleteNote(id: string) {
     if (next) await openNote(next);
     else await newNote();
   }
-  await (await getBackend()).deleteNote(id);
+  await (await getBackend()).deleteNote(id, 'permanent');
   removeMeta(id);
 }
 

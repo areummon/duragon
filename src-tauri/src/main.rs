@@ -1,11 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod system_trash;
 
 use duragon_core::ai::notes_mcp::{self, NotesSearch};
 use duragon_core::ai::{Ai, Events};
 use duragon_core::db::Db;
 use duragon_core::model::Appearance;
+use duragon_core::trash::Trash;
 use duragon_voice::Voice;
 use std::sync::Arc;
 use tauri::window::Color;
@@ -45,6 +47,7 @@ fn open_window(app: &tauri::App, appearance: Appearance) -> tauri::Result<()> {
 
 pub struct AppState {
     pub db: Db,
+    pub trash: Trash,
     pub ai: Ai,
     pub voice: Voice,
 }
@@ -87,7 +90,8 @@ fn main() {
                 }
             });
             let voice = Voice::new(dir.join("models"), emit);
-            app.manage(AppState { db, ai, voice });
+            let trash = Trash::new(db.clone(), dir.join(".trash"), Arc::new(system_trash::OsTrash));
+            app.manage(AppState { db, trash, ai, voice });
             Ok(())
         })
         .invoke_handler(commands::handler())

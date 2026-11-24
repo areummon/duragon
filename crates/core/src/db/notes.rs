@@ -180,9 +180,4 @@ impl Db {
         }
         self.get_note(id)
     }
-
-    pub fn delete_note(&self, id: &str) -> Result<()> {
-        self.conn().execute("DELETE FROM notes WHERE id=?1", [id])?;
-        Ok(())
-    }
 }
