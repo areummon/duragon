@@ -152,6 +152,33 @@ pub async fn save_settings(state: State<'_, AppState>, settings: Settings) -> Re
 }
 
 #[tauri::command]
+pub async fn list_credential_statuses(state: State<'_, AppState>) -> Res<Vec<ProviderCredentialStatus>> {
+    let settings = s(state.db.get_settings())?;
+    Ok(state.credentials.statuses(&settings.resolved_providers()))
+}
+
+#[tauri::command]
+pub async fn set_provider_key(
+    state: State<'_, AppState>,
+    provider_id: String,
+    key: String,
+) -> Res<ProviderCredentialStatus> {
+    s(state.credentials.set_key(&provider_id, &key))?;
+    let settings = s(state.db.get_settings())?;
+    Ok(state.credentials.status_for(&settings.provider(&provider_id)))
+}
+
+#[tauri::command]
+pub async fn delete_provider_key(
+    state: State<'_, AppState>,
+    provider_id: String,
+) -> Res<ProviderCredentialStatus> {
+    s(state.credentials.delete_key(&provider_id))?;
+    let settings = s(state.db.get_settings())?;
+    Ok(state.credentials.status_for(&settings.provider(&provider_id)))
+}
+
+#[tauri::command]
 pub async fn list_riddlers(state: State<'_, AppState>) -> Res<Vec<Riddler>> {
     s(state.db.list_riddlers())
 }
@@ -288,7 +315,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         list_folders, create_folder, rename_folder, move_folder, delete_folder,
         list_threads, set_thread_status, set_thread_pinned, set_thread_kind, thread_to_note, list_chat,
         get_chat_summary, save_chat_summary, clear_chat,
-        get_settings, save_settings, list_riddlers, save_riddler, delete_riddler,
+        get_settings, save_settings, list_credential_statuses, set_provider_key, delete_provider_key,
+        list_riddlers, save_riddler, delete_riddler,
         ai_read, ai_answer, ai_reply, ai_chat, ai_ask, ai_visualize, ai_cancel_read, export_note,
         voice_status, voice_install, list_voices, listen_start, listen_stop, speak, stop_speaking,
     ]

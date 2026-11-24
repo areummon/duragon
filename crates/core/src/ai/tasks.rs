@@ -10,8 +10,9 @@ use std::sync::{Arc, Mutex};
 use super::budget::{fit, Section, Stage};
 use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
-use super::runner::{cancel, run_claude, AiError, CancelKey, ClaudeRequest};
+use super::runner::{cancel, run_ai, AiError, AiRequest, CancelKey};
 use super::svg;
+use crate::credentials::CredentialsStore;
 use crate::db::{Db, NewMessage};
 use crate::doc;
 use crate::model::*;
@@ -29,6 +30,8 @@ pub struct Ai {
     pub bin: Option<PathBuf>,
     /// Set when this build can serve the notes search tool; the chat uses it when the writer turns it on.
     pub notes_search: Option<NotesSearch>,
+    /// Local `0600` credentials store for HTTP API keys (with env-var fallback).
+    pub credentials: Option<CredentialsStore>,
     /// Notes with a summary call in flight.
     summarizing: Arc<Mutex<HashSet<String>>>,
 }
@@ -199,7 +202,20 @@ fn normalize(s: &str) -> (Vec<char>, Vec<(usize, usize)>) {
 
 impl Ai {
     pub fn new(db: Db, events: Arc<dyn Events>) -> Self {
-        Self { db, events, bin: None, notes_search: None, summarizing: Arc::default() }
+        Self { db, events, bin: None, notes_search: None, credentials: None, summarizing: Arc::default() }
+    }
+
+    fn resolve_api_key(&self, provider: &ProviderConfig) -> Option<String> {
+        if let Some(store) = &self.credentials {
+            store.resolve(&provider.id, provider.env_var.as_deref())
+        } else {
+            provider
+                .env_var
+                .as_deref()
+                .and_then(|v| std::env::var(v).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        }
     }
 
     fn emit<T: serde::Serialize>(&self, name: &str, payload: &T) {
@@ -229,7 +245,7 @@ impl Ai {
         Ok(Ctx { note, riddler, settings: self.db.get_settings()? })
     }
 
-    fn request(&self, ctx: &Ctx, task: AiTask, payload: String) -> ClaudeRequest {
+    fn request(&self, ctx: &Ctx, task: AiTask, payload: String) -> AiRequest {
         let spec = task.spec();
         let web = ctx.note.web_on && spec.web;
         let notes = match &self.notes_search {
@@ -253,8 +269,13 @@ impl Ai {
             system_prompt.push_str(prompts::EXPLAIN_SYMBOLS);
             prompts::add_symbols(&mut schema);
         }
-        ClaudeRequest {
+        let provider = ctx.settings.provider(spec.model.provider_of(&ctx.settings));
+        let api_key = self.resolve_api_key(&provider);
+        AiRequest {
+            provider,
             model: spec.model.of(&ctx.settings).to_string(),
+            thinking: spec.model.thinking_of(&ctx.settings),
+            api_key,
             system_prompt,
             schema,
             payload,
@@ -263,6 +284,7 @@ impl Ai {
             cancel: Some(CancelKey { note_id: ctx.note.meta.id.clone(), task }),
             bin: self.bin.clone(),
             notes,
+            db: Some(self.db.clone()),
         }
     }
 
@@ -272,7 +294,7 @@ impl Ai {
         let note_id = &ctx.note.meta.id;
         let (payload, cut) = fit(&payload, task.spec().budget);
         let trimmed = cut.contains(&Stage::DistantNote);
-        let out = match run_claude(self.request(ctx, task, payload)).await {
+        let out = match run_ai(self.request(ctx, task, payload)).await {
             Ok(v) => v,
             Err(AiError::Cancelled) => return None,
             Err(AiError::Failed(m)) => {
@@ -292,8 +314,13 @@ impl Ai {
     /// Runs a bookkeeping task no one waits on. It cannot be cancelled, and any failure yields `None` silently.
     async fn background<T: DeserializeOwned>(&self, task: AiTask, settings: &Settings, payload: String) -> Option<T> {
         let spec = task.spec();
-        let req = ClaudeRequest {
+        let provider = settings.provider(spec.model.provider_of(settings));
+        let api_key = self.resolve_api_key(&provider);
+        let req = AiRequest {
+            provider,
             model: spec.model.of(settings).to_string(),
+            thinking: spec.model.thinking_of(settings),
+            api_key,
             system_prompt: prompts::system_prompt(task, &fallback_riddler(), "", "", false),
             schema: prompts::schema(task, false),
             payload,
@@ -302,8 +329,9 @@ impl Ai {
             cancel: None,
             bin: self.bin.clone(),
             notes: None,
+            db: None,
         };
-        serde_json::from_value(run_claude(req).await.ok()?).ok()
+        serde_json::from_value(run_ai(req).await.ok()?).ok()
     }
 
     /// Persists Riddled's message, announces it, and chains a drawing of it when asked: as in Riddled,

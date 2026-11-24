@@ -82,7 +82,9 @@ impl Db {
             .conn()
             .query_row("SELECT value FROM kv WHERE key='settings'", [], |r| r.get(0))
             .optional()?;
-        Ok(raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default())
+        let mut settings: Settings = raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        settings.providers = settings.resolved_providers();
+        Ok(settings)
     }
 
     pub fn save_settings(&self, settings: &Settings) -> Result<()> {

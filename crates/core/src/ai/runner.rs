@@ -10,8 +10,12 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::sync::Notify;
 
+use super::acp::run_acp;
+use super::codex::run_codex;
+use super::http::{run_anthropic, run_gemini, run_openai};
 use super::notes_mcp::{NotesTool, TOOL_NAMES};
-use crate::model::AiTask;
+use crate::db::Db;
+use crate::model::{AiTask, ProviderConfig, ProviderKind, ThinkingLevel};
 
 #[derive(Debug)]
 pub enum AiError {
@@ -56,6 +60,27 @@ pub struct ClaudeRequest {
     pub notes: Option<NotesTool>,
 }
 
+/// Unified request dispatched across Claude CLI, ACP (`agy acp`), Codex CLI, and HTTP APIs.
+#[derive(Clone)]
+pub struct AiRequest {
+    pub provider: ProviderConfig,
+    pub model: String,
+    pub thinking: ThinkingLevel,
+    pub api_key: Option<String>,
+    pub system_prompt: String,
+    pub schema: Value,
+    pub payload: String,
+    pub web: bool,
+    pub timeout: Duration,
+    pub cancel: Option<CancelKey>,
+    /// Overrides `DURAGON_CLAUDE_BIN` / provider command (tests).
+    pub bin: Option<PathBuf>,
+    /// Lets the call search the writer's other notes.
+    pub notes: Option<NotesTool>,
+    /// Database handle for in-process notes search in HTTP providers.
+    pub db: Option<Db>,
+}
+
 static REGISTRY: LazyLock<Mutex<HashMap<CancelKey, Arc<Notify>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -93,7 +118,7 @@ impl Drop for Registration {
     }
 }
 
-fn args(req: &ClaudeRequest) -> Vec<String> {
+fn args(req: &ClaudeRequest, thinking: ThinkingLevel) -> Vec<String> {
     let tools = if req.web { "WebSearch,WebFetch" } else { "" };
     let mut a: Vec<String> = [
         "-p",
@@ -115,6 +140,10 @@ fn args(req: &ClaudeRequest) -> Vec<String> {
     ]
     .map(String::from)
     .into();
+    if thinking != ThinkingLevel::Default {
+        a.push("--effort".into());
+        a.push(thinking.as_str().into());
+    }
     let mut allowed: Vec<&str> = Vec::new();
     if req.web {
         allowed.extend(["WebSearch", "WebFetch"]);
@@ -133,11 +162,11 @@ fn args(req: &ClaudeRequest) -> Vec<String> {
 }
 
 /// Retries while the binary is briefly busy (it was just written or is being replaced by an update).
-async fn spawn(bin: &PathBuf, req: &ClaudeRequest) -> Result<tokio::process::Child, AiError> {
+async fn spawn(bin: &PathBuf, req: &ClaudeRequest, thinking: ThinkingLevel) -> Result<tokio::process::Child, AiError> {
     let mut attempts = 0;
     loop {
         let spawned = Command::new(bin)
-            .args(args(req))
+            .args(args(req, thinking))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -161,6 +190,10 @@ fn tail(s: &str, n: usize) -> String {
 }
 
 pub async fn run_claude(req: ClaudeRequest) -> Result<Value, AiError> {
+    run_claude_with_thinking(req, ThinkingLevel::Default).await
+}
+
+async fn run_claude_with_thinking(req: ClaudeRequest, thinking: ThinkingLevel) -> Result<Value, AiError> {
     let bin = req
         .bin
         .clone()
@@ -168,7 +201,7 @@ pub async fn run_claude(req: ClaudeRequest) -> Result<Value, AiError> {
         .unwrap_or_else(|| PathBuf::from("claude"));
     let registration = req.cancel.clone().map(Registration::new);
 
-    let mut child = spawn(&bin, &req).await?;
+    let mut child = spawn(&bin, &req, thinking).await?;
 
     if let Some(mut stdin) = child.stdin.take() {
         let payload = req.payload.clone();
@@ -208,5 +241,59 @@ pub async fn run_claude(req: ClaudeRequest) -> Result<Value, AiError> {
     match parsed.get("structured_output") {
         Some(v) if !v.is_null() => Ok(v.clone()),
         _ => fail(format!("claude returned no structured_output. stderr: {}", tail(&stderr, 400))),
+    }
+}
+
+/// Runs an AI request against whichever provider is configured, with shared cancellation & timeout handling.
+pub async fn run_ai(req: AiRequest) -> Result<Value, AiError> {
+    if req.provider.kind == ProviderKind::ClaudeCli {
+        let bin = req
+            .bin
+            .clone()
+            .or_else(|| req.provider.command.as_deref().filter(|s| !s.trim().is_empty()).map(PathBuf::from));
+        return run_claude_with_thinking(
+            ClaudeRequest {
+                model: req.model,
+                system_prompt: req.system_prompt,
+                schema: req.schema,
+                payload: req.payload,
+                web: req.web,
+                timeout: req.timeout,
+                cancel: req.cancel,
+                bin,
+                notes: req.notes,
+            },
+            req.thinking,
+        )
+        .await;
+    }
+
+    let registration = req.cancel.clone().map(Registration::new);
+    let cancelled = async {
+        match &registration {
+            Some(r) => r.token.notified().await,
+            None => std::future::pending().await,
+        }
+    };
+    let timeout = req.timeout;
+    let provider_name = req.provider.name.clone();
+
+    let call = async {
+        match req.provider.kind {
+            ProviderKind::ClaudeCli => unreachable!(),
+            ProviderKind::AgyAcp | ProviderKind::Acp => run_acp(&req).await,
+            ProviderKind::CodexCli => run_codex(&req).await,
+            ProviderKind::OpenAi => run_openai(&req).await,
+            ProviderKind::Anthropic => run_anthropic(&req).await,
+            ProviderKind::Gemini => run_gemini(&req).await,
+        }
+    };
+
+    tokio::select! {
+        res = call => res,
+        _ = cancelled => Err(AiError::Cancelled),
+        _ = tokio::time::sleep(timeout) => {
+            fail(format!("{provider_name} timed out after {}s", timeout.as_secs()))
+        }
     }
 }

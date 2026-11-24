@@ -5,6 +5,7 @@ mod system_trash;
 
 use duragon_core::ai::notes_mcp::{self, NotesSearch};
 use duragon_core::ai::{Ai, Events};
+use duragon_core::credentials::CredentialsStore;
 use duragon_core::db::Db;
 use duragon_core::model::Appearance;
 use duragon_core::trash::Trash;
@@ -62,6 +63,7 @@ pub struct AppState {
     pub trash: Trash,
     pub ai: Ai,
     pub voice: Voice,
+    pub credentials: CredentialsStore,
 }
 
 /// `duragon --notes-mcp <db> <open note id>`: the side chat's notes search server, spawned by the `claude` CLI.
@@ -90,7 +92,9 @@ fn main() {
             let db_path = dir.join("duragon.db");
             let db = Db::open(&db_path)?;
             open_window(app, db.get_settings().map(|s| s.appearance).unwrap_or(Appearance::System))?;
+            let credentials = CredentialsStore::new(dir.join("credentials.json"));
             let mut ai = Ai::new(db.clone(), Arc::new(TauriEvents(app.handle().clone())));
+            ai.credentials = Some(credentials.clone());
             match std::env::current_exe() {
                 Ok(exe) => ai.notes_search = Some(NotesSearch { exe, db: db_path }),
                 Err(e) => eprintln!("duragon: notes search unavailable: {e}"),
@@ -103,7 +107,7 @@ fn main() {
             });
             let voice = Voice::new(dir.join("models"), emit);
             let trash = Trash::new(db.clone(), dir.join(".trash"), Arc::new(system_trash::OsTrash));
-            app.manage(AppState { db, trash, ai, voice });
+            app.manage(AppState { db, trash, ai, voice, credentials });
             Ok(())
         })
         .invoke_handler(commands::handler())

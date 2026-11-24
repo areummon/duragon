@@ -122,7 +122,7 @@ fn untitled(title: &str) -> &str {
     if title.trim().is_empty() { "Untitled" } else { title }
 }
 
-fn search(db: &Db, exclude: &str, query: &str) -> Result<String, String> {
+pub(crate) fn search(db: &Db, exclude: &str, query: &str) -> Result<String, String> {
     let hits = db.search_other_notes(query, exclude, SEARCH_LIMIT).map_err(|e| format!("search failed: {e}"))?;
     if hits.is_empty() {
         return Ok(format!("No other notes matched \"{query}\"."));
@@ -143,7 +143,7 @@ fn search(db: &Db, exclude: &str, query: &str) -> Result<String, String> {
     Ok(out)
 }
 
-fn read(db: &Db, exclude: &str, id: &str) -> Result<String, String> {
+pub(crate) fn read(db: &Db, exclude: &str, id: &str) -> Result<String, String> {
     if id == exclude {
         return Err("That is the note open now; you already have it.".into());
     }

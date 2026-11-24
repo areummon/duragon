@@ -1,7 +1,7 @@
 //! What each AI task may use: one row per task, read by the request, the prompts and the budget.
 use std::time::Duration;
 
-use crate::model::{AiTask, Settings};
+use crate::model::{AiTask, Settings, ThinkingLevel};
 
 /// Which of the writer's model settings runs a task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,6 +17,22 @@ impl ModelSlot {
             ModelSlot::Read => &settings.read_model,
             ModelSlot::Chat => &settings.chat_model,
             ModelSlot::Draw => &settings.draw_model,
+        }
+    }
+
+    pub fn provider_of(self, settings: &Settings) -> &str {
+        match self {
+            ModelSlot::Read => &settings.read_provider,
+            ModelSlot::Chat => &settings.chat_provider,
+            ModelSlot::Draw => &settings.draw_provider,
+        }
+    }
+
+    pub fn thinking_of(self, settings: &Settings) -> ThinkingLevel {
+        match self {
+            ModelSlot::Read => settings.read_thinking,
+            ModelSlot::Chat => settings.chat_thinking,
+            ModelSlot::Draw => settings.draw_thinking,
         }
     }
 }

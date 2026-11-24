@@ -47,6 +47,205 @@ str_enum!(AiTask {
     Chat => "chat", Ask => "ask", Visualize => "visualize", Draw => "draw", Learn => "learn",
     Summarize => "summarize",
 });
+str_enum!(
+    /// Reasoning / thinking depth for a model slot.
+    ThinkingLevel {
+        Default => "default",
+        Low => "low",
+        Medium => "medium",
+        High => "high",
+        XHigh => "xhigh",
+    }
+);
+str_enum!(
+    /// How Duragon talks to an AI provider.
+    ProviderKind {
+        ClaudeCli => "claude-cli",
+        AgyAcp => "agy-acp",
+        CodexCli => "codex-cli",
+        Acp => "acp",
+        OpenAi => "openai",
+        Anthropic => "anthropic",
+        Gemini => "gemini",
+    }
+);
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderConfig {
+    pub id: String,
+    pub name: String,
+    pub kind: ProviderKind,
+    /// Base URL for HTTP providers (e.g. "https://openrouter.ai/api/v1").
+    #[serde(default)]
+    pub base_url: Option<String>,
+    /// Binary name or path for CLI / ACP providers (e.g. "claude", "agy", "codex").
+    #[serde(default)]
+    pub command: Option<String>,
+    /// Extra CLI arguments for CLI / ACP providers (e.g. ["acp"] for agy).
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Environment variable checked as API key fallback.
+    #[serde(default)]
+    pub env_var: Option<String>,
+    /// Suggested model names shown in the UI.
+    #[serde(default)]
+    pub models: Vec<String>,
+    /// Built-in preset (cannot be deleted, only configured).
+    #[serde(default)]
+    pub builtin: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderCredentialStatus {
+    pub provider_id: String,
+    pub has_stored_key: bool,
+    pub masked_key: Option<String>,
+    pub env_var: Option<String>,
+    pub has_env_key: bool,
+}
+
+pub const DEFAULT_PROVIDER_ID: &str = "claude-cli";
+
+pub fn default_providers() -> Vec<ProviderConfig> {
+    let s = |v: &[&str]| v.iter().map(|x| (*x).to_string()).collect::<Vec<_>>();
+    vec![
+        ProviderConfig {
+            id: "claude-cli".into(),
+            name: "Claude CLI".into(),
+            kind: ProviderKind::ClaudeCli,
+            base_url: None,
+            command: Some("claude".into()),
+            args: vec![],
+            env_var: None,
+            models: s(&["haiku", "sonnet", "opus", "fable"]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "agy-acp".into(),
+            name: "Antigravity CLI (ACP)".into(),
+            kind: ProviderKind::AgyAcp,
+            base_url: None,
+            command: Some("agy".into()),
+            args: s(&["acp"]),
+            env_var: None,
+            models: s(&[
+                "gemini-4-neon",
+                "gemini-4-carbon",
+                "gemini-4-argon",
+                "gemini-4-hydrogen",
+                "gemini-3.8-flash",
+            ]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "codex-cli".into(),
+            name: "OpenAI OAuth (Codex CLI)".into(),
+            kind: ProviderKind::CodexCli,
+            base_url: None,
+            command: Some("codex".into()),
+            args: vec![],
+            env_var: None,
+            models: s(&["gpt-5.4", "gpt-5.3-codex", "o3", "o4-mini"]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "openrouter".into(),
+            name: "OpenRouter".into(),
+            kind: ProviderKind::OpenAi,
+            base_url: Some("https://openrouter.ai/api/v1".into()),
+            command: None,
+            args: vec![],
+            env_var: Some("OPENROUTER_API_KEY".into()),
+            models: s(&[
+                "anthropic/claude-sonnet-4",
+                "anthropic/claude-opus-4",
+                "openai/gpt-4.1",
+                "google/gemini-2.5-pro",
+                "deepseek/deepseek-chat-v3-0324",
+            ]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "openai".into(),
+            name: "OpenAI API".into(),
+            kind: ProviderKind::OpenAi,
+            base_url: Some("https://api.openai.com/v1".into()),
+            command: None,
+            args: vec![],
+            env_var: Some("OPENAI_API_KEY".into()),
+            models: s(&["gpt-4.1", "gpt-4.1-mini", "gpt-5", "o4-mini"]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "anthropic".into(),
+            name: "Anthropic API".into(),
+            kind: ProviderKind::Anthropic,
+            base_url: Some("https://api.anthropic.com".into()),
+            command: None,
+            args: vec![],
+            env_var: Some("ANTHROPIC_API_KEY".into()),
+            models: s(&["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-haiku-4-5-20251001"]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "gemini".into(),
+            name: "Google Gemini API".into(),
+            kind: ProviderKind::Gemini,
+            base_url: Some("https://generativelanguage.googleapis.com/v1beta".into()),
+            command: None,
+            args: vec![],
+            env_var: Some("GEMINI_API_KEY".into()),
+            models: s(&["gemini-2.5-pro", "gemini-2.5-flash"]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "deepseek".into(),
+            name: "DeepSeek".into(),
+            kind: ProviderKind::OpenAi,
+            base_url: Some("https://api.deepseek.com/v1".into()),
+            command: None,
+            args: vec![],
+            env_var: Some("DEEPSEEK_API_KEY".into()),
+            models: s(&["deepseek-chat", "deepseek-reasoner"]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "zlm".into(),
+            name: "Z.AI / GLM (ZLM)".into(),
+            kind: ProviderKind::OpenAi,
+            base_url: Some("https://api.z.ai/api/paas/v4".into()),
+            command: None,
+            args: vec![],
+            env_var: Some("ZAI_API_KEY".into()),
+            models: s(&["glm-4.5", "glm-4.5-air", "glm-4-plus"]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "mimo".into(),
+            name: "Xiaomi MiMo".into(),
+            kind: ProviderKind::OpenAi,
+            base_url: Some("https://api.xiaomimimo.com/v1".into()),
+            command: None,
+            args: vec![],
+            env_var: Some("MIMO_API_KEY".into()),
+            models: s(&["mimo-v2-flash", "mimo-v2-pro"]),
+            builtin: true,
+        },
+        ProviderConfig {
+            id: "opencode-go".into(),
+            name: "OpenCode Go".into(),
+            kind: ProviderKind::OpenAi,
+            base_url: Some("https://opencode.ai/zen/go/v1".into()),
+            command: None,
+            args: vec![],
+            env_var: Some("OPENCODE_API_KEY".into()),
+            models: s(&["glm-5", "kimi-k2.5", "minimax-m2.5", "mimo-v2-pro"]),
+            builtin: true,
+        },
+    ]
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -241,9 +440,16 @@ pub struct Settings {
     pub learn_about_you: bool,
     pub search_my_notes: bool,
     pub explain_symbols: bool,
+    pub read_provider: String,
+    pub chat_provider: String,
+    pub draw_provider: String,
     pub read_model: String,
     pub chat_model: String,
     pub draw_model: String,
+    pub read_thinking: ThinkingLevel,
+    pub chat_thinking: ThinkingLevel,
+    pub draw_thinking: ThinkingLevel,
+    pub providers: Vec<ProviderConfig>,
     pub sidebar_open: bool,
     pub deleted_notes: DeleteMode,
 }
@@ -268,12 +474,45 @@ impl Default for Settings {
             learn_about_you: true,
             search_my_notes: false,
             explain_symbols: false,
+            read_provider: DEFAULT_PROVIDER_ID.into(),
+            chat_provider: DEFAULT_PROVIDER_ID.into(),
+            draw_provider: DEFAULT_PROVIDER_ID.into(),
             read_model: "sonnet".into(),
             chat_model: "sonnet".into(),
             draw_model: "opus".into(),
+            read_thinking: ThinkingLevel::Default,
+            chat_thinking: ThinkingLevel::Default,
+            draw_thinking: ThinkingLevel::Default,
+            providers: default_providers(),
             sidebar_open: false,
             deleted_notes: DeleteMode::Duragon,
         }
+    }
+}
+
+impl Settings {
+    /// Returns all providers, merging in any newly added built-in presets and refreshing built-in model lists.
+    pub fn resolved_providers(&self) -> Vec<ProviderConfig> {
+        let mut out = if self.providers.is_empty() { default_providers() } else { self.providers.clone() };
+        for preset in default_providers() {
+            if let Some(existing) = out.iter_mut().find(|p| p.id == preset.id) {
+                if existing.builtin {
+                    existing.models = preset.models;
+                }
+            } else {
+                out.push(preset);
+            }
+        }
+        out
+    }
+
+    pub fn provider(&self, id: &str) -> ProviderConfig {
+        let list = self.resolved_providers();
+        list.iter()
+            .find(|p| p.id == id)
+            .cloned()
+            .or_else(|| list.into_iter().find(|p| p.id == DEFAULT_PROVIDER_ID))
+            .unwrap_or_else(|| default_providers().into_iter().next().unwrap())
     }
 }
 

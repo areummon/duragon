@@ -1200,6 +1200,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "docx-rs",
+ "reqwest 0.12.28",
  "roxmltree",
  "rusqlite",
  "serde",
