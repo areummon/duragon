@@ -95,7 +95,6 @@ export interface Settings {
   pageWidth: number | null;
   lettering: 'own' | 'notes';
   inkColour: 'ink' | 'blue' | 'green' | 'red' | 'purple' | 'brown' | 'orange';
-  inkFromPointer: boolean;
   justMyWords: boolean;
   aboutYou: string;
   learnAboutYou: boolean;

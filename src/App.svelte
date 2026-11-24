@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import ChatPanel from './lib/components/ChatPanel.svelte';
   import DrawingDialog from './lib/components/DrawingDialog.svelte';
-  import InkDrops from './lib/components/InkDrops.svelte';
   import ThreadDialog from './lib/components/ThreadDialog.svelte';
   import CommandPalette from './lib/components/CommandPalette.svelte';
   import Page from './lib/components/Page.svelte';
@@ -68,7 +67,6 @@
   <ChatPanel />
   <ThreadDialog />
   <DrawingDialog />
-  <InkDrops />
   {#if app.paletteOpen}<CommandPalette />{/if}
   <CustomizeDialog />
   <MindDialog />

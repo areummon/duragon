@@ -75,7 +75,6 @@ interface Settings {
   pageWidth: number | null;            // px, null = default 690
   lettering: 'own' | 'notes';          // Newsreader serif | same as notes
   inkColour: 'ink' | 'blue' | 'green' | 'red' | 'purple' | 'brown' | 'orange';
-  inkFromPointer: boolean;
   justMyWords: boolean;                // hide all Riddled marks
   aboutYou: string;                    // <= 700 chars
   learnAboutYou: boolean;

@@ -23,7 +23,6 @@ const DEFAULT_SETTINGS: Settings = {
   pageWidth: null,
   lettering: 'own',
   inkColour: 'ink',
-  inkFromPointer: false,
   justMyWords: false,
   aboutYou: '',
   learnAboutYou: true,

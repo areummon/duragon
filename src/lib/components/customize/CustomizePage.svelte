@@ -35,7 +35,6 @@
     width: 'page width reset',
     lettering: "lettering duragon's own like your notes font",
     colour: 'colour color ink blue green red purple brown orange',
-    pointer: 'ink from the pointer drops',
     readModel: 'reading model',
     chatModel: 'chat model',
     drawModel: 'drawing model',
@@ -43,7 +42,7 @@
   const GROUPS: Record<keyof typeof SECTIONS, string[]> = {
     reading: ['start', 'pace', 'place', 'web', 'notes', 'symbols'],
     voice: ['speak', 'pick', 'speed'],
-    look: ['appearance', 'size', 'width', 'lettering', 'colour', 'pointer'],
+    look: ['appearance', 'size', 'width', 'lettering', 'colour'],
     models: ['readModel', 'chatModel', 'drawModel'],
   };
   const secOn = (k: keyof typeof SECTIONS) => !q || SECTIONS[k].includes(q) || GROUPS[k].some((r) => ROWS[r].includes(q));
@@ -228,9 +227,6 @@
           {/each}
         </div>
       </div>
-    {/if}
-    {#if on('look', 'pointer')}
-      <div class="group"><SwitchRow title="Ink from the pointer" desc="Now and then a drop of ink falls as you move the pointer, then dries and fades." on={s.inkFromPointer} onchange={(v) => set({ inkFromPointer: v })} /></div>
     {/if}
   </section>
 {/if}
