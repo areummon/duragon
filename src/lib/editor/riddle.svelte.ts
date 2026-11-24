@@ -132,7 +132,8 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
 
   /**
    * An answer sits below the line that asked for it. Writing continues below the answer: a request on the last line gets
-   * an empty line after it, and a caret still resting at the end of the request moves down to that line.
+   * an empty line after it, and a caret still resting at the end of the request moves down to an empty line after it,
+   * opened there when the next line has text.
    */
   function lineAfter(quoteEnd: number) {
     const { state } = view;
@@ -140,12 +141,11 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     const start = block.before(1);
     const end = block.after(1);
     const next = state.doc.nodeAt(end);
-    const tr = state.tr;
-    if (!next) tr.insert(end, state.schema.nodes.paragraph.create());
-    const below = tr.doc.nodeAt(end);
     const sel = state.selection;
     const resting = sel.empty && sel.from > start && sel.from === end - 1;
-    if (resting && below?.isTextblock && below.content.size === 0) tr.setSelection(TextSelection.create(tr.doc, end + 1));
+    const tr = state.tr;
+    if (!next || (resting && !(next.isTextblock && next.content.size === 0))) tr.insert(end, state.schema.nodes.paragraph.create());
+    if (resting) tr.setSelection(TextSelection.create(tr.doc, end + 1));
     if (tr.docChanged || tr.selectionSet) view.dispatch(tr.setMeta('addToHistory', false).setMeta(QUIET, true));
   }
 
