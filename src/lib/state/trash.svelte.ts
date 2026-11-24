@@ -4,13 +4,22 @@ import { showToast } from './toast.svelte';
 
 export const trash = $state<TrashList & { loaded: boolean }>({ notes: [], unreadable: 0, loaded: false });
 
+/** Only the newest load is shown, whichever comes back last. */
+let newest = 0;
+
 export async function loadTrash() {
+  const mine = ++newest;
   try {
-    Object.assign(trash, await (await getBackend()).listTrash());
-    trash.loaded = true;
+    const list = await (await getBackend()).listTrash();
+    if (mine === newest) Object.assign(trash, list, { loaded: true });
   } catch {
-    showToast('The trash couldn’t be opened.');
+    if (mine === newest) showToast('The trash couldn’t be opened.');
   }
+}
+
+export function forgetTrash() {
+  newest++;
+  Object.assign(trash, { notes: [], unreadable: 0, loaded: false });
 }
 
 /** Deletes exactly these, so a note that arrives meanwhile stays. */

@@ -243,7 +243,7 @@
         <h4 id="g-deleted">Deleted notes</h4>
         <div class="grid three" role="radiogroup" aria-labelledby="g-deleted">
           <Choice selected={s.deletedNotes === 'duragon'} onpick={() => set({ deletedNotes: 'duragon' })} title="Duragon’s trash" desc="Kept in .trash until you empty it." />
-          <Choice selected={s.deletedNotes === 'system'} onpick={() => set({ deletedNotes: 'system' })} title="System trash" desc="Put back from there, a note returns to Duragon’s trash." />
+          <Choice selected={s.deletedNotes === 'system'} onpick={() => set({ deletedNotes: 'system' })} title="System trash" desc="Moved to your computer’s trash. Restore it there, and it shows in Duragon’s Trash." />
           <Choice selected={s.deletedNotes === 'permanent'} onpick={() => set({ deletedNotes: 'permanent' })} title="Delete for good" desc="Asks first. Nothing is kept." />
         </div>
       </div>

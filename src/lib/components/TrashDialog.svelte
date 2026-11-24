@@ -6,18 +6,20 @@
   import { focusLost, takeFocus } from '../focus';
   import { pop, unfold, veil } from '../motion/transitions';
   import { app, restoreNote } from '../state/app.svelte';
-  import { deleteForever, loadTrash, trash } from '../state/trash.svelte';
+  import { deleteForever, forgetTrash, loadTrash, trash } from '../state/trash.svelte';
 
   let card = $state<HTMLElement>();
-  /** What waits for a yes: a note's id, or the whole trash. */
-  let asking = $state<{ id: string } | 'all' | null>(null);
+  /** What waits for a yes, as it was when asked: a row's note, or every note in the list. */
+  let asking = $state<{ kind: 'row' | 'all'; ids: string[] } | null>(null);
   let busy = $state(false);
 
   const close = () => (app.trashOpen = false);
-  const askingFor = (n: TrashedNote) => asking !== null && asking !== 'all' && asking.id === n.id;
+  const askingFor = (n: TrashedNote) => asking?.kind === 'row' && asking.ids[0] === n.id;
 
-  $effect(() => {
+  // Before the page updates, so an old list is never drawn.
+  $effect.pre(() => {
     if (!app.trashOpen) return;
+    forgetTrash();
     void loadTrash();
     return () => (asking = null);
   });
@@ -36,7 +38,7 @@
     (rows[Math.min(row, rows.length - 1)] ?? card).focus({ preventScroll: true });
   }
 
-  async function act(work: () => Promise<void>, row = 0) {
+  async function act(work: () => Promise<unknown>, row = 0) {
     if (busy) return;
     busy = true;
     try {
@@ -95,7 +97,7 @@
                 <button class="quiet keep" onclick={() => keep(i)}>Keep it</button>
               {:else}
                 <button class="quiet restore" aria-describedby="trash-{n.id}" disabled={busy} onclick={() => act(() => restoreNote(n.id), i)}>Restore</button>
-                <button class="quiet" aria-describedby="trash-{n.id}" disabled={busy} onclick={() => ask({ id: n.id })}>Delete for good</button>
+                <button class="quiet" aria-describedby="trash-{n.id}" disabled={busy} onclick={() => ask({ kind: 'row', ids: [n.id] })}>Delete for good</button>
               {/if}
             </div>
           </li>
@@ -111,13 +113,14 @@
       {/if}
       {#if trash.notes.length > 0}
         <div class="foot">
-          {#if asking === 'all'}
-            <span class="grow">{trash.notes.length === 1 ? 'Delete this note for good?' : `Delete all ${trash.notes.length} notes for good?`}</span>
-            <button class="quiet danger" disabled={busy} onclick={() => act(() => deleteForever(trash.notes.map((n) => n.id)))}>Delete</button>
-            <button class="quiet keep" onclick={() => keep()}>{trash.notes.length === 1 ? 'Keep it' : 'Keep them'}</button>
+          {#if asking?.kind === 'all'}
+            {@const ids = asking.ids}
+            <span class="grow">{ids.length === 1 ? 'Delete this note for good?' : `Delete ${ids.length} notes for good?`}</span>
+            <button class="quiet danger" disabled={busy} onclick={() => act(() => deleteForever(ids))}>Delete</button>
+            <button class="quiet keep" onclick={() => keep()}>{ids.length === 1 ? 'Keep it' : 'Keep them'}</button>
           {:else}
             <span class="grow"></span>
-            <button class="quiet" disabled={busy} onclick={() => ask('all')}>Empty trash</button>
+            <button class="quiet" disabled={busy} onclick={() => ask({ kind: 'all', ids: trash.notes.map((n) => n.id) })}>Empty trash</button>
           {/if}
         </div>
       {/if}

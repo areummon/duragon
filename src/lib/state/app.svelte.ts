@@ -71,9 +71,6 @@ export async function newNote(title = '') {
   app.focusTitle = title === '';
 }
 
-/** Deleted while open, so getting one of these back opens it again. */
-const openAtDelete = new Set<string>();
-
 /** To the note open before this one. */
 async function leaveNote(id: string) {
   const left = new Set(notes.list.map((n) => n.id));
@@ -86,41 +83,51 @@ async function leaveNote(id: string) {
 /** `mode` is what the menu offered, so a setting that changes meanwhile never turns a trip to the trash into a loss. */
 export async function deleteNote(id: string, mode: DeleteMode) {
   const wasOpen = app.note?.id === id;
+  let movedTo: string | undefined;
   let went: DeleteMode;
   try {
     // What was typed in the note is stored first, which would fail once it is gone.
     if (wasOpen) {
       await leaveNote(id);
+      movedTo = app.note?.id;
       // Its editor is gone a tick later, and hands over what was typed while the next note loaded.
       await tick();
     }
     await storeNote(id);
     went = await (await getBackend()).deleteNote(id, mode);
   } catch {
-    showToast('That note couldn’t be deleted.');
-    if (wasOpen) await openNote(id);
-    return;
+    await refreshNotes().catch(() => {});
+    if (app.note?.id === id || notes.list.some((n) => n.id === id)) {
+      showToast('That note couldn’t be deleted.');
+      if (wasOpen) await openNote(id).catch(() => {});
+      return;
+    }
+    went = mode === 'permanent' ? mode : 'duragon';
   }
   removeMeta(id);
-  if (wasOpen) openAtDelete.add(id);
-  else openAtDelete.delete(id);
-  const undo = { label: 'Undo', run: () => void restoreNote(id) };
+  const undo = { label: 'Undo', run: () => void undoDelete(id, movedTo) };
   if (went === 'system') showToast('Moved to the system trash');
   else if (went === 'duragon') showToast(mode === 'system' ? 'The system trash wouldn’t take it. It’s in Duragon’s Trash.' : 'Moved to Trash', undo);
 }
 
-/** Reopens a note that was open when it was deleted. */
-export async function restoreNote(id: string) {
+/** Reopens the note when the writer is still on the one that deleting it moved them to. */
+async function undoDelete(id: string, movedTo: string | undefined) {
+  if (!(await restoreNote(id)) || !movedTo || app.note?.id !== movedTo) return;
+  app.trashOpen = false;
+  await openNote(id);
+}
+
+/** Whether the note is back. */
+export async function restoreNote(id: string): Promise<boolean> {
+  let back = false;
   try {
     upsertMeta(await (await getBackend()).restoreNote(id));
-    if (openAtDelete.delete(id)) {
-      app.trashOpen = false;
-      await openNote(id);
-    }
+    back = true;
   } catch {
     showToast('That note couldn’t be restored.');
   }
   if (app.trashOpen) await loadTrash();
+  return back;
 }
 
 export async function updateMeta(patch: NoteMetaPatch) {
