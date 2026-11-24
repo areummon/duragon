@@ -15,9 +15,11 @@
   let { open, onclose, align = 'left', up = false, at, width, label, children }: Props = $props();
 
   function dismiss(node: HTMLElement) {
+    // A menu under its button counts the button as inside, so pressing it toggles. One opened at the pointer has no
+    // button beside it, and its parent can hold the whole page, so only the menu itself is inside.
     const away = (e: PointerEvent) => {
-      const host = node.parentElement;
-      if (!host?.contains(e.target as Node)) onclose();
+      const inside = at ? node : node.parentElement;
+      if (!inside?.contains(e.target as Node)) onclose();
     };
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {

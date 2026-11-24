@@ -13,6 +13,7 @@
   const QUOTE_GAP = 9;
 
   let heights = $state<Record<string, number>>({});
+  const lastTop = new Map<string, number>();
 
   interface Placed {
     thread: ThreadModel;
@@ -37,7 +38,9 @@
     for (const t of shown) {
       const g = geometry.byId[t.id];
       if (g === undefined) continue;
-      anchored.push({ t, top: g ? g.top : Number.POSITIVE_INFINITY, orphan: g === null });
+      if (g) lastTop.set(t.id, g.top);
+      // Editing the quoted words unanchors a thread for as long as they differ; it waits where it was, not at the top.
+      anchored.push({ t, top: (g ? g.top : lastTop.get(t.id)) ?? Number.POSITIVE_INFINITY, orphan: g === null });
     }
     anchored.sort((a, b) => a.top - b.top || a.t.createdAt - b.t.createdAt);
 
@@ -45,7 +48,7 @@
     const out: Placed[] = [];
     for (const a of anchored) {
       const side = sideOf(a.t);
-      const y = a.orphan ? bottoms[side] + GAP + 24 : Math.max(a.top, bottoms[side] + GAP);
+      const y = Number.isFinite(a.top) ? Math.max(a.top, bottoms[side] + GAP) : bottoms[side] + GAP + 24;
       bottoms[side] = y + (heights[a.t.id] ?? 60);
       out.push({ thread: a.t, side, y, orphan: a.orphan });
     }
