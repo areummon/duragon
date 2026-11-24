@@ -2,7 +2,7 @@
   import Check from 'lucide-svelte/icons/check';
   import Search from 'lucide-svelte/icons/search';
   import { onMount, tick } from 'svelte';
-  import { isReady, THINKING_LEVELS, type Job, type ProviderView } from '../../api/providers';
+  import { isReady, modelsOf, THINKING_LEVELS, type Job, type ProviderView } from '../../api/providers';
   import type { ProviderConfig } from '../../api/types';
   import { rise } from '../../motion/transitions';
   import { settings, updateSettings } from '../../state/settings.svelte';
@@ -19,6 +19,7 @@
 
   interface Option {
     provider: ProviderConfig;
+    /** '' only says that a name has to be typed. */
     model: string;
     text: string;
   }
@@ -34,9 +35,10 @@
   const groups = $derived.by(() => {
     const q = typed.toLowerCase();
     const found = choices.map(({ provider }) => {
-      const models = provider === current.provider && model && !provider.models.includes(model) ? [model, ...provider.models] : provider.models;
-      const matches = provider.name.toLowerCase().includes(q) ? models : models.filter((m) => m.toLowerCase().includes(q));
-      return { label: provider.name, options: matches.map((m): Option => ({ provider, model: m, text: m })) };
+      const listed = modelsOf(provider);
+      const models = provider === current.provider && model && !listed.includes(model) ? [model, ...listed] : listed;
+      const matches = provider.name.toLowerCase().includes(q) ? (models.length ? models : ['']) : models.filter((m) => m.toLowerCase().includes(q));
+      return { label: provider.name, options: matches.map((m): Option => ({ provider, model: m, text: m || 'Type the name of its model' })) };
     });
     const free = choices.filter((v) => typed && isReady(v) && !found.some((g) => g.options.some((o) => o.provider === v.provider && o.model === typed)));
     return [...found, { label: `Use “${typed}” with`, options: free.map(({ provider }): Option => ({ provider, model: typed, text: provider.name })) }]
@@ -45,7 +47,8 @@
   const options = $derived(groups.flatMap((g) => g.options));
 
   const isCurrent = (o: Option) => o.provider === current.provider && o.model === model;
-  const start = () => Math.max(0, typed ? options.findIndex((o) => o.text.toLowerCase() === typed.toLowerCase()) : options.findIndex(isCurrent));
+  const named = (o: Option) => o.text !== o.provider.name && o.text.toLowerCase() === typed.toLowerCase();
+  const start = () => Math.max(0, options.findIndex(typed ? named : isCurrent));
 
   let index = $state(start());
 
@@ -66,6 +69,7 @@
   }
 
   function pick(o: Option) {
+    if (!o.model) return;
     if (!isCurrent(o)) void updateSettings({ [job.providerKey]: o.provider.id, [job.modelKey]: o.model });
     onclose();
   }
@@ -113,7 +117,7 @@
         <div class="glabel" aria-hidden="true" title={g.label}>{g.label}</div>
         {#each g.options as o (`${o.provider.id} ${o.model}`)}
           {@const i = options.indexOf(o)}
-          <div id="model-{i}" class="opt" class:active={i === index} role="option" aria-selected={i === index} tabindex="-1" title={o.text}
+          <div id="model-{i}" class="opt" class:active={i === index} class:note={!o.model} role="option" aria-selected={i === index} aria-disabled={!o.model} tabindex="-1" title={o.text}
             onpointerdown={(e) => e.preventDefault()} onclick={() => pick(o)} onmousemove={() => (index = i)} onkeydown={() => {}}>
             <span class="what">{o.text}</span>
             {#if isCurrent(o)}<span class="check" role="img" aria-label="In use"><Check size={15} strokeWidth={1.6} /></span>{/if}
@@ -140,6 +144,7 @@
   .glabel { padding: 8px 10px 4px; font-size: 12px; line-height: 1.3; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .opt { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 6px 10px; border-radius: 7px; font-size: 13.5px; line-height: 1.3; cursor: default; }
   .opt.active { background: var(--shelf); }
+  .opt.note { color: var(--faint); }
   .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .check { display: grid; flex: none; color: var(--graphite); }
   .think { margin: 4px -4px 0; padding: 10px 14px 12px; border-top: 1px solid var(--rule); }

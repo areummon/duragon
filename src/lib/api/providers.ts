@@ -144,6 +144,9 @@ export function isHttpKind(kind: ProviderKind): boolean {
   return kind === 'openai' || kind === 'anthropic' || kind === 'gemini';
 }
 
+/** What a job can pick. The CLIs and agents take `default` as no model, and choose their own. */
+export const modelsOf = ({ kind, models }: ProviderConfig): string[] => (models.length || isHttpKind(kind) ? models : ['default']);
+
 export function mergeProviders(saved: ProviderConfig[] | undefined): ProviderConfig[] {
   const base = saved && saved.length > 0 ? saved.map((p) => ({ ...p, args: [...(p.args ?? [])], models: [...new Set(p.models ?? [])] })) : [];
   for (const preset of DEFAULT_PROVIDERS) {
