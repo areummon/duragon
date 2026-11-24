@@ -13,7 +13,7 @@ import { measureLines } from './pencil';
 import { current } from './current';
 import { QUIET } from './create';
 import { TextSelection } from '@tiptap/pm/state';
-import { docBlocks, lineOccurrence } from './plain';
+import { blockText, docBlocks, lineOccurrence } from './plain';
 import type { BlockChange } from './Editor.svelte';
 
 const PACE = { regular: 900, slow: 1800 } as const;
@@ -133,16 +133,16 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
   /**
    * An answer sits below the line that asked for it. Writing continues below the answer: a request on the last line gets
    * an empty line after it, and a caret still resting at the end of the request moves down to an empty line after it,
-   * opened there when the next line has text.
+   * opened there when the next line has text. A caret at the end of a line written on past the request stays put.
    */
-  function lineAfter(quoteEnd: number) {
+  function lineAfter(quoteEnd: number, quote: string) {
     const { state } = view;
     const block = state.doc.resolve(quoteEnd - 1);
     const start = block.before(1);
     const end = block.after(1);
     const next = state.doc.nodeAt(end);
     const sel = state.selection;
-    const resting = sel.empty && sel.from > start && sel.from === end - 1;
+    const resting = sel.empty && sel.from > start && sel.from === end - 1 && blockText(block.node(1)).trim() === quote;
     const tr = state.tr;
     if (!next || (resting && !(next.isTextblock && next.content.size === 0))) tr.insert(end, state.schema.nodes.paragraph.create());
     if (resting) tr.setSelection(TextSelection.create(tr.doc, end + 1));
@@ -174,7 +174,7 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
           if (t.kind !== 'reply' || placed.has(t.id) || age > JUST_ARRIVED_MS) continue;
           placed.add(t.id);
           const r = anchorKey.getState(view.state)?.ranges.get(t.id);
-          if (r) lineAfter(r.to);
+          if (r) lineAfter(r.to, t.quote);
         }
       });
       measure();

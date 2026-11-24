@@ -29,10 +29,13 @@ export function blockTexts(doc: unknown): string[] {
   });
 }
 
+/** One top-level block's text, as `blockTexts` reads it. */
+export const blockText = (block: PMNode) => block.textBetween(0, block.content.size, '\n', '\n');
+
 /** `blockTexts` of the live editor doc, without serializing it: each top-level block's text, title first. */
 export function docBlocks(doc: PMNode): string[] {
   const out: string[] = [];
-  doc.forEach((block) => out.push(block.textBetween(0, block.content.size, '\n', '\n')));
+  doc.forEach((block) => out.push(blockText(block)));
   return out;
 }
 
