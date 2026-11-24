@@ -1,17 +1,18 @@
 <script lang="ts">
   import Check from 'lucide-svelte/icons/check';
   import Play from 'lucide-svelte/icons/play';
-  import { providerViews } from '../../api/providers';
+  import { tick } from 'svelte';
+  import { JOBS, providerViews } from '../../api/providers';
   import type { Settings } from '../../api/types';
   import { credentialStatuses, settings, updateSettings } from '../../state/settings.svelte';
   import { readAloud, voice } from '../../state/voice.svelte';
   import Choice from './Choice.svelte';
-  import ModelSlots from './ModelSlots.svelte';
+  import JobRow from './JobRow.svelte';
   import PlacementPreview from './PlacementPreview.svelte';
   import ProvidersPanel from './ProvidersPanel.svelte';
   import SwitchRow from './SwitchRow.svelte';
 
-  let { query = '' }: { query?: string } = $props();
+  let { query = $bindable('') }: { query?: string } = $props();
 
   const s = $derived(settings.value);
   const q = $derived(query.trim().toLowerCase());
@@ -22,9 +23,9 @@
     voice: 'voice speak aloud speaking sound',
     look: 'look appearance theme colour color lettering text size page width ink',
     notes: 'notes what happens to the notes you delete',
-    models: 'models providers api keys claude agy antigravity acp openai codex oauth openrouter anthropic gemini deepseek zlm glm mimo opencode go',
+    models: 'models which model does each job',
   } as const;
-  const ROWS: Record<string, string> = {
+  const ROWS: Record<string, string> = $derived({
     start: 'new notes start in thinks with you when you ask reading mode',
     pace: 'reading pace regular slow',
     place: 'where questions appear both margins right margin marks only',
@@ -40,11 +41,11 @@
     lettering: "lettering duragon's own like your notes font",
     colour: 'colour color ink blue green red purple brown orange',
     deleted: "deleted notes duragon’s trash duragon's trash system trash .trash bin delete for good permanently forever undo restore recover",
-    readModel: 'reading model provider thinking effort level',
-    chatModel: 'chat model provider thinking effort level',
-    drawModel: 'drawing model provider thinking effort level',
-    providers: 'providers api keys claude agy antigravity acp codex oauth openai openrouter anthropic gemini deepseek zlm glm mimo custom',
-  };
+    readModel: 'reading reads along and asks in the margin model provider thinking effort',
+    chatModel: 'chat answers in the side chat, and when you say its name model provider thinking effort',
+    drawModel: 'drawing sketches beside your notes model provider thinking effort',
+    providers: `providers where models come from api keys address command subscription custom claude antigravity agy acp codex openai oauth zlm ${s.providers.map((p) => p.name).join(' ').toLowerCase()}`,
+  });
   const GROUPS: Record<keyof typeof SECTIONS, string[]> = {
     reading: ['start', 'pace', 'place', 'web', 'notes', 'symbols'],
     voice: ['speak', 'pick', 'speed'],
@@ -57,6 +58,14 @@
   const empty = $derived(!!q && !(Object.keys(SECTIONS) as (keyof typeof SECTIONS)[]).some(secOn));
 
   const views = $derived(providerViews(s, credentialStatuses.value, credentialStatuses.error !== null));
+  const jobs = $derived(JOBS.filter((job) => on('models', job.modelKey)));
+  let panel = $state<ProvidersPanel>();
+
+  async function onsetup() {
+    if (!panel) query = '';
+    await tick();
+    panel?.openAdd();
+  }
 
   const INKS = [
     ['ink', 'Ink', 'var(--ink)'],
@@ -254,13 +263,13 @@
 {#if secOn('models')}
   <section>
     <h3>Models</h3>
-    <p class="sub">Which provider, model, and thinking effort does each job. Pick one, or type any model name.</p>
-    <ModelSlots
-      showRead={on('models', 'readModel')}
-      showChat={on('models', 'chatModel')}
-      showDraw={on('models', 'drawModel')}
-    />
-    {#if on('models', 'providers')}<ProvidersPanel {views} />{/if}
+    <p class="sub">Which model does each job.</p>
+    {#if jobs.length}
+      <div class="jobs">
+        {#each jobs as job (job.modelKey)}<JobRow {job} {views} {onsetup} />{/each}
+      </div>
+    {/if}
+    {#if on('models', 'providers')}<ProvidersPanel bind:this={panel} {views} />{/if}
   </section>
 {/if}
 
@@ -282,6 +291,8 @@
   .sample { margin-top: 4px; line-height: 1.3; color: var(--ink); }
   .sample.serif { font-family: 'Newsreader Variable', Georgia, serif; font-size: 16px; }
   .sample.sans { font-family: var(--font-sans); font-size: 15px; }
+
+  .jobs { margin-top: 22px; border: 1px solid var(--rule); border-radius: 12px; }
 
   .voices { border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; }
   .vrow { display: flex; align-items: center; border-top: 1px solid var(--rule); }

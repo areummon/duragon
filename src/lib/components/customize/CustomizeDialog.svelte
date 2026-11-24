@@ -54,7 +54,7 @@
                   <Search size={15} strokeWidth={1.5} />
                   <input type="search" placeholder="Search settings" aria-label="Search settings" bind:value={query} />
                 </label>
-                <CustomizePageView {query} />
+                <CustomizePageView bind:query />
               {:else if app.customizePage === 'minds'}
                 <MindsPage />
               {:else if app.customizePage === 'about'}
