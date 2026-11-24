@@ -64,39 +64,49 @@ async function refreshCredentials() {
   }
 }
 
-let saving: Promise<unknown> = Promise.resolve();
+let last: Promise<unknown> = Promise.resolve();
 
-export async function updateSettings(patch: Partial<Settings>) {
+/** Saves and key changes run one at a time, in order, whether or not the one before worked. */
+function inTurn<T>(act: () => Promise<T>): Promise<T> {
+  const run = last.then(act);
+  last = run.catch(() => {});
+  return run;
+}
+
+export function updateSettings(patch: Partial<Settings>) {
   // In place, so only what reads a changed key re-runs; replacing the object re-ran every reader (~45 ms in WebKitGTK).
   Object.assign(settings.value, patch);
   apply();
-  const backend = await getBackend();
-  const save = backend.saveSettings($state.snapshot(settings.value));
-  saving = save.catch(() => {});
-  await save;
-  if (patch.providers) await refreshCredentials();
+  return inTurn(async () => {
+    await (await getBackend()).saveSettings($state.snapshot(settings.value));
+    if (patch.providers) await refreshCredentials();
+  });
 }
 
 /** Stored before it shows. The core keeps everything as it was when the provider's key can't be forgotten with it. */
-export async function removeProvider(id: string) {
-  await saving;
-  const patch = withoutProvider(settings.value, id);
-  await (await getBackend()).saveSettings($state.snapshot({ ...settings.value, ...patch }) as Settings);
-  Object.assign(settings.value, patch);
-  await refreshCredentials();
+export function removeProvider(id: string) {
+  return inTurn(async () => {
+    const without = { ...settings.value, ...withoutProvider(settings.value, id) };
+    await (await getBackend()).saveSettings($state.snapshot(without) as Settings);
+    // Worked out again, to keep an edit made meanwhile.
+    Object.assign(settings.value, withoutProvider(settings.value, id));
+    await refreshCredentials();
+  });
 }
 
-export async function setProviderKey(providerId: string, key: string) {
-  const backend = await getBackend();
-  // The core takes a key only for a provider it has stored.
-  await saving;
-  await backend.setProviderKey(providerId, key);
-  await refreshCredentials();
+// The core takes a key only for a provider it has stored.
+export function setProviderKey(providerId: string, key: string) {
+  return inTurn(async () => {
+    await (await getBackend()).setProviderKey(providerId, key);
+    await refreshCredentials();
+  });
 }
 
-export async function deleteProviderKey(providerId: string) {
-  await (await getBackend()).deleteProviderKey(providerId);
-  await refreshCredentials();
+export function deleteProviderKey(providerId: string) {
+  return inTurn(async () => {
+    await (await getBackend()).deleteProviderKey(providerId);
+    await refreshCredentials();
+  });
 }
 
 if (import.meta.env.DEV) Object.assign(window as object, { __duragon: { settings, updateSettings } });
