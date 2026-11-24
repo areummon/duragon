@@ -12,7 +12,7 @@ The Customize dialog holds the reading, voice, look and model settings, plus the
 
 ## How to get to it (user POV)
 
-- Press `Control+,` (`Cmd+,` on macOS). It toggles, and it reopens on the last page shown. While another dialog, such as the mind editor or the command palette, is open, it doesn't open Customize, but it still closes an open one beneath the dialog.
+- Press `Control+,` (`Cmd+,` on macOS). It toggles, and it reopens on the last page shown. While another dialog, such as the mind editor or the command palette, is open, it does nothing.
 - Choose `Open notes`, then `Settings` at the bottom of the sidebar, then the menuitem `Customize Ctrl ,` (`find role menuitem click --name "Customize"` matches it) or `Minds`. The menu always opens on that page.
 - The mind picker in the note header (button `Duragon`) has the menuitems `New Mind` and `Manage`.
 - `Close`, Escape or a click on the scrim closes it, and closing clears the search. Escape closes the newest layer first, so with the mind editor open, the first Escape closes the editor and the second closes Customize.

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { closeOnEscape } from '../escape';
   import EditorView, { type EditorApi } from '../editor/Editor.svelte';
   import { app } from '../state/app.svelte';
   import { riddlerName } from '../state/riddler';
@@ -41,6 +42,10 @@
       r.detach();
       riddle = null;
     };
+  });
+
+  $effect(() => {
+    if (app.tellOpen) return closeOnEscape(() => (app.tellOpen = false), () => page?.querySelector<HTMLElement>('[data-tell]'));
   });
 
   $effect(() => {
@@ -129,7 +134,7 @@
       {#if app.tellOpen}
         {#key app.note.id}<TellCard />{/key}
       {:else if app.note.brief}
-        <button class="brief" onclick={() => (app.tellOpen = true)} title="Edit what {riddlerName()} keeps in mind"><span class="label"><Pencil size={13} strokeWidth={1.5} />Tell {riddlerName()}</span><span class="text">{app.note.brief}</span></button>
+        <button class="brief" data-tell onclick={() => (app.tellOpen = true)} title="Edit what {riddlerName()} keeps in mind"><span class="label"><Pencil size={13} strokeWidth={1.5} />Tell {riddlerName()}</span><span class="text">{app.note.brief}</span></button>
       {/if}
       <div class="title-gap" class:has-meta={app.tellOpen || app.note.brief}></div>
       <EditorView

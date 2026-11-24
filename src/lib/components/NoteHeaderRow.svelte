@@ -108,7 +108,7 @@
   </div>
 
   {#if !note.brief}
-    <button class="item" aria-expanded={app.tellOpen} onclick={() => (app.tellOpen = !app.tellOpen)}>
+    <button class="item" data-tell aria-expanded={app.tellOpen} onclick={() => (app.tellOpen = !app.tellOpen)}>
       <Pencil size={15} strokeWidth={1.5} /><span>Tell {riddlerName()}</span>
     </button>
   {/if}

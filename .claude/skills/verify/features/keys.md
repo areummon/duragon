@@ -8,12 +8,12 @@ App-wide shortcuts open the palette, the chat and Customize, make and copy notes
 - `keys-shortcuts` covers `Control+K` (palette), `Control+J` (chat), `Control+,` (Customize), `Control+N` (new note), `Control+Shift+C` (copy the note), `Control+Shift+E` (export) and `Control+Shift+.` (Just my words). macOS uses `Cmd` in place of `Control`, except for `Control+N`.
 - `keys-escape` closes the newest open layer and gives focus back to what had it when the layer opened.
 - `keys-tab` moves focus through the window and round again, stays inside an open dialog, and gives focus back when something closes.
-- `keys-covered` stops `Control+K`, `Control+J` and `Control+,` from opening a panel while a dialog is open. Each still closes its own panel, even one beneath the dialog.
+- `keys-covered` stops `Control+K`, `Control+J` and `Control+,` from opening or closing a panel beneath a dialog. The palette and Customize still close by their own shortcut while they are on top.
 
 ## How to get to it (user POV)
 
 - Press `Control+k`, or choose `Find or start a note Ctrl K` in the sidebar. Type to filter, press Arrow keys to move, and press Enter to pick. The last option is `New note: <query>` unless the query matches a title exactly.
-- Press Escape. These layers close newest first: the sidebar, the side chat, the palette, Customize, the mind editor, the thread dialog, the drawing dialog, an open thread, the thread menu, popover menus, the selection toolbar and the slash list. `src/lib/escape.ts` keeps the order. A field that uses Escape itself, such as `Folder name` or the Tell card's text, takes it first. The Tell card isn't a layer, so Escape elsewhere leaves it open. Escape also stops hands-free listening (`voice.md`).
+- Press Escape. These layers close newest first: the sidebar, the Tell card, the side chat, the palette, Customize, the mind editor, the thread dialog, the drawing dialog, an open thread, the thread menu, popover menus, the selection toolbar and the slash list. `src/lib/escape.ts` keeps the order. A field that uses Escape itself, such as `Folder name`, takes it first. Escape also stops hands-free listening (`voice.md`).
 - Press Tab or Shift+Tab. In a list or code it indents or outdents, after `/` it picks, and in the title it goes to the text. Anywhere else in the note it moves on. With words selected it goes to their toolbar first. In a menu it closes the menu and goes on from the button that opened it. In a menu opened with the mouse, the first Tab goes to its first item. `src/lib/focus.ts` holds the rules.
 - The dialogs are Customize, the mind editor, the thread dialog, the drawing dialog and the palette.
 
@@ -27,7 +27,7 @@ Preconditions:
 - **Create.** Fill "Pond life", run `agent-browser wait --text "New note: Pond life"`, and press Enter. The editor's heading reads `Pond life`, and `listNotes` gains it.
 - **New note.** Press `Control+n`. `listNotes` gains a note titled `""`.
 - **Escape order.** Choose `Open notes`, press `Control+k`, and press Escape twice. The first closes the palette and focus goes back to `Close notes`. The second closes the sidebar. Then press `Control+j` and `Control+,`. The first Escape closes Customize and focus goes back to `Ask about this note`. The second closes the chat.
-- **Covered.** Press `Control+k`, then `Control+j` and `Control+,`. Only the palette is open. Press `Control+k` again, and it closes. From the mind picker (button `Duragon`, `--exact`), choose `New Mind`, then press `Control+,`. Customize stays closed. Open the chat, press `Control+k`, then `Control+j`. The chat closes and the palette stays.
+- **Covered.** Press `Control+k`, then `Control+j` and `Control+,`. Only the palette is open. Press `Control+k` again, and it closes. From the mind picker (button `Duragon`, `--exact`), choose `New Mind`, then press `Control+,`. Customize stays closed. On a fresh load, press `Control+j`, `Control+k` and `Control+j`. The chat and the palette both stay open. From Customize's `Minds`, choose `New Mind` and press `Control+,`. Both stay open.
 - **Tab round the window.** On a fresh load, press Tab. Focus goes from `Note` to the margin thread, then to `Open notes`, and never to `BODY`. Shift+Tab goes back the same way, and the caret in the note is where it was.
 - **Tab in a dialog.** Press `Control+,`, then Tab 45 times, then Shift+Tab. `document.activeElement.closest('[aria-modal="true"]')` is never null. Escape, and the `Close` button, both put focus back on `Note`.
 - **Tab to a thread.** Press Tab and Enter. Focus is on `Reply to Duragon`. Escape puts it back on the thread. At 1000×860, Tab and Enter on `Open Duragon’s thought` opens the thread, and the live `doc.childCount` stays 5 (4 blocks are stored).

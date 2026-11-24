@@ -14,7 +14,7 @@ The row above the title sets how the mind works in this note. It picks the mind 
 ## How to get to it (user POV)
 
 - The toolbar `Note settings` holds the mind picker (named after the mind), `Tell Duragon`, the mode picker, `Voice`, `Web` and `Export`. Scrolled, it becomes a pill at the top.
-- `Tell Duragon` opens a card. `Save` or `Control+Enter` saves it. `Cancel`, or Escape in its text, drops the change.
+- `Tell Duragon` opens a card. `Save` or `Control+Enter` saves it. `Cancel`, or Escape, drops the change. Focus goes back to the button that opened it, or to the brief.
 - Drag either small tick above the page's corners.
 
 ## Driving it with agent-browser
@@ -26,7 +26,7 @@ Preconditions:
 - **Mode.** Choose `Thinks with you`, then `agent-browser find role menuitemradio click --name "When you ask"`. `getNote(n.id).mode` is `asks`. Type "Plants make their food from sunlight and water." and run `agent-browser wait 5000`. `listThreads` still has one thread.
 - **Switches.** Run `agent-browser find role switch click --name "Voice" --exact`, and the same for `Web`. `voiceOn` and `webOn` are `true`.
 - **Web sources.** Turn on `Web`, press `Control+End`, type "Duragon, what is a cell?" and press Enter. After the answer, it holds links to `en.wikipedia.org` and `khanacademy.org`.
-- **Tell.** Choose `Tell Duragon`. Focus is in the card's text. Type "Prep notes" and press Escape. The card closes and `brief` is empty. Open it again, type "Prep notes" and press `Control+Enter`. `brief` is "Prep notes", and a button under the row shows it.
+- **Tell.** Choose `Tell Duragon`. Focus is in the card's text. Type "Prep notes" and press Escape. The card closes, `brief` is empty and focus is on `Tell Duragon`. Open it again, type "Prep notes" and press `Control+Enter`. `brief` is "Prep notes", and the button under the row shows it and has focus. Opened again with focus moved to `Note`, Escape closes the card too.
 - **PDF.** Set `window.print = () => { window.__printed = 1 }`, choose `Export`, then the menuitem `PDF`. `__printed` is 1.
 - **Width.** Drag `.handle.right` 40 px to the right. The readout shows `770px`, and the stored `pageWidth` is 770 after the release. Double-click the handle, and it is `null`.
 - **New mind for this note.** Choose the mind picker, then `New Mind`. Fill `Name` and `How it thinks`, and press `Control+Enter`. The picker shows the new name, and a toast says it is ready.

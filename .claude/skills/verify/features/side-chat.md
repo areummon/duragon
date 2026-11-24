@@ -15,7 +15,7 @@ The side chat lets the writer talk with the note's mind about the whole note. It
 ## How to get to it (user POV)
 
 - Choose the `Chat` button in the top bar. While the panel is open the button fades out and leaves the Tab order, but `snapshot -i` still lists it.
-- Press `Control+J` (`Cmd+J` on macOS). It toggles. While a dialog such as Customize or the command palette is open, it doesn't open the chat, but it still closes an open one beneath the dialog.
+- Press `Control+J` (`Cmd+J` on macOS). It toggles. While a dialog such as Customize or the command palette is open, it does nothing.
 - Close the panel with `Close`, Escape, `Control+J`, or a click outside it while it is not pinned. Escape closes only the newest open layer, so a Customize dialog opened over the chat closes first. `Pin open while you write` takes away the scrim and the dimming. Escape still closes a pinned chat.
 - An empty chat offers three suggestion buttons: `What am I still misunderstanding?`, `What have we figured out so far?` and `What should I work on next?`.
 
@@ -31,7 +31,7 @@ Preconditions:
 - **Rich and symbols.** Turn the setting on first (`agent-browser press Control+,`, `agent-browser find role switch click --name "Explain symbols in formulas"`, `agent-browser press Escape`). Escape closes only Customize, and the chat stays open. Ask `"Show the formula as code"` and wait for `"is one line"` (plain words, not TeX). Each symbol is a button named by its meaning, such as `area of the circle`. Run `agent-browser focus '[aria-label="area of the circle"]'` and read `document.querySelector('.symbol-tip.shown').textContent`. It returns `area of the circle`. `agent-browser press Enter` on it sends "Explain $A$ in more detail: what does it represent here?". Prove the answer by polling the store until the count reaches 6, not by waiting for reply text that is already on the page.
 - **Copy.** Stub the clipboard as `../SKILL.md` shows, then run `agent-browser find role button click --name "Copy" --exact`. `window.__copied` holds the conversation as `You: …` and `Duragon: …` paragraphs.
 - **Summary.** Send questions until the chat holds 18 messages, waiting about 3.8 s after each. The button `Earlier in this chat` appears, and `(await b.getChatSummary(n.id))` returns a non-empty string covering the first 8 messages.
-- **Clear.** Run `agent-browser find role button click --name "Clear" --exact`. The panel shows the suggestion buttons again, and `Copy`, `Clear` and `Earlier in this chat` disappear.
+- **Clear.** Run `agent-browser find role button click --name "Clear" --exact`. The panel shows the suggestion buttons again, focus is on `Ask about this note`, and `Copy`, `Clear` and `Earlier in this chat` disappear.
 - **Cleared in the store.** Run the same store read. It returns `0`, and `getChatSummary` returns `""`.
 - **Pin.** Choose `Pin open while you write`. No `.scrim` is left, and `main` loses the class `dim`.
 - **Close.** Press Escape. `agent-browser snapshot -i` no longer lists `Ask about this note`.

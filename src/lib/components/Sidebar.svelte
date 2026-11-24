@@ -110,6 +110,8 @@
   function swallowClick(e: MouseEvent) {
     if (!justDragged) return;
     justDragged = false;
+    // A press from the keyboard is not the click the drag ended with.
+    if (e.detail === 0) return;
     e.stopPropagation();
     e.preventDefault();
   }

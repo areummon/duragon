@@ -16,7 +16,7 @@
   import { cycleTab, topDialog } from './lib/focus';
   import { isMod } from './lib/keys';
   import {
-    app, copyNote, exportNote, initApp, newNote, toggleJustMyWords,
+    app, copyNote, exportNote, initApp, newNote, toggleChat, toggleJustMyWords,
   } from './lib/state/app.svelte';
 
   onMount(() => {
@@ -38,14 +38,14 @@
       e.preventDefault();
       fn();
     };
-    // A shortcut can close its panel, but not open one beneath a dialog, where Escape would close it out of sight.
-    const toggle = (open: boolean, set: (open: boolean) => void) =>
+    // A shortcut opens or closes nothing beneath a dialog, out of sight. A dialog on top closes by its own.
+    const toggle = (onTop: boolean, act: () => void) =>
       handled(() => {
-        if (open || !topDialog()) set(!open);
+        if (onTop || !topDialog()) act();
       });
-    if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') toggle(app.paletteOpen, (v) => (app.paletteOpen = v));
-    else if (mod && !e.shiftKey && e.key.toLowerCase() === 'j') toggle(app.chatOpen, (v) => (app.chatOpen = v));
-    else if (mod && !e.shiftKey && e.key === ',') toggle(app.customizeOpen, (v) => (app.customizeOpen = v));
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') toggle(app.paletteOpen, () => (app.paletteOpen = !app.paletteOpen));
+    else if (mod && !e.shiftKey && e.key.toLowerCase() === 'j') toggle(false, toggleChat);
+    else if (mod && !e.shiftKey && e.key === ',') toggle(app.customizeOpen && !app.mindEditor, () => (app.customizeOpen = !app.customizeOpen));
     else if (mod && e.shiftKey && e.code === 'KeyC') handled(() => void copyNote());
     else if (mod && e.shiftKey && e.code === 'KeyE') handled(() => void exportNote('md'));
     else if (mod && e.shiftKey && e.code === 'Period') handled(() => void toggleJustMyWords());

@@ -50,7 +50,7 @@
   });
 
   $effect(() => {
-    if (open) input?.focus({ preventScroll: true });
+    if (open) focusInput();
   });
 
   $effect(() => {
@@ -59,10 +59,19 @@
     void tick().then(() => scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' }));
   });
 
+  /** Clear and the suggestions leave with their own button, so typing goes on in the field. */
+  const focusInput = () => input?.focus({ preventScroll: true });
+
   function submit(text = draft) {
     if (!text.trim()) return;
     draft = '';
     void send(text);
+    focusInput();
+  }
+
+  function clear() {
+    void clearChat();
+    focusInput();
   }
 
 </script>
@@ -80,7 +89,7 @@
     <div class="tools">
       {#if messages.length}
         <button class="t" class:done={copied} onclick={copyChat}>{copied ? 'Copied' : 'Copy'}</button>
-        <button class="t" onclick={() => void clearChat()}>Clear</button>
+        <button class="t" onclick={clear}>Clear</button>
       {/if}
       <button class="i" aria-pressed={chat.pinned} aria-label="Pin open while you write" title="Pin open while you write" onclick={() => (chat.pinned = !chat.pinned)}><Pin size={15} strokeWidth={1.5} /></button>
       <button class="i" aria-label="Close" onclick={() => (app.chatOpen = false)}><X size={17} strokeWidth={1.5} /></button>

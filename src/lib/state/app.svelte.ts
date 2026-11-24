@@ -40,30 +40,42 @@ export async function initApp() {
   app.ready = true;
 }
 
+/** Notes in the order they were last open, the one open now last. */
+const visited: string[] = [];
+
+function show(note: Note) {
+  const i = visited.indexOf(note.id);
+  if (i >= 0) visited.splice(i, 1);
+  visited.push(note.id);
+  app.tellOpen = false;
+  app.note = note;
+}
+
 export async function openNote(id: string) {
   if (app.note?.id === id) return;
   await flushSave?.();
-  app.tellOpen = false;
-  app.note = await (await getBackend()).getNote(id);
+  show(await (await getBackend()).getNote(id));
 }
 
 export async function newNote(title = '') {
   await flushSave?.();
   const note = await (await getBackend()).createNote(title);
   upsertMeta(note);
-  app.tellOpen = false;
-  app.note = note;
+  show(note);
   app.focusTitle = title === '';
 }
 
 export async function deleteNote(id: string) {
+  // Leaving the note saves what was just typed in it, which would fail once it is gone.
+  if (app.note?.id === id) {
+    const left = new Set(notes.list.map((n) => n.id));
+    left.delete(id);
+    const next = visited.filter((v) => left.has(v)).at(-1) ?? [...left][0];
+    if (next) await openNote(next);
+    else await newNote();
+  }
   await (await getBackend()).deleteNote(id);
   removeMeta(id);
-  if (app.note?.id !== id) return;
-  app.note = null;
-  const next = notes.list[0];
-  if (next) await openNote(next.id);
-  else await newNote();
 }
 
 export async function updateMeta(patch: NoteMetaPatch) {

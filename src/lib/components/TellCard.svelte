@@ -16,15 +16,11 @@
     app.tellOpen = false;
   }
   async function save() {
-    app.tellOpen = false;
     await updateMeta({ brief: draft.trim() });
+    app.tellOpen = false;
   }
   function onkeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      cancel();
-    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       void save();
     }
