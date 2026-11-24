@@ -1,10 +1,11 @@
 import type { Backend, Unsubscribe } from './backend';
 import { BUILTIN_RIDDLER } from './presets';
+import { DEFAULT_PROVIDER_ID, DEFAULT_PROVIDERS } from './providers';
 import { CHAT_BUDGET, SUMMARIZE_AFTER, SUMMARIZE_FOLD, SUMMARY_MAX_CHARS, TASK_BUDGET } from './limits';
 import {
   BUILTIN_RIDDLER_ID,
   type AiTask, type BackendEvents, type DeleteMode, type MathSymbol, type ExportFormat, type Folder, type Message,
-  type Note, type NoteMeta, type NoteMetaPatch, type Riddler, type Settings,
+  type Note, type NoteMeta, type NoteMetaPatch, type ProviderCredentialStatus, type Riddler, type Settings,
   type Thread, type ThreadKind, type ThreadStatus, type TrashList, type VoiceOption, type VoiceStatus,
 } from './types';
 
@@ -28,9 +29,16 @@ const DEFAULT_SETTINGS: Settings = {
   learnAboutYou: true,
   searchMyNotes: false,
   explainSymbols: false,
+  readProvider: DEFAULT_PROVIDER_ID,
+  chatProvider: DEFAULT_PROVIDER_ID,
+  drawProvider: DEFAULT_PROVIDER_ID,
   readModel: 'sonnet',
   chatModel: 'sonnet',
   drawModel: 'opus',
+  readThinking: 'default',
+  chatThinking: 'default',
+  drawThinking: 'default',
+  providers: DEFAULT_PROVIDERS.map((p) => ({ ...p, args: [...p.args], models: [...p.models] })),
   sidebarOpen: false,
   deletedNotes: 'duragon',
 };
@@ -155,7 +163,8 @@ export class MockBackend implements Backend {
   private trash = new Map<string, Trashed>();
   private systemTrash = new Map<string, Trashed>();
   private riddlers = new Map<string, Riddler>([[BUILTIN_RIDDLER_ID, BUILTIN_RIDDLER]]);
-  private settings: Settings = { ...DEFAULT_SETTINGS };
+  private settings: Settings = structuredClone(DEFAULT_SETTINGS);
+  private keys = new Map<string, string>();
   private handlers = new Map<string, Set<(p: any) => void>>();
   private timers = new Map<string, number[]>();
 
@@ -429,10 +438,37 @@ export class MockBackend implements Backend {
   }
 
   async getSettings() {
-    return { ...this.settings };
+    return structuredClone(this.settings);
   }
   async saveSettings(settings: Settings) {
-    this.settings = { ...settings };
+    this.settings = structuredClone(settings);
+  }
+  private credentialStatus(providerId: string): ProviderCredentialStatus {
+    const p = this.settings.providers.find((x) => x.id === providerId);
+    const stored = this.keys.get(providerId);
+    const maskedKey = stored
+      ? stored.length <= 8 ? '••••' : `${stored.slice(0, 4)}…${stored.slice(-4)}`
+      : null;
+    return {
+      providerId,
+      hasStoredKey: !!stored,
+      maskedKey,
+      envVar: p?.envVar ?? null,
+      hasEnvKey: false,
+    };
+  }
+  async listCredentialStatuses() {
+    return this.settings.providers.map((p) => this.credentialStatus(p.id));
+  }
+  async setProviderKey(providerId: string, key: string) {
+    const t = key.trim();
+    if (t) this.keys.set(providerId, t);
+    else this.keys.delete(providerId);
+    return this.credentialStatus(providerId);
+  }
+  async deleteProviderKey(providerId: string) {
+    this.keys.delete(providerId);
+    return this.credentialStatus(providerId);
   }
   async listRiddlers() {
     return [...this.riddlers.values()];

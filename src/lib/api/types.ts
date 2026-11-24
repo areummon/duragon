@@ -82,6 +82,37 @@ export interface Riddler {
   builtin: boolean;
 }
 
+export type ThinkingLevel = 'default' | 'low' | 'medium' | 'high' | 'xhigh';
+
+export type ProviderKind =
+  | 'claude-cli'
+  | 'agy-acp'
+  | 'codex-cli'
+  | 'acp'
+  | 'openai'
+  | 'anthropic'
+  | 'gemini';
+
+export interface ProviderConfig {
+  id: string;
+  name: string;
+  kind: ProviderKind;
+  baseUrl?: string | null;
+  command?: string | null;
+  args: string[];
+  envVar?: string | null;
+  models: string[];
+  builtin: boolean;
+}
+
+export interface ProviderCredentialStatus {
+  providerId: string;
+  hasStoredKey: boolean;
+  maskedKey: string | null;
+  envVar: string | null;
+  hasEnvKey: boolean;
+}
+
 export interface Settings {
   newNoteMode: ReadingMode;
   readingPace: 'regular' | 'slow';
@@ -100,9 +131,16 @@ export interface Settings {
   learnAboutYou: boolean;
   searchMyNotes: boolean;
   explainSymbols: boolean;
+  readProvider: string;
+  chatProvider: string;
+  drawProvider: string;
   readModel: string;
   chatModel: string;
   drawModel: string;
+  readThinking: ThinkingLevel;
+  chatThinking: ThinkingLevel;
+  drawThinking: ThinkingLevel;
+  providers: ProviderConfig[];
   sidebarOpen: boolean;
   deletedNotes: DeleteMode;
 }

@@ -5,7 +5,9 @@
   import { settings, updateSettings } from '../../state/settings.svelte';
   import { readAloud, voice } from '../../state/voice.svelte';
   import Choice from './Choice.svelte';
+  import ModelSlots from './ModelSlots.svelte';
   import PlacementPreview from './PlacementPreview.svelte';
+  import ProvidersPanel from './ProvidersPanel.svelte';
   import SwitchRow from './SwitchRow.svelte';
 
   let { query = '' }: { query?: string } = $props();
@@ -19,7 +21,7 @@
     voice: 'voice speak aloud speaking sound',
     look: 'look appearance theme colour color lettering text size page width ink',
     notes: 'notes what happens to the notes you delete',
-    models: 'models which claude model does what',
+    models: 'models providers api keys claude agy antigravity acp openai codex oauth openrouter anthropic gemini deepseek zlm glm mimo opencode go',
   } as const;
   const ROWS: Record<string, string> = {
     start: 'new notes start in thinks with you when you ask reading mode',
@@ -37,16 +39,17 @@
     lettering: "lettering duragon's own like your notes font",
     colour: 'colour color ink blue green red purple brown orange',
     deleted: "deleted notes duragon’s trash duragon's trash system trash .trash bin delete for good permanently forever undo restore recover",
-    readModel: 'reading model',
-    chatModel: 'chat model',
-    drawModel: 'drawing model',
+    readModel: 'reading model provider thinking effort level',
+    chatModel: 'chat model provider thinking effort level',
+    drawModel: 'drawing model provider thinking effort level',
+    providers: 'providers api keys claude agy antigravity acp codex oauth openai openrouter anthropic gemini deepseek zlm glm mimo custom',
   };
   const GROUPS: Record<keyof typeof SECTIONS, string[]> = {
     reading: ['start', 'pace', 'place', 'web', 'notes', 'symbols'],
     voice: ['speak', 'pick', 'speed'],
     look: ['appearance', 'size', 'width', 'lettering', 'colour'],
     notes: ['deleted'],
-    models: ['readModel', 'chatModel', 'drawModel'],
+    models: ['readModel', 'chatModel', 'drawModel', 'providers'],
   };
   const secOn = (k: keyof typeof SECTIONS) => !q || SECTIONS[k].includes(q) || GROUPS[k].some((r) => ROWS[r].includes(q));
   const on = (k: keyof typeof SECTIONS, row: string) => !q || SECTIONS[k].includes(q) || ROWS[row].includes(q);
@@ -67,12 +70,6 @@
   async function sample(id: string) {
     await updateSettings({ voiceName: id });
     await readAloud(null, 'Does this still hold?');
-  }
-
-  const MODELS = ['haiku', 'sonnet', 'opus', 'fable'];
-  function commitModel(key: 'readModel' | 'chatModel' | 'drawModel', e: Event) {
-    const v = (e.currentTarget as HTMLInputElement).value.trim();
-    if (v && v !== s[key]) set({ [key]: v });
   }
 </script>
 
@@ -254,18 +251,15 @@
 {#if secOn('models')}
   <section>
     <h3>Models</h3>
-    <p class="sub">Which Claude model does each job. Pick one, or type any model name.</p>
-    {#each [['readModel', 'Reading model', 'Reads along and asks questions.'], ['chatModel', 'Chat model', 'Answers in the chat and when you address it.'], ['drawModel', 'Drawing model', 'Sketches the drawings.']] as const as [key, name, desc] (key)}
-      {#if on('models', key)}
-        <div class="group">
-          <div class="line">
-            <div><h4>{name}</h4><p class="note tight">{desc}</p></div>
-            <input class="model" list="models" value={s[key]} aria-label={name} spellcheck="false" onchange={(e) => commitModel(key, e)} />
-          </div>
-        </div>
-      {/if}
-    {/each}
-    <datalist id="models">{#each MODELS as m (m)}<option value={m}></option>{/each}</datalist>
+    <p class="sub">Which provider, model, and thinking effort does each job. Pick one, or type any model name.</p>
+    <ModelSlots
+      showRead={on('models', 'readModel')}
+      showChat={on('models', 'chatModel')}
+      showDraw={on('models', 'drawModel')}
+    />
+    {#if on('models', 'providers')}
+      <ProvidersPanel />
+    {/if}
   </section>
 {/if}
 
@@ -312,8 +306,6 @@
   .line { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
   .ghost { height: 30px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 999px; font-size: 13px; transition: opacity 150ms var(--ease-ui), transform 160ms var(--ease-step); }
   .ghost:disabled { opacity: 0.4; cursor: default; }
-  .model { width: 170px; height: 34px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 9px; background: transparent; font: inherit; font-size: 13.5px; color: var(--ink); outline: none; }
-  .model:focus { border-color: var(--faint); }
 
   .swatches { display: flex; gap: 12px; }
   .swatch { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid transparent; transition: border-color 150ms var(--ease-ui); }
