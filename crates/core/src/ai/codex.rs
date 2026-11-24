@@ -1,7 +1,6 @@
 //! OpenAI Codex CLI runner (`codex exec`) for OpenAI ChatGPT OAuth subscriptions.
 use serde_json::Value;
 use std::io::Write;
-use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -10,14 +9,6 @@ use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, strict_schema};
 use crate::model::ThinkingLevel;
 use crate::private::{self, WorkDir};
-
-struct TempFile(PathBuf);
-
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
-}
 
 fn tail(s: &str, n: usize) -> String {
     let t = s.trim();
@@ -34,15 +25,15 @@ pub async fn run_codex(req: &AiRequest) -> Result<Value, AiError> {
         .filter(|s| !s.is_empty())
         .unwrap_or("codex");
 
-    // Write strict JSON Schema to a temporary file for `--output-schema`.
-    let schema_path = std::env::temp_dir().join(format!("duragon-schema-{}.json", uuid::Uuid::new_v4()));
+    // A folder each, so the one Codex works in starts empty.
+    let folder = || WorkDir::new().map_err(|e| AiError::Failed(format!("could not make a folder for {command}: {e}")));
+    let (cwd, schema_dir) = (folder()?, folder()?);
+    let schema_path = schema_dir.path().join("schema.json");
     let schema_json = serde_json::to_string_pretty(&strict_schema(&req.schema))
         .map_err(|e| AiError::Failed(format!("codex schema error: {e}")))?;
     let schema_error = |e| AiError::Failed(format!("could not write codex schema file: {e}"));
     let mut schema_file = private::options().create_new(true).open(&schema_path).map_err(schema_error)?;
-    let _guard = TempFile(schema_path.clone());
     schema_file.write_all(schema_json.as_bytes()).map_err(schema_error)?;
-    let cwd = WorkDir::new().map_err(|e| AiError::Failed(format!("could not make a folder for {command}: {e}")))?;
 
     let mut args: Vec<String> = vec![
         "exec".into(),
