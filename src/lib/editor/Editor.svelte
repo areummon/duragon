@@ -16,12 +16,11 @@
 
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { getBackend } from '../api/backend';
   import type { Note } from '../api/types';
   import { registerFlush } from '../state/app.svelte';
-  import { upsertMeta } from '../state/notes.svelte';
+  import { keepWords, storeNote } from '../state/saves';
   import { createEditor } from './create';
-  import { changedBlocks, docBlocks, docTitle, normalizeDoc, plainText, withoutLastLine } from './plain';
+  import { changedBlocks, docBlocks, normalizeDoc, withoutLastLine } from './plain';
   import { findQuote } from './quote';
   import SlashMenu from './SlashMenu.svelte';
 
@@ -39,30 +38,21 @@
   let editor = $state.raw<TipTapEditor>();
   const noteId = $derived(note.id);
 
-  async function persist(id: string, json: ReturnType<TipTapEditor['getJSON']>) {
-    upsertMeta(await (await getBackend()).saveNote(id, docTitle(json), json, plainText(json)));
-  }
-
   function mount(n: Note) {
     const id = n.id;
     const doc = normalizeDoc(n.doc, n.title);
     let timer: number | undefined;
     let changeTimer: number | undefined;
     let dirty = false;
-    let saving: Promise<void> | undefined;
 
-    // Waits for a save already on its way too, so a note never leaves before its last words are in.
-    const save = async () => {
+    const save = () => {
       window.clearTimeout(timer);
-      if (dirty) {
-        dirty = false;
-        const mine = persist(id, withoutLastLine(ed.getJSON())).finally(() => {
-          if (saving === mine) saving = undefined;
-        });
-        saving = mine;
-      }
-      await saving;
+      if (dirty) keepWords(id, withoutLastLine(ed.getJSON()));
+      dirty = false;
+      return storeNote(id);
     };
+    // A save that fails is tried again by itself.
+    const saveSoon = () => void save().catch(() => {});
 
     const flushChanges = () => {
       const texts = docBlocks(ed.state.doc);
@@ -79,7 +69,7 @@
         dirty = true;
         if (!quiet) onEdit?.();
         window.clearTimeout(timer);
-        timer = window.setTimeout(() => void save(), SAVE_DEBOUNCE);
+        timer = window.setTimeout(saveSoon, SAVE_DEBOUNCE);
         window.clearTimeout(changeTimer);
         changeTimer = window.setTimeout(flushChanges, changeDelay());
       },
@@ -90,14 +80,12 @@
     onReady?.({ editor: ed, findQuote: (quote) => findQuote(ed.state.doc, quote) });
 
     return () => {
-      window.clearTimeout(timer);
       window.clearTimeout(changeTimer);
       registerFlush(null);
       onReady?.(null);
-      const last = dirty ? withoutLastLine(ed.getJSON()) : null;
+      saveSoon();
       ed.destroy();
       editor = undefined;
-      if (last) void persist(id, last);
     };
   }
 

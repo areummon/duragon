@@ -1,7 +1,9 @@
+import { tick } from 'svelte';
 import { getBackend } from '../api/backend';
 import type { DeleteMode, ExportFormat, Note, NoteMetaPatch } from '../api/types';
 import { markdownish } from '../editor/plain';
 import { notes, refreshNotes, removeMeta, upsertMeta } from './notes.svelte';
+import { storeNote } from './saves';
 import { loadSettings, settings, updateSettings } from './settings.svelte';
 import { showToast } from './toast.svelte';
 import { loadTrash } from './trash.svelte';
@@ -57,6 +59,7 @@ function show(note: Note) {
 export async function openNote(id: string) {
   if (app.note?.id === id) return;
   await flushSave?.();
+  await storeNote(id);
   show(await (await getBackend()).getNote(id));
 }
 
@@ -85,8 +88,13 @@ export async function deleteNote(id: string, mode: DeleteMode) {
   const wasOpen = app.note?.id === id;
   let went: DeleteMode;
   try {
-    // Leaving the note saves what was just typed in it, which would fail once it is gone.
-    if (wasOpen) await leaveNote(id);
+    // What was typed in the note is stored first, which would fail once it is gone.
+    if (wasOpen) {
+      await leaveNote(id);
+      // Its editor is gone a tick later, and hands over what was typed while the next note loaded.
+      await tick();
+    }
+    await storeNote(id);
     went = await (await getBackend()).deleteNote(id, mode);
   } catch {
     showToast('That note couldn’t be deleted.');
