@@ -183,11 +183,5 @@
   .quiet { flex: none; color: var(--graphite); transition: color 150ms var(--ease-ui); }
   .quiet:hover { color: var(--ink); }
   .quiet.danger:hover { color: var(--text-red); }
-  .solid { flex: none; height: 34px; padding: 0 16px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 13px; transition: opacity 150ms var(--ease-ui), transform 160ms var(--ease-step); }
-  .solid:disabled { opacity: 0.4; cursor: default; }
-  .solid:active:not(:disabled) { transform: scale(0.97); }
-  @media (prefers-reduced-motion: reduce) {
-    .chev { transition: none; }
-    .solid:active:not(:disabled) { transform: none; }
-  }
+  @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
 </style>

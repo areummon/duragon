@@ -79,8 +79,4 @@
   .actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
   .quiet { height: 34px; padding: 0 8px; font-size: 13px; color: var(--graphite); transition: color 150ms var(--ease-ui); }
   .quiet:hover { color: var(--ink); }
-  .solid { height: 34px; padding: 0 16px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 13px; transition: opacity 150ms var(--ease-ui), transform 160ms var(--ease-step); }
-  .solid:disabled { opacity: 0.4; cursor: default; }
-  .solid:active:not(:disabled) { transform: scale(0.97); }
-  @media (prefers-reduced-motion: reduce) { .solid:active:not(:disabled) { transform: none; } }
 </style>

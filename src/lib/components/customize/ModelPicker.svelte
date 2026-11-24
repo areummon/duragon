@@ -141,7 +141,6 @@
   .find input::placeholder { color: var(--faint); opacity: 1; }
   .opts { position: relative; outline: none; max-height: 232px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
   @media (max-height: 699px) { .opts { max-height: 152px; } }
-  .glabel { padding: 8px 10px 4px; font-size: 12px; line-height: 1.3; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .opt { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 6px 10px; border-radius: 7px; font-size: 13.5px; line-height: 1.3; cursor: default; }
   .opt.active { background: var(--shelf); }
   .opt.note { color: var(--faint); }

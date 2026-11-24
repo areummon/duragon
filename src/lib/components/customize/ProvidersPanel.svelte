@@ -124,7 +124,6 @@
   .ghost.open { border-color: var(--faint); }
   @media (hover: hover) and (pointer: fine) { .ghost:hover { border-color: var(--faint); } }
   .ghost:active { transform: scale(0.97); }
-  .glabel { padding: 8px 10px 4px; font-size: 12px; line-height: 1.3; color: var(--faint); }
   .adder .menu-item { font-size: 13.5px; line-height: 1.3; }
   .error { margin-top: 12px; font-size: 13px; line-height: 1.4; color: var(--text-red); overflow-wrap: anywhere; }
   .list { margin-top: 12px; border: 1px solid var(--rule); border-radius: 12px; }
