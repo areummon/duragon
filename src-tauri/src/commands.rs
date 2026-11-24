@@ -1,4 +1,5 @@
 //! One command per method of the frontend `Backend` interface (src/lib/api/tauri.ts).
+use duragon_core::credentials;
 use duragon_core::export::{to_docx, to_markdown};
 use duragon_core::model::*;
 use tauri::State;
@@ -148,7 +149,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Res<Settings> {
 
 #[tauri::command]
 pub async fn save_settings(state: State<'_, AppState>, settings: Settings) -> Res<()> {
-    s(state.db.save_settings(&settings))
+    s(credentials::save_settings(&state.db, &state.credentials, &settings))
 }
 
 #[tauri::command]
@@ -163,9 +164,7 @@ pub async fn set_provider_key(
     provider_id: String,
     key: String,
 ) -> Res<ProviderCredentialStatus> {
-    s(state.credentials.set_key(&provider_id, &key))?;
-    let settings = s(state.db.get_settings())?;
-    Ok(state.credentials.status_for(&settings.provider(&provider_id)))
+    s(credentials::set_provider_key(&state.db, &state.credentials, &provider_id, &key))
 }
 
 #[tauri::command]
@@ -173,9 +172,7 @@ pub async fn delete_provider_key(
     state: State<'_, AppState>,
     provider_id: String,
 ) -> Res<ProviderCredentialStatus> {
-    s(state.credentials.delete_key(&provider_id))?;
-    let settings = s(state.db.get_settings())?;
-    Ok(state.credentials.status_for(&settings.provider(&provider_id)))
+    s(credentials::delete_provider_key(&state.db, &state.credentials, &provider_id))
 }
 
 #[tauri::command]

@@ -7,7 +7,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::model::{ProviderConfig, ProviderCredentialStatus};
+use crate::db::Db;
+use crate::model::{ProviderConfig, ProviderCredentialStatus, Settings};
 use crate::private;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -92,6 +93,27 @@ impl CredentialsStore {
         let data = self.read_file();
         providers.iter().map(|p| status_from_data(&data, p)).collect()
     }
+}
+
+pub fn save_settings(db: &Db, _store: &CredentialsStore, settings: &Settings) -> Result<()> {
+    db.save_settings(settings)
+}
+
+pub fn set_provider_key(
+    db: &Db,
+    store: &CredentialsStore,
+    provider_id: &str,
+    key: &str,
+) -> Result<ProviderCredentialStatus> {
+    store.set_key(provider_id, key)?;
+    let settings = db.get_settings()?;
+    Ok(store.status_for(&settings.provider(provider_id)))
+}
+
+pub fn delete_provider_key(db: &Db, store: &CredentialsStore, provider_id: &str) -> Result<ProviderCredentialStatus> {
+    store.delete_key(provider_id)?;
+    let settings = db.get_settings()?;
+    Ok(store.status_for(&settings.provider(provider_id)))
 }
 
 fn status_from_data(data: &FileData, provider: &ProviderConfig) -> ProviderCredentialStatus {
