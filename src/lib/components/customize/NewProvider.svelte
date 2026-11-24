@@ -54,16 +54,16 @@
     <Pills labelledby="works-like" options={KINDS} value={kind} onpick={(k) => (kind = k)} />
   </div>
   <div class="two">
-    <Field label="Name" placeholder="Ollama" bind:value={name} bind:input={nameInput} />
+    <Field label="Name" placeholder="Groq" bind:value={name} bind:input={nameInput} />
     {#if http}
-      <Field label="Address" placeholder={kind === 'openai' ? 'http://localhost:11434/v1' : 'https://api.example.com'} bind:value={address} />
+      <Field label="Address" placeholder={kind === 'openai' ? 'https://api.groq.com/openai/v1' : 'https://api.example.com'} bind:value={address} />
     {:else}
       <Field label="Command" placeholder="my-agent" bind:value={command} />
     {/if}
   </div>
   <div class:two={!http}>
     {#if !http}<Field label="Options" placeholder="acp" bind:value={options} />{/if}
-    <Field label="Models" hint="Optional, separated by commas" placeholder="llama3.3, qwen3" bind:value={models} />
+    <Field label="Models" hint="Optional, separated by commas" placeholder="llama-3.3-70b-versatile, openai/gpt-oss-120b" bind:value={models} />
   </div>
   <div class="actions">
     <button type="button" class="quiet" onclick={oncancel}>Cancel</button>
