@@ -42,7 +42,6 @@ Preconditions:
 - `wait --text` also matches text from an earlier reply. The mock repeats replies, so prove each new answer with the store count.
 - After a rich reply, `Copy` also matches the code block's `Copy code`. Use `--exact`.
 - The closed panel stays in the DOM as `inert`. Check whether it is open with `snapshot -i`, not `querySelector`.
-- The input takes focus 380 ms after the panel opens. A key pressed sooner can land elsewhere.
 - Closing and reopening the panel does not reload from the backend. Prove a stored effect with the store read, not by reopening.
 - The mock folds only after a reply and only past 16 unsummarized messages, so the first fold comes at 18. The Rust side of folding is proven in `crates/core/tests/chat_summary.rs`.
 - Symbols appear only on replies that arrive after the setting is turned on. Hover tooltips need a hover-capable pointer, so use `focus` in headless Chromium. While a symbol's tip shows, the first Escape hides the tip.

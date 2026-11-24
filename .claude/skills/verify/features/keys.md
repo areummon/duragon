@@ -24,7 +24,7 @@ Preconditions:
 - **Find.** Press `Control+k`. Run `agent-browser fill '[aria-label="Find a note, or name a new one"]' "mitochondria"`. The options are `Welcome to Duragon` and `New note: mitochondria`.
 - **Create.** Fill "Pond life", run `agent-browser wait --text "New note: Pond life"`, and press Enter. The editor's heading reads `Pond life`, and `listNotes` gains it.
 - **New note.** Press `Control+n`. `listNotes` gains a note titled `""`.
-- **Escape order.** Choose `Open notes`, press `Control+k`, and press Escape twice. The first closes the palette and focus goes back to `Close notes`. The second closes the sidebar. Then press `Control+j`, wait 500 ms, and press `Control+,`. The first Escape closes Customize and focus goes back to `Ask about this note`. The second closes the chat.
+- **Escape order.** Choose `Open notes`, press `Control+k`, and press Escape twice. The first closes the palette and focus goes back to `Close notes`. The second closes the sidebar. Then press `Control+j` and `Control+,`. The first Escape closes Customize and focus goes back to `Ask about this note`. The second closes the chat.
 - **Covered.** Press `Control+k`, then `Control+j` and `Control+,`. Only the palette is open. Press `Control+k` again, and it closes. From the mind picker (button `Duragon`, `--exact`), choose `New Mind`, then press `Control+,`. Customize stays closed.
 - **Copy the note.** Stub the clipboard as `../SKILL.md` shows and press `Control+Shift+c`. `window.__copied` starts with `# Welcome to Duragon`.
 - **Just my words.** Press `Control+Shift+Period`. `__duragon.settings.value.justMyWords` goes from `false` to `true`.

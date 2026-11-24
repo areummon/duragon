@@ -31,7 +31,7 @@ Preconditions:
 - **Switch.** Run `agent-browser find role button click --name "Scratch" --exact`. The editor's level-1 heading reads `Scratch`.
 - **New.** Run `agent-browser find role button click --name "New note" --exact`. `All notes 3` shows, a row `Untitled` comes first, and the stored title is `""`.
 - **Note menu.** Click a row's `Note options` by ref from `snapshot -i`. The menu has the menuitems `Rename`, `Move to folder` and `Delete`. Use `agent-browser find role menuitem click --name "…"`, not `role button`.
-- **Rename.** Choose `Rename`. The note opens with its whole title selected. Run `agent-browser keyboard type "New title"`, then `agent-browser wait 1500` for the save. The row and `listNotes` show the new title.
+- **Rename.** Choose `Rename`. The note opens with its whole title selected. Run `agent-browser wait 100`, `agent-browser keyboard type "New title"`, then `agent-browser wait 1500` for the save. The row and `listNotes` show the new title.
 - **Delete.** Choose `Delete`. The menu changes to "Delete this note for good?" with the menuitems `Delete` and `Keep it`. Choose `Delete` again. `All notes` drops by one.
 - **Folder.** Run `agent-browser find role button click --name "New folder"`, `agent-browser fill '[aria-label="Folder name"]' "Projects"`, `agent-browser press Enter`. The button `Projects` (`expanded=true`) and its `Folder options` appear.
 - **Move by menu.** On a note's `Note options`, choose `Move to folder`, then `Projects`. The note moves under `Projects`, and its stored `folderId` is the folder's id.
@@ -42,7 +42,7 @@ Preconditions:
 ## Gotchas
 
 - Every row has a button named `Note options`. Pick the one under the intended row by ref from `snapshot -i`.
-- Rename is broken on 2026-11-24 at `253c1d7` and before. The editor focuses the end of the note after the title is selected, so typed text goes to the end of the note. Typing at once can land the first keys in the title. A wait of 100 ms or more lands none. Report a failure here as a product bug.
+- The title is selected once the note's editor has started, about 30 ms after `Rename`. Keys typed before that are dropped, so wait 100 ms before typing.
 - Titles are trimmed in the row name, so a title " pad" shows as `pad`.
 - A drag starts only after the pointer moves more than 4 px with the button held, so move once near the row before moving to the target.
 - `Folder options` holds `Rename` and `Delete folder`. Deleting a folder moves what is inside it up a level.

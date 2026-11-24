@@ -30,6 +30,6 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 | [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear | 2026-11-24, 253c1d7, all |
 | [margin-threads.md](margin-threads.md) | Margin questions and thread replies | 2026-11-24, 253c1d7, all but pin and the `Thread options` actions |
 | [customize.md](customize.md) | Customize dialog, its switches and the mind editor | 2026-11-24, 253c1d7, all |
-| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, delete, folders | 2026-11-24, 253c1d7, all but `sidebar-rename` (product bug) |
+| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, delete, folders | 2026-11-24, 4720040, all |
 | [editor.md](editor.md) | Selection toolbar, inline answers, slash commands, code blocks | 2026-11-24, 253c1d7, all but Visualize |
 | [keys.md](keys.md) | Command palette, shortcuts, Escape layers | 2026-11-24, 253c1d7, all but export (needs Tauri) and voice (no models in the mock) |
