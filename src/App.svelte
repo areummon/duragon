@@ -14,15 +14,12 @@
   import Toast from './lib/components/Toast.svelte';
   import { initVoice, stopHandsFree, voice, voiceBlur, voiceKeydown, voiceKeyup } from './lib/state/voice.svelte';
   import { isMod } from './lib/keys';
-  import { getBackend } from './lib/api/backend';
-  import { scaleWheel } from './lib/motion/wheel';
   import {
     app, copyNote, exportNote, initApp, newNote, setSidebar, toggleChat, toggleJustMyWords,
   } from './lib/state/app.svelte';
 
   onMount(() => {
     void initApp().then(initVoice);
-    void getBackend().then((b) => b.wheelScale()).then(scaleWheel);
   });
 
   function onkeydown(e: KeyboardEvent) {

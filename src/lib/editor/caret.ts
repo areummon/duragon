@@ -20,16 +20,20 @@ function caretView(view: EditorView) {
   bar.setAttribute('aria-hidden', 'true');
   host.append(bar);
   view.dom.classList.add('drawn-caret');
-  // Restarted by rewinding rather than by re-adding a class, which would force a layout on every keystroke.
+  // Blinks on a timer, two repaints a second. A running animation keeps WebKit drawing every frame, and on X11 that
+  // cost about a CPU core while the caret sat still, which slowed the keys typed against it.
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const period = parseFloat(getComputedStyle(host).getPropertyValue('--dur-caret')) || 1060;
-  const blink = still
-    ? null
-    : bar.animate([{ opacity: 1 }, { opacity: 1, offset: 0.5 }, { opacity: 0, offset: 0.5 }, { opacity: 0 }], { duration: period, iterations: Infinity });
+  const half = (parseFloat(getComputedStyle(host).getPropertyValue('--dur-caret')) || 1060) / 2;
+  let timer = 0;
+  const blink = (shown: boolean) => {
+    bar.style.visibility = shown ? '' : 'hidden';
+    timer = window.setTimeout(() => blink(!shown), half);
+  };
   let height = '';
 
   const place = () => {
     const { selection } = view.state;
+    window.clearTimeout(timer);
     if (!view.hasFocus() || !selection.empty || !view.editable) {
       bar.hidden = true;
       return;
@@ -41,7 +45,7 @@ function caretView(view: EditorView) {
     const h = `${at.bottom - at.top}px`;
     if (h !== height) bar.style.height = height = h;
     // Solid while the writer types or moves, blinking once they pause, as the native caret does.
-    if (blink) blink.currentTime = 0;
+    if (!still) blink(true);
   };
 
   const resized = new ResizeObserver(place);
@@ -57,7 +61,7 @@ function caretView(view: EditorView) {
       view.dom.removeEventListener('focus', place);
       view.dom.removeEventListener('blur', place);
       view.dom.classList.remove('drawn-caret');
-      blink?.cancel();
+      window.clearTimeout(timer);
       bar.remove();
     },
   };

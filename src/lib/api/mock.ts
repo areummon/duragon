@@ -363,9 +363,6 @@ export class MockBackend implements Backend {
     this.emit('chat:summary', { noteId, summary: text });
   }
 
-  async wheelScale() {
-    return 1;
-  }
   async getSettings() {
     return { ...this.settings };
   }

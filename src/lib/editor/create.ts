@@ -1,5 +1,5 @@
 import { riddlerName } from '../state/riddler';
-import { Editor } from '@tiptap/core';
+import { Editor, Extension } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
@@ -20,6 +20,15 @@ export interface EditorOptions {
   /** quiet: the change was made for the writer (a line opened below an answer), not by them. */
   onUpdate: (editor: Editor, quiet: boolean) => void;
 }
+
+// TipTap dispatches every command a key binding runs, even one that changed nothing, and Backspace runs two of them
+// before the browser deletes. Each still recomputes decorations and plugin views, so one that carries nothing stops here.
+const SkipEmpty = Extension.create({
+  name: 'skipEmpty',
+  dispatchTransaction({ transaction: tr, next }) {
+    if (tr.docChanged || tr.selectionSet || tr.storedMarksSet || tr.scrolledIntoView || !tr.isGeneric) next(tr);
+  },
+});
 
 interface PlaceholderProps {
   editor: Editor;
@@ -58,6 +67,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       Caret,
       SlashCommands,
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),
+      SkipEmpty,
     ],
     editorProps: { attributes: { class: 'note-body', spellcheck: 'true', 'aria-label': 'Note' } },
     onUpdate: ({ editor, transaction }) => onUpdate(editor, transaction.getMeta(QUIET) === true),

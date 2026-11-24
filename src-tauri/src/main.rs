@@ -67,13 +67,6 @@ fn main() {
         }
     }
 
-    // WebKitGTK on native Wayland paints at half the display rate (30 fps on a 60 Hz screen), which makes every
-    // transition stutter. Through XWayland it keeps up. Falls back to Wayland where there is no X server.
-    #[cfg(target_os = "linux")]
-    if std::env::var_os("GDK_BACKEND").is_none() {
-        std::env::set_var("GDK_BACKEND", "x11,wayland");
-    }
-
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
