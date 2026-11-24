@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import FileText from 'lucide-svelte/icons/file-text';
@@ -9,10 +10,13 @@
   import Plus from 'lucide-svelte/icons/plus';
   import Search from 'lucide-svelte/icons/search';
   import SettingsIcon from 'lucide-svelte/icons/settings';
-  import type { Folder, NoteMeta } from '../api/types';
+  import TrashIcon from 'lucide-svelte/icons/trash-2';
+  import type { DeleteMode, Folder, NoteMeta } from '../api/types';
   import { app, deleteNote, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
   import { createFolder, deleteFolder, folderWithin, moveFolder, notes, renameFolder } from '../state/notes.svelte';
+  import { settings } from '../state/settings.svelte';
   import { closeOnEscape } from '../escape';
+  import { focusLost } from '../focus';
   import { kbd } from '../keys';
   import { unfold, veil } from '../motion/transitions';
   import Blot from './Blot.svelte';
@@ -27,10 +31,11 @@
   const subfolders = (f: Folder) => notes.folders.filter((c) => c.parentId === f.id);
 
   let collapsed = $state<Record<string, boolean>>({});
-  let noteMenu = $state<{ id: string; at: { x: number; y: number }; view: 'main' | 'move' | 'confirm' } | null>(null);
+  let noteMenu = $state<{ id: string; at: { x: number; y: number }; view: 'main' | 'move' | 'confirm'; mode: DeleteMode } | null>(null);
   let folderMenu = $state<{ id: string; at: { x: number; y: number }; confirm: boolean } | null>(null);
   let editing = $state<{ id: string | null; name: string } | null>(null);
   let settingsOpen = $state(false);
+  let list: HTMLElement;
 
   $effect(() => {
     if (app.sidebarOpen) return closeOnEscape(() => setSidebar(false));
@@ -39,12 +44,27 @@
   function openNoteMenu(e: MouseEvent, n: NoteMeta) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     folderMenu = null;
-    noteMenu = { id: n.id, at: { x: r.left, y: r.bottom + 4 }, view: 'main' };
+    noteMenu = { id: n.id, at: { x: r.left, y: r.bottom + 4 }, view: 'main', mode: settings.value.deletedNotes };
   }
   function openFolderMenu(e: MouseEvent, f: Folder) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     noteMenu = null;
     folderMenu = { id: f.id, at: { x: r.left, y: r.bottom + 4 }, confirm: false };
+  }
+
+  function remove(menu: NonNullable<typeof noteMenu>) {
+    if (menu.mode === 'permanent' && menu.view !== 'confirm') {
+      menu.view = 'confirm';
+      return;
+    }
+    const rows = () => [...list.querySelectorAll<HTMLElement>('[data-note]')];
+    const at = rows().findIndex((r) => r.dataset.note === menu.id);
+    void deleteNote(menu.id, menu.mode).then(async () => {
+      await tick();
+      // Focus that went with the row goes to the one that took its place.
+      if (focusLost()) (rows()[at] ?? rows().at(-1))?.querySelector<HTMLElement>('.open')?.focus();
+    });
+    noteMenu = null;
   }
 
   async function renameNote(id: string) {
@@ -118,7 +138,7 @@
 
   const busy = () =>
     drag !== null || noteMenu !== null || folderMenu !== null || settingsOpen || editing !== null ||
-    app.paletteOpen || app.customizeOpen || app.mindEditor !== null;
+    app.paletteOpen || app.customizeOpen || app.trashOpen || app.mindEditor !== null;
 
   // Leaving towards the window's left edge keeps a peek open, as does any menu or dialog in use.
   function leave(e: MouseEvent) {
@@ -151,9 +171,9 @@
     </button>
   </div>
 
-  <div class="list" class:drop-root={drag?.over === ''} data-drop="" onpointerdowncapture={() => (justDragged = false)} onclickcapture={swallowClick}>
+  <div class="list" bind:this={list} class:drop-root={drag?.over === ''} data-drop="" onpointerdowncapture={() => (justDragged = false)} onclickcapture={swallowClick}>
     {#snippet noteRow(n: NoteMeta)}
-      <div class="row note" class:current={app.note?.id === n.id} class:lifted={drag?.item.id === n.id}>
+      <div class="row note" data-note={n.id} class:current={app.note?.id === n.id} class:lifted={drag?.item.id === n.id}>
         <button
           class="open"
           onpointerdown={(e) => grab(e, { kind: 'note', id: n.id, label: n.title || 'Untitled', from: n.folderId })}
@@ -248,6 +268,9 @@
   </div>
 
   <div class="foot">
+    <button class="row action" aria-haspopup="dialog" onclick={() => (app.trashOpen = true)}>
+      <TrashIcon size={15} strokeWidth={1.5} /><span>Trash</span>
+    </button>
     <div class="host">
       <button class="row settings" aria-haspopup="menu" aria-expanded={settingsOpen} onclick={() => (settingsOpen = !settingsOpen)}>
         <SettingsIcon size={15} strokeWidth={1.5} /><span>Settings</span><ChevronDown size={15} strokeWidth={1.5} />
@@ -274,7 +297,7 @@
         {#if noteMenu.view === 'main'}
           <button class="menu-item" role="menuitem" onclick={() => renameNote(id)}>Rename</button>
           <button class="menu-item" role="menuitem" onclick={() => noteMenu && (noteMenu.view = 'move')}>Move to folder</button>
-          <button class="menu-item" role="menuitem" onclick={() => noteMenu && (noteMenu.view = 'confirm')}>Delete</button>
+          <button class="menu-item" role="menuitem" onclick={() => noteMenu && remove(noteMenu)}>Delete</button>
         {:else if noteMenu.view === 'move'}
           <button class="menu-item" role="menuitem" onclick={() => { moveNote(id, null); noteMenu = null; }}>No folder</button>
           {#each notes.folders as f (f.id)}
@@ -283,7 +306,7 @@
           {#if notes.folders.length === 0}<div class="empty">Make a folder first.</div>{/if}
         {:else}
           <div class="empty">Delete this note for good?</div>
-          <button class="menu-item danger" role="menuitem" onclick={() => { deleteNote(id); noteMenu = null; }}>Delete</button>
+          <button class="menu-item danger" role="menuitem" onclick={() => noteMenu && remove(noteMenu)}>Delete</button>
           <button class="menu-item" role="menuitem" onclick={() => (noteMenu = null)}>Keep it</button>
         {/if}
       </div>
@@ -406,7 +429,7 @@
 
   .foot { border-top: 1px solid var(--rule); padding: 10px 0 0; }
   .host { position: relative; }
-  .settings { height: 40px; }
+  .foot .row { height: 40px; }
   .settings span { flex: 1; }
   .empty { padding: 6px 10px; font-size: 13px; color: var(--faint); }
   .danger { color: var(--text-red); }

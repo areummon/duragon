@@ -3,6 +3,7 @@
   import ChatPanel from './lib/components/ChatPanel.svelte';
   import DrawingDialog from './lib/components/DrawingDialog.svelte';
   import ThreadDialog from './lib/components/ThreadDialog.svelte';
+  import TrashDialog from './lib/components/TrashDialog.svelte';
   import CommandPalette from './lib/components/CommandPalette.svelte';
   import Page from './lib/components/Page.svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
@@ -67,6 +68,7 @@
   <ChatPanel />
   <ThreadDialog />
   <DrawingDialog />
+  <TrashDialog />
   {#if app.paletteOpen}<CommandPalette />{/if}
   <CustomizeDialog />
   <MindDialog />

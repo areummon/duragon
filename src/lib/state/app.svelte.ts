@@ -1,8 +1,10 @@
 import { getBackend } from '../api/backend';
-import type { ExportFormat, Note, NoteMetaPatch } from '../api/types';
+import type { DeleteMode, ExportFormat, Note, NoteMetaPatch } from '../api/types';
 import { markdownish } from '../editor/plain';
 import { notes, refreshNotes, removeMeta, upsertMeta } from './notes.svelte';
 import { loadSettings, settings, updateSettings } from './settings.svelte';
+import { showToast } from './toast.svelte';
+import { loadTrash } from './trash.svelte';
 
 export type CustomizePage = 'customize' | 'minds' | 'about' | 'voice' | 'help';
 /** `pinned` is the user's saved choice; `peek` came from hovering the left edge and is never saved. */
@@ -19,6 +21,7 @@ export const app = $state({
   },
   paletteOpen: false,
   chatOpen: false,
+  trashOpen: false,
   customizeOpen: false,
   customizePage: 'customize' as CustomizePage,
   mindEditor: null as MindEditor | null,
@@ -65,17 +68,51 @@ export async function newNote(title = '') {
   app.focusTitle = title === '';
 }
 
-export async function deleteNote(id: string) {
-  // Leaving the note saves what was just typed in it, which would fail once it is gone.
-  if (app.note?.id === id) {
-    const left = new Set(notes.list.map((n) => n.id));
-    left.delete(id);
-    const next = visited.filter((v) => left.has(v)).at(-1) ?? [...left][0];
-    if (next) await openNote(next);
-    else await newNote();
+/** Deleted while open, so getting one of these back opens it again. */
+const openAtDelete = new Set<string>();
+
+/** To the note open before this one. */
+async function leaveNote(id: string) {
+  const left = new Set(notes.list.map((n) => n.id));
+  left.delete(id);
+  const next = visited.filter((v) => left.has(v)).at(-1) ?? [...left][0];
+  if (next) await openNote(next);
+  else await newNote();
+}
+
+/** `mode` is what the menu offered, so a setting that changes meanwhile never turns a trip to the trash into a loss. */
+export async function deleteNote(id: string, mode: DeleteMode) {
+  const wasOpen = app.note?.id === id;
+  let went: DeleteMode;
+  try {
+    // Leaving the note saves what was just typed in it, which would fail once it is gone.
+    if (wasOpen) await leaveNote(id);
+    went = await (await getBackend()).deleteNote(id, mode);
+  } catch {
+    showToast('That note couldn’t be deleted.');
+    if (wasOpen) await openNote(id);
+    return;
   }
-  await (await getBackend()).deleteNote(id, 'permanent');
   removeMeta(id);
+  if (wasOpen) openAtDelete.add(id);
+  else openAtDelete.delete(id);
+  const undo = { label: 'Undo', run: () => void restoreNote(id) };
+  if (went === 'system') showToast('Moved to the system trash');
+  else if (went === 'duragon') showToast(mode === 'system' ? 'The system trash wouldn’t take it. It’s in Duragon’s Trash.' : 'Moved to Trash', undo);
+}
+
+/** Reopens a note that was open when it was deleted. */
+export async function restoreNote(id: string) {
+  try {
+    upsertMeta(await (await getBackend()).restoreNote(id));
+    if (openAtDelete.delete(id)) {
+      app.trashOpen = false;
+      await openNote(id);
+    }
+  } catch {
+    showToast('That note couldn’t be restored.');
+  }
+  if (app.trashOpen) await loadTrash();
 }
 
 export async function updateMeta(patch: NoteMetaPatch) {

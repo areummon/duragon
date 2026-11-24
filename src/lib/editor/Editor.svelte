@@ -49,12 +49,19 @@
     let timer: number | undefined;
     let changeTimer: number | undefined;
     let dirty = false;
+    let saving: Promise<void> | undefined;
 
+    // Waits for a save already on its way too, so a note never leaves before its last words are in.
     const save = async () => {
       window.clearTimeout(timer);
-      if (!dirty) return;
-      dirty = false;
-      await persist(id, withoutLastLine(ed.getJSON()));
+      if (dirty) {
+        dirty = false;
+        const mine = persist(id, withoutLastLine(ed.getJSON())).finally(() => {
+          if (saving === mine) saving = undefined;
+        });
+        saving = mine;
+      }
+      await saving;
     };
 
     const flushChanges = () => {

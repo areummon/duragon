@@ -12,10 +12,11 @@ Cargo.toml                workspace: crates/core, src-tauri
 crates/core/              duragon-core: storage + AI. No tauri imports.
   src/lib.rs
   src/model.rs            domain types (serde, shared with the frontend through types.ts)
-  src/db/                 rusqlite, migrations, one module per table group
+  src/db/                 rusqlite, migrations, one module per table group; bundle.rs takes a whole note out and puts it back
+  src/trash.rs            deleted notes: the .trash/ folder, its file format and its lock
   src/ai/                 claude runner, prompts, task orchestration
   src/export/             markdown + docx from ProseMirror JSON
-src-tauri/                thin shell: commands.rs maps 1:1 onto core functions, emits events
+src-tauri/                thin shell: commands.rs maps 1:1 onto core functions, emits events; system_trash.rs wraps the trash crate
 src/                      Svelte 5 + Vite + TypeScript frontend
   lib/api/backend.ts      the Backend interface (the only way the UI talks to Rust)
   lib/api/tauri.ts        Backend over invoke/listen
@@ -84,6 +85,7 @@ interface Settings {
   chatModel: string;                   // default 'sonnet'
   drawModel: string;                   // default 'sonnet'
   sidebarOpen: boolean;
+  deletedNotes: 'duragon' | 'system' | 'permanent';   // default 'duragon'; see "Trash"
 }
 ```
 
@@ -118,7 +120,10 @@ get_note(id) -> Note
 create_note(title?) -> Note                   applies settings defaults (mode, web, voice)
 save_note(id, title, doc, plain) -> NoteMeta
 update_note_meta(id, patch: {riddlerId?, mode?, voiceOn?, webOn?, brief?, folderId?}) -> Note
-delete_note(id)
+delete_note(id, mode: 'duragon'|'system'|'permanent') -> mode   where it went; 'duragon' when the system trash refused it
+list_trash() -> {notes: {id, title, deletedAt}[], unreadable}   newest first
+restore_note(id) -> NoteMeta                  already live: returned as it is
+delete_trashed(ids)                           deletes these from the trash for good, passing over any that is live
 list_folders() / create_folder(name) / rename_folder(id,name) / delete_folder(id)
 
 list_threads(noteId) -> Thread[]              includes messages
@@ -153,6 +158,29 @@ ai:error      ({noteId, task, message})
 about:updated (string)                        about-you paragraph changed
 chat:summary  ({noteId, summary})             the side chat's summary was folded forward in the background
 ```
+
+## Trash (crates/core/src/trash.rs)
+
+A deleted note becomes one file, `<app data>/.trash/<title> <id>.json`, which holds everything the note owns:
+
+```
+{ "duragonTrash": 1, "deletedAt", "note", "plain", "threads", "chat", "summary" }
+```
+
+The id at the end of the name, matched by the id inside, is what makes a file a note. The title is there for the person who meets it in the system trash, cut to what any file system takes. The only text from the frontend that reaches a path is a parsed `NoteId`. Nothing purges the trash.
+
+The database wins. A file whose note is live is hidden, and no sweep removes it. That makes every order of crashes safe:
+
+- **Delete** writes the file (temporary file, fsync, rename, fsync the folder) and reads it back inside the transaction that deletes the row. A failed write leaves the note. `Db::take_note` runs the transaction with `synchronous=FULL`, and `Db::put_note` does too.
+- **Restore** commits the rows, then removes the file. A note that is already live is returned and nothing is touched. A Mind that is gone becomes the builtin one, a folder that is gone none, and a drawing still pending failed. A thread or message id that is taken aborts and keeps the file.
+- **Permanent** removes any hidden file first, then deletes the rows.
+- **System** does what Delete does, then hands the same file to the `SystemTrash`. Whether the file is still there afterwards says whether it went, not what the call returned. A file it refused stays in Duragon's trash. Restoring it from the system trash puts it back in `.trash/`, where the list shows it.
+
+Every operation holds a lock on `.trash/.lock`, across processes, and can be run again from wherever it stopped. Core knows the system trash only as the `SystemTrash` trait, so its tests can't reach the real one. `src-tauri/src/system_trash.rs` implements it with the `trash` crate.
+
+A file can be edited by anyone, so restore treats it as untrusted: drawings go through `svg::sanitize` again, sources through `clean_sources`, and nesting alone decides which note and thread a message belongs to. Links, directories, names without an id, files of another version and broken files are counted as `unreadable` and never touched. `tests/fixtures/trash-v1.json` is frozen: it must restore for as long as version 1 files exist.
+
+The delete menu sends the mode it showed, so a setting that changes meanwhile can't turn a trip to the trash into a loss. The sidebar's Trash row opens `TrashDialog.svelte`, which reads the list again when the window gets focus.
 
 ## AI runner (crates/core/src/ai)
 
@@ -214,7 +242,7 @@ Drawing rules sent to the model: SVG only, viewBox width 320, `fill:none;stroke-
 
 ## Frontend structure
 
-- `App.svelte`: TopBar (hamburger, blot + wordmark, Chat pill), Sidebar, Page, ChatPanel, CommandPalette, CustomizeDialog, voice hint.
+- `App.svelte`: TopBar (hamburger, blot + wordmark, Chat pill), Sidebar, Page, ChatPanel, CommandPalette, TrashDialog, CustomizeDialog, voice hint.
 - `Page.svelte`: width handles, NoteHeaderRow (Riddler picker, Tell Riddled, mode, Voice, Web, Export), TellRiddledCard, Editor, Margin(s).
 - Editor: TipTap with a Title node as the first block, StarterKit (headings 1–4, lists, quote), CodeBlockLowlight with a per-block language picker, HorizontalRule with `---` input rule, SlashMenu, a Decorations plugin that underlines each open thread's quote (threads quoting the same whole line take its copies in order; a shorter quote sits where it first occurs), and widget decorations that render `reply` threads inline under their line.
 - Margin layout: each thread's top = the top of its quote's first line; threads are stacked to avoid overlap (push down). Both-margins placement alternates by order; right puts all on the right; marks renders a small `?` widget after the quote that opens the thread.
@@ -227,7 +255,7 @@ Reproduce the measured timings in `reference-riddled.md` (Animation timings). Al
 
 ## Verification
 
-- Rust: `cargo test -p duragon-core` covers migrations, CRUD, FTS, settings round-trip, the runner against a fake `claude` script (success, error exit, cancel), prompt assembly, and SVG sanitizing.
+- Rust: `cargo test -p duragon-core` covers migrations, CRUD, FTS, settings round-trip, the runner against a fake `claude` script (success, error exit, cancel), prompt assembly, and SVG sanitizing, and the trash at every point it can stop.
 - UI: `npm run dev` with the mock backend, driven by agent-browser in its own headless session (`--session duragon`), never the user's Chromium.
 - Desktop: `cargo tauri dev` inside `nix develop` launches the window and talks to the real CLI.
 

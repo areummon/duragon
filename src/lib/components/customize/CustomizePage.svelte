@@ -18,6 +18,7 @@
     reading: 'reading when duragon reads along, and where its thoughts go',
     voice: 'voice speak aloud speaking sound',
     look: 'look appearance theme colour color lettering text size page width ink',
+    notes: 'notes what happens to the notes you delete',
     models: 'models which claude model does what',
   } as const;
   const ROWS: Record<string, string> = {
@@ -35,6 +36,7 @@
     width: 'page width reset',
     lettering: "lettering duragon's own like your notes font",
     colour: 'colour color ink blue green red purple brown orange',
+    deleted: "deleted notes duragon’s trash duragon's trash system trash .trash bin delete for good permanently forever undo restore recover",
     readModel: 'reading model',
     chatModel: 'chat model',
     drawModel: 'drawing model',
@@ -43,6 +45,7 @@
     reading: ['start', 'pace', 'place', 'web', 'notes', 'symbols'],
     voice: ['speak', 'pick', 'speed'],
     look: ['appearance', 'size', 'width', 'lettering', 'colour'],
+    notes: ['deleted'],
     models: ['readModel', 'chatModel', 'drawModel'],
   };
   const secOn = (k: keyof typeof SECTIONS) => !q || SECTIONS[k].includes(q) || GROUPS[k].some((r) => ROWS[r].includes(q));
@@ -225,6 +228,23 @@
               <span style:background={colour}></span>
             </button>
           {/each}
+        </div>
+      </div>
+    {/if}
+  </section>
+{/if}
+
+{#if secOn('notes')}
+  <section>
+    <h3>Notes</h3>
+    <p class="sub">What happens to the notes you delete.</p>
+    {#if on('notes', 'deleted')}
+      <div class="group">
+        <h4 id="g-deleted">Deleted notes</h4>
+        <div class="grid three" role="radiogroup" aria-labelledby="g-deleted">
+          <Choice selected={s.deletedNotes === 'duragon'} onpick={() => set({ deletedNotes: 'duragon' })} title="Duragon’s trash" desc="Kept in .trash until you empty it." />
+          <Choice selected={s.deletedNotes === 'system'} onpick={() => set({ deletedNotes: 'system' })} title="System trash" desc="Put back from there, a note returns to Duragon’s trash." />
+          <Choice selected={s.deletedNotes === 'permanent'} onpick={() => set({ deletedNotes: 'permanent' })} title="Delete for good" desc="Asks first. Nothing is kept." />
         </div>
       </div>
     {/if}
