@@ -271,4 +271,4 @@ Reproduce the measured timings in `reference-riddled.md` (Animation timings). Al
 
 Inline styles stay allowed, because KaTeX and drawings are built from style attributes. Tauri would add a nonce to `style-src`, and browsers ignore `'unsafe-inline'` beside a nonce, so `dangerousDisableAssetCspModification` names `style-src`. Script sources are still hashed by Tauri.
 
-A policy doesn't stop navigation. A page the window is taken to gets no access to Duragon's commands.
+A policy doesn't stop navigation, so `own_page` in `src-tauri/src/main.rs` does. The window stays on the app's own pages, and in dev on the dev server's. Sources open in the browser.

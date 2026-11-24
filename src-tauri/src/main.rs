@@ -11,6 +11,7 @@ use duragon_core::trash::Trash;
 use duragon_voice::Voice;
 use std::sync::Arc;
 use tauri::window::Color;
+use tauri::Url;
 use tauri::{AppHandle, Emitter, Manager, Theme, WebviewWindowBuilder};
 
 struct TauriEvents(AppHandle);
@@ -29,13 +30,24 @@ fn paper(dark: bool) -> Color {
 }
 
 /// Opens the main window in the note's colours, so nothing white shows while the page loads.
+/// Whether the window may go there. Sources and anything else on the web open in the browser instead.
+fn own_page(url: &Url, dev: Option<&Url>) -> bool {
+    match url.scheme() {
+        "tauri" => url.host_str() == Some("localhost"),
+        // How Windows serves the same page.
+        "http" | "https" if url.host_str() == Some("tauri.localhost") => cfg!(windows),
+        _ => dev.is_some_and(|dev| dev.origin().is_tuple() && dev.origin() == url.origin()),
+    }
+}
+
 fn open_window(app: &tauri::App, appearance: Appearance) -> tauri::Result<()> {
     let config = &app.config().app.windows[0];
     let mut builder = WebviewWindowBuilder::from_config(app.handle(), config)?;
     if appearance != Appearance::System {
         builder = builder.initialization_script(format!("document.documentElement.dataset.theme = '{}';", appearance.as_str()));
     }
-    let window = builder.build()?;
+    let dev = app.config().build.dev_url.clone().filter(|_| tauri::is_dev());
+    let window = builder.on_navigation(move |url| own_page(url, dev.as_ref())).build()?;
     let dark = match appearance {
         Appearance::Dark => true,
         Appearance::Light => false,
@@ -97,4 +109,36 @@ fn main() {
         .invoke_handler(commands::handler())
         .run(tauri::generate_context!())
         .expect("error while running Duragon");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::own_page;
+    use tauri::Url;
+
+    fn goes(to: &str, dev: Option<&str>) -> bool {
+        own_page(&Url::parse(to).unwrap(), dev.map(|d| Url::parse(d).unwrap()).as_ref())
+    }
+
+    #[test]
+    fn the_window_stays_on_the_apps_pages() {
+        assert!(goes("tauri://localhost/", None));
+        assert!(goes("tauri://localhost/index.html#x", None));
+        assert_eq!(goes("http://tauri.localhost/", None), cfg!(windows));
+        for away in [
+            "https://example.com/", "http://localhost:1420/", "http://127.0.0.1/", "file:///etc/hosts", "data:text/html,x",
+            "about:blank", "javascript:0", "tauri://evil/", "https://tauri.localhost.evil.com/", "http://tauri.localhost@evil.com/",
+        ] {
+            assert!(!goes(away, None), "{away}");
+        }
+    }
+
+    #[test]
+    fn dev_adds_only_the_dev_server() {
+        let dev = Some("http://localhost:1420");
+        assert!(goes("http://localhost:1420/src/x", dev));
+        for away in ["http://localhost:1421/", "https://localhost:1420/", "http://localhost.evil.com:1420/", "http://localhost:1420@evil.com/", "data:text/html,x"] {
+            assert!(!goes(away, dev), "{away}");
+        }
+    }
 }
