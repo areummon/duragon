@@ -12,6 +12,7 @@ use crate::model::ThinkingLevel;
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
         .user_agent(concat!("duragon/", env!("CARGO_PKG_VERSION")))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("reqwest client")
 });
