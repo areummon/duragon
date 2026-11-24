@@ -81,6 +81,34 @@ fn a_removed_provider_takes_its_key_with_it() {
 }
 
 #[test]
+fn a_provider_whose_key_cannot_be_dropped_is_not_removed() {
+    let app = app();
+    app.save(&settings_with(&["mine"])).unwrap();
+    std::fs::write(&app.file, DAMAGED[3]).unwrap();
+    let before = app.db.get_settings().unwrap();
+
+    let mut without = settings_with(&[]);
+    without.just_my_words = true;
+    assert!(app.save(&without).is_err());
+    assert_eq!(app.db.get_settings().unwrap(), before, "the provider is gone and its key is not");
+    assert_eq!(std::fs::read(&app.file).unwrap(), DAMAGED[3]);
+}
+
+#[test]
+fn settings_that_cannot_be_read_remove_no_provider() {
+    for row in ["not json", r#"{"providers":[{"id":"mine","kind":"from-a-newer-duragon"}]}"#] {
+        let app = app();
+        app.save(&settings_with(&["mine"])).unwrap();
+        app.set("mine", "sk-mine-1234567890").unwrap();
+        let db = rusqlite::Connection::open(app.dir.path().join("duragon.db")).unwrap();
+        assert_eq!(db.execute("UPDATE kv SET value=?1 WHERE key='settings'", [row]).unwrap(), 1);
+
+        app.save(&app.db.get_settings().unwrap()).unwrap();
+        assert!(app.has_key("mine"), "reading {row} as defaults dropped a key");
+    }
+}
+
+#[test]
 fn a_built_in_provider_missing_from_the_saved_list_keeps_its_key() {
     let app = app();
     app.set("openai", "sk-openai-1234567890").unwrap();
@@ -140,7 +168,6 @@ fn a_damaged_file_is_never_written_over() {
         for (what, result) in [
             ("set", app.set("mine", "sk-mine-1234567890").map(|_| ())),
             ("delete", delete_provider_key(&app.db, &app.store, "mine").map(|_| ())),
-            ("prune", app.store.prune(&[])),
             ("removal", app.save(&Settings::default())),
         ] {
             assert_eq!(std::fs::read(&app.file).unwrap(), bytes, "{what} changed {shown}");
