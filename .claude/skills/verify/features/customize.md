@@ -7,6 +7,8 @@ The Customize dialog holds the reading, voice, look and model settings, plus the
 - `customize-open` opens the dialog from the keyboard and the sidebar's Settings menu.
 - `customize-search` filters settings by text.
 - `customize-switch` toggles a setting and stores it. On `Customize Duragon` the switches are `Web search in new notes` (`webInNewNotes`), `Search my other notes in chat` (`searchMyNotes`), `Explain symbols in formulas` (`explainSymbols`) and `New notes speak aloud` (`voiceInNewNotes`), all off by default. Under `Notes`, `Deleted notes` picks one of three radios (`deletedNotes`, `trash.md`). `About you` has `Duragon learns about you` (`learnAboutYou`, on by default).
+- `customize-models` picks the model, its provider and the thinking level for `Reading`, `Chat` and `Drawing` (`readModel`, `readProvider`, `readThinking` and so on), at the end of `Customize Duragon`.
+- `customize-providers` lists the providers that are set up or in use, and adds, changes and removes them.
 - `customize-pages` moves between `Customize Duragon`, `Minds`, `About you`, `Voice models` and `Help`. Help lists the shortcuts, including ```, `Esc`, `Tab` and `Shift Tab`.
 - `customize-minds` opens the mind editor from `New Mind` on the Minds page or from the mind picker in the note header.
 
@@ -30,6 +32,14 @@ Preconditions:
 - **Pages.** Choose each button in `Settings sections`. `Minds` shows `New Mind`. `About you` shows the switch `Duragon learns about you`. `Voice models` shows `Install voice models (615 MB download)`.
 - **Mind editor.** On `Minds`, choose `New Mind`. A dialog named `New Mind` opens over Customize with the textboxes `Name`, `Description …` and `How it thinks …`, and `Cancel`. The last two names carry their hint, so leave out `--exact`. Press Escape. `__duragon.app.mindEditor` is `null` and `__duragon.app.customizeOpen` is still `true`. Press Escape again, and Customize closes.
 - **Save a mind.** On `Minds`, choose `New Mind`, fill `Name` and `How it thinks`, and press `Control+Enter`. `listRiddlers` gains it, and only the editor closes. Started from the note's mind picker, it also becomes the note's mind (`note-header.md`).
+- **Pick a model.** Focus the `Drawing` row with `agent-browser eval '[...document.querySelectorAll(".job .row")].find((b) => b.textContent.includes("Drawing")).focus()'` and press Enter. The dialog `Drawing model` opens, and its combobox `Find a model, or type its name` has focus. Arrows, Home and End move through the listbox `Models`. Type `haiku` and press Enter. The dialog closes, the row has focus, and `drawProvider` and `drawModel` change together in `__duragon.settings.value`.
+- **Any name.** Type a name no provider lists, such as `glm-5.2`. The group `Use “glm-5.2” with` offers each ready provider, the current one first.
+- **Thinking.** In the dialog press Tab. The radiogroup `Thinking` is one tab stop, the arrows pick, and the dialog stays open. One more Tab reaches `Set up another provider`, which opens the Add menu, even from a search that hides `Providers`.
+- **Escape.** With the dialog open, Escape closes only that. `__duragon.app.customizeOpen` stays `true`.
+- **Save a key.** Choose `Add` (with `--exact`), then the menuitem `OpenRouter`. Its row appears open, with focus in `API key`. Type a key and press Enter. The row shows the key masked, and `(await b.listCredentialStatuses())` has it under `hasStoredKey`.
+- **Key that won't save.** Stub the page's backend with `b.setProviderKey = async () => { throw "no space left on device"; }`, and save again. An alert says `The key wasn’t saved: no space left on device. Your old key is still in place.`, and the field keeps the draft.
+- **Own provider.** Choose `Add`, then `Something else…`. Fill `Name` and `Address` and press Enter. Give a job one of its models, then choose `Remove provider` in its row. The row goes, the next row has focus, and the job is on `claude-cli` with a Claude model.
+- **Keys that can't be read.** Make `b.listCredentialStatuses` return `error` on each API provider, and change a provider's address. The reason stands under `Providers`, and those rows say `Key can’t be read`.
 - **Search cleared.** Open Customize, type in `Search settings`, close it, and open it again. The searchbox is empty.
 - **Proof.** Take screenshots before and after the toggle, and an `.aria.txt` of the dialog.
 
@@ -39,4 +49,6 @@ Preconditions:
 - The `Voice` and `Web` switches in the note header have the same role and live outside the dialog. Match the full switch name.
 - `About you` is also the name of a textbox on that page. Use `role button` to reach the page.
 - While the mind editor sits over Customize, two `Close` buttons exist.
+- The dialog has one scroller, `.jobs`' closest `.scroll`. A bare `.scroll` is the side chat's.
+- The model list holds only ready providers and the current one, so save a key first to see an API provider in it. Every command line provider counts as ready, because nothing checks that its command exists.
 - Settings in the mock reset on reload.
