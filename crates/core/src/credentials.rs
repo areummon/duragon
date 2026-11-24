@@ -88,12 +88,14 @@ impl CredentialsStore {
         self.set_key(provider_id, "")
     }
 
-    /// Drops every key whose provider is not among `providers`.
-    pub fn prune(&self, providers: &[ProviderConfig]) -> Result<()> {
+    pub fn forget(&self, provider_ids: &[String]) -> Result<()> {
+        if provider_ids.is_empty() {
+            return Ok(());
+        }
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let mut data = self.read_file()?;
         let before = data.keys.len();
-        data.keys.retain(|id, _| providers.iter().any(|p| p.id == *id));
+        data.keys.retain(|id, _| !provider_ids.contains(id));
         if data.keys.len() == before {
             return Ok(());
         }
@@ -113,20 +115,15 @@ impl CredentialsStore {
     }
 }
 
-/// Saves the settings, and drops the keys of providers they no longer have.
-/// Keys that can't be dropped are an error only to a save that removes a provider.
+/// Saves the settings, after forgetting the keys of the providers they remove.
+/// Saved settings that can't be parsed remove none, because their providers are unknown.
 pub fn save_settings(db: &Db, store: &CredentialsStore, settings: &Settings) -> Result<()> {
-    let providers = settings.resolved_providers();
-    let removes = db.get_settings()?.providers.iter().any(|old| providers.iter().all(|p| p.id != old.id));
-    db.save_settings(settings)?;
-    match store.prune(&providers) {
-        Err(e) if removes => Err(e.context("The provider was removed, but its API key could not be")),
-        Err(e) => {
-            eprintln!("duragon: could not drop the keys of removed providers: {e:#}");
-            Ok(())
-        }
-        Ok(()) => Ok(()),
-    }
+    let kept = settings.resolved_providers();
+    let stored = db.stored_settings()?.map(|s| s.resolved_providers()).unwrap_or_default();
+    let removed: Vec<String> =
+        stored.into_iter().map(|p| p.id).filter(|id| kept.iter().all(|p| p.id != *id)).collect();
+    store.forget(&removed).context("The settings were not saved, because a removed provider's API key could not be deleted")?;
+    db.save_settings(settings)
 }
 
 fn known_provider(db: &Db, id: &str) -> Result<ProviderConfig> {

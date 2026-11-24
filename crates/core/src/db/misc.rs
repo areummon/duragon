@@ -77,12 +77,17 @@ impl Db {
         Ok(())
     }
 
-    pub fn get_settings(&self) -> Result<Settings> {
+    /// The saved settings, or `None` when there are none or they can't be parsed.
+    pub(crate) fn stored_settings(&self) -> Result<Option<Settings>> {
         let raw: Option<String> = self
             .conn()
             .query_row("SELECT value FROM kv WHERE key='settings'", [], |r| r.get(0))
             .optional()?;
-        let mut settings: Settings = raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        Ok(raw.and_then(|s| serde_json::from_str(&s).ok()))
+    }
+
+    pub fn get_settings(&self) -> Result<Settings> {
+        let mut settings = self.stored_settings()?.unwrap_or_default();
         settings.providers = settings.resolved_providers();
         Ok(settings)
     }

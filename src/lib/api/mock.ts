@@ -441,9 +441,9 @@ export class MockBackend implements Backend {
     return structuredClone(this.settings);
   }
   async saveSettings(settings: Settings) {
+    const kept = new Set(mergeProviders(settings.providers).map((p) => p.id));
+    for (const { id } of this.providers()) if (!kept.has(id)) this.keys.delete(id);
     this.settings = structuredClone(settings);
-    const ids = new Set(this.providers().map((p) => p.id));
-    for (const id of this.keys.keys()) if (!ids.has(id)) this.keys.delete(id);
   }
   private providers() {
     return mergeProviders(this.settings.providers);
