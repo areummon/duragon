@@ -42,6 +42,16 @@ fn require_key(req: &AiRequest) -> Result<&str, AiError> {
         })
 }
 
+/// Only a built-in provider may have no address, because its key belongs to the default host.
+fn base_url<'a>(req: &'a AiRequest, default: &'a str) -> Result<&'a str, AiError> {
+    let set = req.provider.base_url.as_deref().map(str::trim).filter(|u| !u.is_empty());
+    match set {
+        Some(url) => Ok(url.trim_end_matches('/')),
+        None if req.provider.builtin => Ok(default),
+        None => fail(format!("{} has no address. Add it in Customize → Models.", req.provider.name)),
+    }
+}
+
 fn run_note_tool(req: &AiRequest, name: &str, args: &Value) -> String {
     let (Some(db), Some(notes)) = (&req.db, &req.notes) else {
         return "Notes search is unavailable.".into();
@@ -95,12 +105,7 @@ fn openai_note_tools() -> Value {
 /// OpenAI-compatible Chat Completions (OpenAI, OpenRouter, DeepSeek, Z.AI/GLM, MiMo, custom).
 pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
     let key = require_key(req)?;
-    let base = req
-        .provider
-        .base_url
-        .as_deref()
-        .unwrap_or("https://api.openai.com/v1")
-        .trim_end_matches('/');
+    let base = base_url(req, "https://api.openai.com/v1")?;
     let url = format!("{base}/chat/completions");
     let is_openrouter = base.contains("openrouter.ai");
 
@@ -216,12 +221,7 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
 /// Anthropic Messages API (`POST /v1/messages`).
 pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
     let key = require_key(req)?;
-    let base = req
-        .provider
-        .base_url
-        .as_deref()
-        .unwrap_or("https://api.anthropic.com")
-        .trim_end_matches('/');
+    let base = base_url(req, "https://api.anthropic.com")?;
     let url = format!("{base}/v1/messages");
 
     let mut tools = vec![json!({
@@ -371,12 +371,7 @@ pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
 /// Google Gemini API (`POST /models/{model}:generateContent`).
 pub async fn run_gemini(req: &AiRequest) -> Result<Value, AiError> {
     let key = require_key(req)?;
-    let base = req
-        .provider
-        .base_url
-        .as_deref()
-        .unwrap_or("https://generativelanguage.googleapis.com/v1beta")
-        .trim_end_matches('/');
+    let base = base_url(req, "https://generativelanguage.googleapis.com/v1beta")?;
     let model = req.model.trim();
     let url = format!("{base}/models/{model}:generateContent");
 
