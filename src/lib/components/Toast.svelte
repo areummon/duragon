@@ -41,5 +41,9 @@
     background: var(--ink);
     color: var(--paper);
     font-size: 13px;
+    transition: transform 160ms var(--ease-step);
   }
+  /* Gives a little under the press. */
+  button:active:not(:disabled) { transform: scale(0.97); }
+  @media (prefers-reduced-motion: reduce) { button:active:not(:disabled) { transform: none; } }
 </style>

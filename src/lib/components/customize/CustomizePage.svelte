@@ -294,7 +294,7 @@
   .ends { display: flex; justify-content: space-between; margin-top: 2px; font-size: 12.5px; color: var(--faint); }
 
   .line { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-  .ghost { height: 30px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 999px; font-size: 13px; transition: opacity 150ms var(--ease-ui); }
+  .ghost { height: 30px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 999px; font-size: 13px; transition: opacity 150ms var(--ease-ui), transform 160ms var(--ease-step); }
   .ghost:disabled { opacity: 0.4; cursor: default; }
   .model { width: 170px; height: 34px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 9px; background: transparent; font: inherit; font-size: 13.5px; color: var(--ink); outline: none; }
   .model:focus { border-color: var(--faint); }
@@ -304,4 +304,7 @@
   .swatch span { width: 20px; height: 20px; border-radius: 50%; }
   .swatch.selected { border-color: var(--ink); }
   .none { margin-top: 40px; font-size: 14px; color: var(--faint); }
+  /* Gives a little under the press. */
+  .ghost:active:not(:disabled) { transform: scale(0.97); }
+  @media (prefers-reduced-motion: reduce) { .ghost:active:not(:disabled) { transform: none; } }
 </style>

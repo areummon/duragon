@@ -64,7 +64,10 @@
   .bar span { display: block; height: 100%; background: var(--ink); transform-origin: left; transition: transform 120ms linear; }
   .pct { margin-top: 6px; font-size: 12.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
   .error { margin-top: 14px; font-size: 13.5px; color: var(--text-red); }
-  .install { margin-top: 20px; height: 36px; padding: 0 18px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 13.5px; transition: opacity 150ms var(--ease-ui); }
+  .install { margin-top: 20px; height: 36px; padding: 0 18px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 13.5px; transition: opacity 150ms var(--ease-ui), transform 160ms var(--ease-step); }
   .install:disabled { opacity: 0.4; cursor: default; }
   .ok { margin-top: 18px; font-size: 13.5px; color: var(--graphite); }
+  /* Gives a little under the press. */
+  .install:active:not(:disabled) { transform: scale(0.97); }
+  @media (prefers-reduced-motion: reduce) { .install:active:not(:disabled) { transform: none; } }
 </style>

@@ -39,7 +39,7 @@
 <style>
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
   .intro { max-width: 410px; font-size: 14px; line-height: 1.5; color: var(--graphite); }
-  .new { flex: none; height: 36px; padding: 0 16px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 13.5px; transition: opacity 150ms var(--ease-ui); }
+  .new { flex: none; height: 36px; padding: 0 16px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 13.5px; transition: opacity 150ms var(--ease-ui), transform 160ms var(--ease-step); }
   .new:hover { opacity: 0.85; }
   .list { margin-top: 24px; display: flex; flex-direction: column; gap: 18px; }
   .mind { display: flex; align-items: flex-start; gap: 12px; }
@@ -51,4 +51,7 @@
   .empty { margin-top: 16px; font-size: 14px; line-height: 1.5; color: var(--graphite); }
   .edit { height: 30px; padding: 0 12px; margin-top: 3px; border-radius: 8px; font-size: 13.5px; color: var(--graphite); transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui); }
   .edit:hover { color: var(--ink); background: var(--riddle-wash); }
+  /* Gives a little under the press. */
+  .new:active:not(:disabled) { transform: scale(0.97); }
+  @media (prefers-reduced-motion: reduce) { .new:active:not(:disabled) { transform: none; } }
 </style>

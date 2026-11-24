@@ -160,7 +160,7 @@
     style:top="{sel.top}px"
     style:left="{sel.left}px"
     style:width="{MENU_W}px"
-    transition:rise={{ y: 4, duration: 160 }}
+    transition:rise={{ y: sel.below ? -4 : 0, scale: 0.97, duration: 160 }}
     onmousedown={(e) => e.target instanceof HTMLInputElement || keep(e)}
   >
     <div class="row">
@@ -195,6 +195,8 @@
 <style>
   .menu {
     position: absolute;
+    /* Grows from the corner nearest the selection: its top left, in the margin or under the line. */
+    transform-origin: top left;
     z-index: 25;
     padding: 6px;
     border: 1px solid var(--rule);

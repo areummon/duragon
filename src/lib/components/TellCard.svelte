@@ -84,7 +84,10 @@
     background: var(--ink);
     color: var(--paper);
     font-size: 13px;
-    transition: opacity var(--dur-ui) var(--ease-ui);
+    transition: opacity var(--dur-ui) var(--ease-ui), transform 160ms var(--ease-step);
   }
   .save:disabled { opacity: 0.3; cursor: default; }
+  /* Gives a little under the press. */
+  .save:active:not(:disabled) { transform: scale(0.97); }
+  @media (prefers-reduced-motion: reduce) { .save:active:not(:disabled) { transform: none; } }
 </style>

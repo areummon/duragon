@@ -55,14 +55,15 @@
     style:top={at ? `${at.y}px` : undefined}
     style:min-width={width ? `${width}px` : undefined}
     use:dismiss
-    transition:rise={{ y: up ? 2 : -2, duration: 200 }}
+    transition:rise={{ y: up ? 4 : -4, scale: 0.97, duration: 180 }}
   >
     {@render children()}
   </div>
 {/if}
 
 <style>
-  .popover { top: calc(100% + 6px); left: 0; }
-  .popover.right { left: auto; right: 0; }
-  .popover.up { top: auto; bottom: calc(100% + 6px); }
+  /* Grows out of the button it opened from; a menu at the pointer grows from its top left corner. */
+  .popover { top: calc(100% + 6px); left: 0; transform-origin: top left; }
+  .popover.right { left: auto; right: 0; transform-origin: top right; }
+  .popover.up { top: auto; bottom: calc(100% + 6px); transform-origin: bottom left; }
 </style>

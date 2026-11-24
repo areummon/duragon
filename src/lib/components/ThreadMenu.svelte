@@ -6,6 +6,7 @@
   import type { Thread } from '../api/types';
   import { makeNote, moveToMargin, setStatus, threads, threadText } from '../state/threads.svelte';
   import { readAloud, stopSpeaking, voice } from '../state/voice.svelte';
+  import { rise } from '../motion/transitions';
 
   interface Props {
     thread: Thread;
@@ -48,7 +49,7 @@
   }
 </script>
 
-<div class="popover menu" role="menu">
+<div class="popover menu" role="menu" transition:rise|global={{ y: -4, scale: 0.97, duration: 160 }}>
   {#each actions as a (a)}
     <button class="menu-item" role="menuitem" onclick={() => run(a)}>{LABEL[a]()}</button>
   {/each}
@@ -66,7 +67,7 @@
     font-family: var(--font-sans);
     font-size: 13px;
     text-align: left;
-    animation: settle var(--dur-settle) var(--ease-settle) both;
+    transform-origin: top right;
   }
   .menu-item { color: var(--graphite); }
   .menu-item:hover { color: var(--ink); }

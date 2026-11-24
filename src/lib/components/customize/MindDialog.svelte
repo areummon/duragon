@@ -206,6 +206,9 @@
   .quiet:hover { color: var(--ink); }
   .quiet.danger { color: var(--faint); }
   .quiet.danger:hover { color: var(--text-red); }
-  .primary { height: 36px; padding: 0 18px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 14px; transition: opacity 150ms var(--ease-ui); }
+  .primary { height: 36px; padding: 0 18px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 14px; transition: opacity 150ms var(--ease-ui), transform 160ms var(--ease-step); }
   .primary:disabled { opacity: 0.35; cursor: default; }
+  /* Gives a little under the press. */
+  .primary:active:not(:disabled) { transform: scale(0.97); }
+  @media (prefers-reduced-motion: reduce) { .primary:active:not(:disabled) { transform: none; } }
 </style>
