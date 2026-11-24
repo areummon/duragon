@@ -80,8 +80,7 @@
   const selectedVoice = $derived(voice.voices.some((v) => v.id === s.voiceName) ? s.voiceName : voice.voices[0]?.id);
 
   async function sample(id: string) {
-    await updateSettings({ voiceName: id });
-    await readAloud(null, 'Does this still hold?');
+    if (await updateSettings({ voiceName: id })) await readAloud(null, 'Does this still hold?');
   }
 </script>
 

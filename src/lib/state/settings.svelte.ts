@@ -1,6 +1,7 @@
 import { getBackend } from '../api/backend';
 import { DEFAULT_MODELS, DEFAULT_PROVIDER_ID, DEFAULT_PROVIDERS, mergeProviders, withoutProvider } from '../api/providers';
 import type { ProviderCredentialStatus, Settings } from '../api/types';
+import { showToast } from './toast.svelte';
 
 const DEFAULTS: Settings = {
   newNoteMode: 'thinks', readingPace: 'regular', questionPlacement: 'both',
@@ -38,14 +39,13 @@ function apply() {
 
 dark.addEventListener('change', apply);
 
+async function storedSettings(): Promise<Settings> {
+  const loaded = await (await getBackend()).getSettings();
+  return { ...DEFAULTS, ...loaded, providers: mergeProviders(loaded.providers) };
+}
+
 export async function loadSettings() {
-  const backend = await getBackend();
-  const loaded = await backend.getSettings();
-  settings.value = {
-    ...DEFAULTS,
-    ...loaded,
-    providers: mergeProviders(loaded.providers),
-  };
+  settings.value = await storedSettings();
   settings.loaded = true;
   apply();
   await refreshCredentials();
@@ -73,13 +73,28 @@ function inTurn<T>(act: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export function updateSettings(patch: Partial<Settings>) {
+let edits = 0;
+
+/** Whether the change was stored. If not, the writer has been told, and what is stored shows again. */
+export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
   // In place, so only what reads a changed key re-runs; replacing the object re-ran every reader (~45 ms in WebKitGTK).
   Object.assign(settings.value, patch);
   apply();
+  const edit = ++edits;
   return inTurn(async () => {
-    await (await getBackend()).saveSettings($state.snapshot(settings.value));
+    try {
+      await (await getBackend()).saveSettings($state.snapshot(settings.value));
+    } catch {
+      const stored = await storedSettings().catch(() => null);
+      // A newer change is saved next, and this one with it.
+      if (edit !== edits) return false;
+      if (stored) Object.assign(settings.value, stored);
+      apply();
+      showToast('That change couldn’t be saved.');
+      return false;
+    }
     if (patch.providers) await refreshCredentials();
+    return true;
   });
 }
 
