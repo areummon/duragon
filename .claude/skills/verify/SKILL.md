@@ -55,6 +55,10 @@ Use `agent-browser` with `AGENT_BROWSER_SESSION=duragon-verify`, so this run's b
 - **Side chat.** The input is `Ask about this note`, plus the buttons `Send`, `Copy`, `Clear`, `Pin open while you write` and `Close`.
 - **Sidebar.** The navigation is `Notes`, with `Find or start a note Ctrl K`, `New note`, `New folder`, `Settings`, one button per note title and `Note options` per row. Entries in popover menus are `menuitem`, not `button`.
 - **Customize.** Press `Control+,`. You get the navigation `Settings sections` (`Customize Duragon`, `Minds`, `About you`, `Voice models`, `Help`), the searchbox `Search settings` and `Close`.
+- **Command palette.** Press `Control+k`. It is the dialog `Find a note`, with the combobox `Find a note, or name a new one` and the listbox `Notes`.
+- **Editor menus.** Selected words show the toolbar `Selection`. A `/` shows the listbox `Commands`. A code block has the select `Code language` and the button `Copy code`.
+
+`find … --name` matches a case-insensitive substring. Add `--exact` when one name contains another, such as `Copy` and `Copy code`, or `Close` and `Close notes`.
 
 Useful patterns:
 
@@ -66,13 +70,25 @@ agent-browser wait --text "write one sentence for each job"
 agent-browser wait 3000        # replies ink in word by word; let them finish before a screenshot
 ```
 
-Read or change backend state the way the UI does, through the same mock instance the page uses. The page and the dynamic import share one module, so this is the real store and not a copy:
+Read backend state through the mock instance the page uses:
 
 ```sh
 agent-browser eval '(async () => { const b = await (await import("/src/lib/api/backend.ts")).getBackend(); const n = (await b.listNotes()).find((x) => x.title === "Welcome to Duragon"); return (await b.listChat(n.id)).length; })()'
 ```
 
-Use this only to observe side effects. Drive the change itself through the UI.
+The import shares the page's module only while no file under `src/` has changed since `launch.sh` started Vite. After an edit, Vite serves the changed module as `…?t=<stamp>`, so the bare import loads a second copy with its own state. Run `cleanup.sh` and `launch.sh` again before you read the store.
+
+Front-end state is on `window.__duragon` in dev builds, always as the page's own instance: `app` (open panels, `note`, `sidebar`, `mindEditor`), `notes`, `threads` and `settings`. For example, `agent-browser eval '__duragon.app.customizeOpen'`.
+
+Use both only to observe. Drive the change itself through the UI.
+
+Headless Chromium denies `agent-browser clipboard read`. To prove a copy, capture what the page writes before you press the button:
+
+```sh
+agent-browser eval 'navigator.clipboard.writeText = async (t) => { window.__copied = t; }; "stubbed"'
+agent-browser find role button click --name "Copy" --exact
+agent-browser eval 'window.__copied'
+```
 
 ## Evidence
 
@@ -109,3 +125,5 @@ It closes this run's `agent-browser` session, kills only the process group in `v
 - **Hover.** Headless Chromium reports `hover: none`, so `(hover: hover)` styles and hover tooltips won't fire. To prove a hover path, run a headed `agent-browser` inside a private Xvfb display (`nix shell nixpkgs#xvfb-run`).
 - **IPv6 only.** Vite listens on `localhost` (`::1`). `127.0.0.1:5199` refuses connections.
 - **Fresh mock on reload.** Reloading the page resets all mock data. Persistence across restarts can only be proven in the Rust tests (`tests/db.rs` reopens a database).
+- **Blank page after a restart.** Once, right after `cleanup.sh` and `launch.sh`, the session sat on `about:blank` and evals said `__duragon is not defined`. Run `agent-browser open` again before you read anything. It did not happen in later restarts.
+- **Panels stay mounted.** The closed side chat and sidebar stay in the DOM as `inert`. To check whether one is open, use `snapshot -i` or `__duragon.app`, not `querySelector`.

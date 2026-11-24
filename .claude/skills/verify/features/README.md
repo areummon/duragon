@@ -14,7 +14,8 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 - Start each recipe from a fresh page load unless it says otherwise.
 - Find elements by accessible name (`agent-browser find role <role> <action> --name "<name>"` or `[aria-label="…"]`), not position.
 - Mock replies ink in word by word. Wait for a known phrase, then `agent-browser wait 3000` before a screenshot.
-- Read side effects from the mock store with the `getBackend()` eval in `../SKILL.md`. Drive the change itself through the UI.
+- Read side effects from the mock store with the `getBackend()` eval in `../SKILL.md`, and front-end state from `window.__duragon`. Drive the change itself through the UI.
+- Escape closes only the newest open layer, from anywhere, the editor included. `keys.md` lists the layers.
 
 ## Proof and skip reporting
 
@@ -26,7 +27,9 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 
 | File | Feature | Last proven |
 | --- | --- | --- |
-| [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear | 2026-11-21, 70ed6ac, all but `chat-copy` |
-| [margin-threads.md](margin-threads.md) | Margin questions and thread replies | 2026-11-21, 70ed6ac, open, reply, resolve, read |
-| [customize.md](customize.md) | Customize dialog and its switches | 2026-11-21, 70ed6ac, all |
-| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, delete, folders | 2026-11-21, 70ed6ac, all |
+| [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear | 2026-11-24, 253c1d7, all |
+| [margin-threads.md](margin-threads.md) | Margin questions and thread replies | 2026-11-24, 253c1d7, all but pin and the `Thread options` actions |
+| [customize.md](customize.md) | Customize dialog, its switches and the mind editor | 2026-11-24, 253c1d7, all |
+| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, delete, folders | 2026-11-24, 253c1d7, all but `sidebar-rename` (product bug) |
+| [editor.md](editor.md) | Selection toolbar, inline answers, slash commands, code blocks | 2026-11-24, 253c1d7, all but Visualize |
+| [keys.md](keys.md) | Command palette, shortcuts, Escape layers | 2026-11-24, 253c1d7, all but export (needs Tauri) and voice (no models in the mock) |
