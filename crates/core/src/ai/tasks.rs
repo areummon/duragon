@@ -538,7 +538,7 @@ impl Ai {
 }
 
 /// Keeps only http(s) sources, drops duplicates, and falls back to the URL for a blank title.
-fn clean_sources(sources: &[Source]) -> Vec<Source> {
+pub(crate) fn clean_sources(sources: &[Source]) -> Vec<Source> {
     let mut out: Vec<Source> = Vec::new();
     for s in sources {
         let url = s.url.trim();

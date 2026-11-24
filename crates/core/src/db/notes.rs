@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use rusqlite::{params, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde_json::Value;
 
 use super::{new_id, now_ms, Db};
@@ -35,6 +35,10 @@ fn note_row(r: &Row) -> rusqlite::Result<Note> {
         brief: r.get(10)?,
         created_at: r.get(11)?,
     })
+}
+
+pub(super) fn read_note(conn: &Connection, id: &str) -> rusqlite::Result<Option<Note>> {
+    conn.query_row(&format!("SELECT {NOTE_COLS} FROM notes n WHERE n.id=?1"), [id], note_row).optional()
 }
 
 /// Quote each token and append `*`, so user input can never be FTS5 syntax.
@@ -98,14 +102,11 @@ impl Db {
     }
 
     pub fn get_note(&self, id: &str) -> Result<Note> {
-        self.conn()
-            .query_row(
-                &format!("SELECT {NOTE_COLS} FROM notes n WHERE n.id=?1"),
-                [id],
-                note_row,
-            )
-            .optional()?
-            .ok_or_else(|| anyhow!("note not found: {id}"))
+        self.find_note(id)?.ok_or_else(|| anyhow!("note not found: {id}"))
+    }
+
+    pub(crate) fn find_note(&self, id: &str) -> Result<Option<Note>> {
+        Ok(read_note(&self.conn(), id)?)
     }
 
     pub fn create_note(&self, title: Option<&str>) -> Result<Note> {

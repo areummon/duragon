@@ -1,3 +1,6 @@
+mod common;
+
+use common::delete_for_good;
 use duragon_core::db::{Db, NewMessage};
 use duragon_core::model::*;
 use serde_json::json;
@@ -26,7 +29,7 @@ fn deleting_every_note_does_not_resurrect_the_welcome_note() {
     let path = dir.path().join("d.db");
     let db = Db::open(&path).unwrap();
     for n in db.list_notes().unwrap() {
-        db.delete_note(&n.id).unwrap();
+        delete_for_good(&db, &n.id);
     }
     drop(db);
     assert!(Db::open(&path).unwrap().list_notes().unwrap().is_empty());
@@ -117,7 +120,7 @@ fn create_note_applies_settings_defaults() {
 fn search_by_title_and_body_with_prefix() {
     let db = Db::open_in_memory().unwrap();
     for n in db.list_notes().unwrap() {
-        db.delete_note(&n.id).unwrap();
+        delete_for_good(&db, &n.id);
     }
     let a = db.create_note(Some("Mitochondria")).unwrap();
     let b = db.create_note(Some("Other")).unwrap();
@@ -198,7 +201,7 @@ fn deleting_a_note_cascades() {
     let t = db.create_thread(&n.meta.id, ThreadKind::Reply, "q").unwrap();
     let m = db.add_message(&n.meta.id, Some(&t.id), Author::Riddled, "x", DrawingState::None).unwrap();
     let c = db.add_message(&n.meta.id, None, Author::You, "chat", DrawingState::None).unwrap();
-    db.delete_note(&n.meta.id).unwrap();
+    delete_for_good(&db, &n.meta.id);
     assert!(db.get_thread(&t.id).is_err());
     assert!(db.get_message(&m.id).is_err());
     assert!(db.get_message(&c.id).is_err());
@@ -352,7 +355,7 @@ fn chat_summary_edits_persist_and_keep_the_watermark() {
 
     let db = Db::open(&path).unwrap();
     assert_eq!(db.get_chat_summary(&note).unwrap(), ChatSummary { text: "Greeted me.".into(), through: Some(m.id) });
-    db.delete_note(&note).unwrap();
+    delete_for_good(&db, &note);
     assert_eq!(db.get_chat_summary(&note).unwrap(), ChatSummary::default());
 }
 

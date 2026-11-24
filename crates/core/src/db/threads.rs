@@ -55,7 +55,35 @@ fn thread_row(r: &Row) -> rusqlite::Result<Thread> {
     })
 }
 
-fn read_summary(conn: &Connection, note_id: &str) -> rusqlite::Result<ChatSummary> {
+pub(super) fn read_threads(conn: &Connection, note_id: &str) -> rusqlite::Result<Vec<Thread>> {
+    let mut threads: Vec<Thread> = conn
+        .prepare(
+            "SELECT id,note_id,kind,quote,status,pinned,created_at FROM threads
+             WHERE note_id=?1 ORDER BY created_at, rowid",
+        )?
+        .query_map([note_id], thread_row)?
+        .collect::<Result<_, _>>()?;
+    let mut st = conn.prepare(&format!(
+        "SELECT {MSG_COLS} FROM messages WHERE note_id=?1 AND thread_id IS NOT NULL ORDER BY created_at, rowid"
+    ))?;
+    for m in st.query_map([note_id], msg_row)? {
+        let m = m?;
+        if let Some(t) = threads.iter_mut().find(|t| Some(&t.id) == m.thread_id.as_ref()) {
+            t.messages.push(m);
+        }
+    }
+    Ok(threads)
+}
+
+pub(super) fn read_chat(conn: &Connection, note_id: &str) -> rusqlite::Result<Vec<Message>> {
+    conn.prepare(&format!(
+        "SELECT {MSG_COLS} FROM messages WHERE note_id=?1 AND thread_id IS NULL ORDER BY created_at, rowid"
+    ))?
+    .query_map([note_id], msg_row)?
+    .collect()
+}
+
+pub(super) fn read_summary(conn: &Connection, note_id: &str) -> rusqlite::Result<ChatSummary> {
     conn.query_row(
         "SELECT chat_summary, chat_summarized_through FROM chat_summaries WHERE note_id=?1",
         [note_id],
@@ -65,7 +93,7 @@ fn read_summary(conn: &Connection, note_id: &str) -> rusqlite::Result<ChatSummar
     .map(Option::unwrap_or_default)
 }
 
-fn write_summary(conn: &Connection, note_id: &str, s: &ChatSummary) -> Result<()> {
+pub(super) fn write_summary(conn: &Connection, note_id: &str, s: &ChatSummary) -> Result<()> {
     conn.execute(
         "INSERT INTO chat_summaries(note_id, chat_summary, chat_summarized_through) VALUES (?1,?2,?3)
          ON CONFLICT(note_id) DO UPDATE SET chat_summary=excluded.chat_summary,
@@ -77,26 +105,7 @@ fn write_summary(conn: &Connection, note_id: &str, s: &ChatSummary) -> Result<()
 
 impl Db {
     pub fn list_threads(&self, note_id: &str) -> Result<Vec<Thread>> {
-        let mut threads: Vec<Thread> = {
-            let conn = self.conn();
-            let mut st = conn.prepare(
-                "SELECT id,note_id,kind,quote,status,pinned,created_at FROM threads
-                 WHERE note_id=?1 ORDER BY created_at, rowid",
-            )?;
-            let rows = st.query_map([note_id], thread_row)?.collect::<Result<_, _>>()?;
-            rows
-        };
-        let conn = self.conn();
-        let mut st = conn.prepare(&format!(
-            "SELECT {MSG_COLS} FROM messages WHERE note_id=?1 AND thread_id IS NOT NULL ORDER BY created_at, rowid"
-        ))?;
-        for m in st.query_map([note_id], msg_row)? {
-            let m = m?;
-            if let Some(t) = threads.iter_mut().find(|t| Some(&t.id) == m.thread_id.as_ref()) {
-                t.messages.push(m);
-            }
-        }
-        Ok(threads)
+        Ok(read_threads(&self.conn(), note_id)?)
     }
 
     pub fn get_thread(&self, id: &str) -> Result<Thread> {
@@ -170,12 +179,7 @@ impl Db {
     }
 
     pub fn list_chat(&self, note_id: &str) -> Result<Vec<Message>> {
-        let conn = self.conn();
-        let mut st = conn.prepare(&format!(
-            "SELECT {MSG_COLS} FROM messages WHERE note_id=?1 AND thread_id IS NULL ORDER BY created_at, rowid"
-        ))?;
-        let rows = st.query_map([note_id], msg_row)?.collect::<Result<_, _>>()?;
-        Ok(rows)
+        Ok(read_chat(&self.conn(), note_id)?)
     }
 
     pub fn get_chat_summary(&self, note_id: &str) -> Result<ChatSummary> {

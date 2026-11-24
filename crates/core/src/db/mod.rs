@@ -1,8 +1,10 @@
 //! SQLite storage. `Db` is a cheap clone around one shared connection.
+mod bundle;
 mod misc;
 mod notes;
 mod threads;
 
+pub(crate) use bundle::NoteBundle;
 pub use threads::NewMessage;
 
 use anyhow::Result;

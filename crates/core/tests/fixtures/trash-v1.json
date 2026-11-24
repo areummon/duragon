@@ -1,0 +1,67 @@
+{
+  "duragonTrash": 1,
+  "deletedAt": 1790000000000,
+  "note": {
+    "id": "3f2b8a52-6c1e-4d0a-9a57-0f6f5a1d2c11",
+    "title": "Leaves",
+    "folderId": "7d9c2a10-1111-4222-8333-444455556666",
+    "updatedAt": 1789999999000,
+    "hasOpenQuestion": true,
+    "doc": {
+      "type": "doc",
+      "content": [
+        { "type": "title", "content": [{ "type": "text", "text": "Leaves" }] },
+        { "type": "paragraph", "content": [{ "type": "text", "text": "Chloroplasts catch the light." }] }
+      ]
+    },
+    "riddlerId": "8e9c2a10-1111-4222-8333-444455556666",
+    "mode": "asks",
+    "voiceOn": true,
+    "webOn": true,
+    "brief": "Be brief.",
+    "createdAt": 1780000000000
+  },
+  "plain": "Leaves\nChloroplasts catch the light.",
+  "threads": [
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000001",
+      "noteId": "3f2b8a52-6c1e-4d0a-9a57-0f6f5a1d2c11",
+      "kind": "question",
+      "quote": "Chloroplasts catch the light.",
+      "status": "open",
+      "pinned": true,
+      "createdAt": 1785000000000,
+      "messages": [
+        {
+          "id": "a1b2c3d4-0000-4000-8000-000000000002",
+          "noteId": "3f2b8a52-6c1e-4d0a-9a57-0f6f5a1d2c11",
+          "threadId": "a1b2c3d4-0000-4000-8000-000000000001",
+          "author": "riddled",
+          "text": "All of it, or only some colours? $E = h\\nu$",
+          "drawing": "done",
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 100\"><path d=\"M0 0 L10 10\" stroke=\"var(--ink)\"></path></svg>",
+          "sources": [{ "url": "https://example.org/leaf", "title": "Leaf" }],
+          "symbols": [{ "tex": "\\nu", "meaning": "frequency" }],
+          "trimmed": true,
+          "createdAt": 1785000000001
+        }
+      ]
+    }
+  ],
+  "chat": [
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000003",
+      "noteId": "3f2b8a52-6c1e-4d0a-9a57-0f6f5a1d2c11",
+      "threadId": null,
+      "author": "you",
+      "text": "What is weakest here?",
+      "drawing": "none",
+      "svg": null,
+      "sources": [],
+      "symbols": [],
+      "trimmed": false,
+      "createdAt": 1786000000000
+    }
+  ],
+  "summary": { "text": "Asked about the weakest claim.", "through": "a1b2c3d4-0000-4000-8000-000000000003" }
+}

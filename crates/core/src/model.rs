@@ -1,6 +1,7 @@
 //! Domain types shared with the frontend (mirrors `src/lib/api/types.ts`).
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
 pub const BUILTIN_RIDDLER_ID: &str = "00000000-0000-4000-8000-000000000001";
 
@@ -36,6 +37,10 @@ str_enum!(InkColour {
     Ink => "ink", Blue => "blue", Green => "green", Red => "red",
     Purple => "purple", Brown => "brown", Orange => "orange",
 });
+str_enum!(
+    /// Where a deleted note goes.
+    DeleteMode { Duragon => "duragon", System => "system", Permanent => "permanent" }
+);
 str_enum!(ExportFormat { Md => "md", Docx => "docx" });
 str_enum!(AiTask {
     Read => "read", Answer => "answer", Reply => "reply",
@@ -51,6 +56,56 @@ pub struct NoteMeta {
     pub folder_id: Option<String>,
     pub updated_at: i64,
     pub has_open_question: bool,
+}
+
+/// A note's id in its one spelling, so it can name a file and still match the stored row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct NoteId(Uuid);
+
+impl std::str::FromStr for NoteId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        match Uuid::parse_str(s) {
+            Ok(id) if id.to_string() == s => Ok(Self(id)),
+            _ => Err("not a note id".into()),
+        }
+    }
+}
+
+impl TryFrom<String> for NoteId {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, String> {
+        s.parse()
+    }
+}
+
+impl From<NoteId> for String {
+    fn from(id: NoteId) -> Self {
+        id.to_string()
+    }
+}
+
+impl std::fmt::Display for NoteId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashedNote {
+    pub id: NoteId,
+    pub title: String,
+    pub deleted_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct TrashList {
+    /// Newest first.
+    pub notes: Vec<TrashedNote>,
+    /// Files that are broken or from a newer Duragon, left as they are.
+    pub unreadable: usize,
 }
 
 /// A search hit in another note. `edited` is the local date it was last saved, `YYYY-MM-DD`.
@@ -190,6 +245,7 @@ pub struct Settings {
     pub chat_model: String,
     pub draw_model: String,
     pub sidebar_open: bool,
+    pub deleted_notes: DeleteMode,
 }
 
 impl Default for Settings {
@@ -216,6 +272,7 @@ impl Default for Settings {
             chat_model: "sonnet".into(),
             draw_model: "opus".into(),
             sidebar_open: false,
+            deleted_notes: DeleteMode::Duragon,
         }
     }
 }

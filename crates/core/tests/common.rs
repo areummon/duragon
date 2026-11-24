@@ -1,9 +1,12 @@
 #![allow(dead_code)]
 use duragon_core::ai::Events;
+use duragon_core::db::Db;
+use duragon_core::model::DeleteMode;
+use duragon_core::trash::{SystemTrash, Trash};
 use serde_json::{json, Value};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
@@ -55,4 +58,41 @@ pub fn recording_claude(dir: &Path, out: &Value, delay: &str) -> PathBuf {
     std::fs::write(&path, script).unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     path
+}
+
+/// A stand-in for the system trash: moves files into `dir`, or refuses.
+pub struct FakeSystemTrash {
+    pub dir: PathBuf,
+    pub manners: Manners,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Manners {
+    Takes,
+    Refuses,
+    /// Says it took the file and leaves it.
+    SaysItTook,
+    /// Takes the file and says it failed.
+    SaysItFailed,
+}
+
+impl SystemTrash for FakeSystemTrash {
+    fn take(&self, file: &Path) -> anyhow::Result<()> {
+        if matches!(self.manners, Manners::Takes | Manners::SaysItFailed) {
+            std::fs::create_dir_all(&self.dir)?;
+            std::fs::rename(file, self.dir.join(file.file_name().unwrap()))?;
+        }
+        match self.manners {
+            Manners::Takes | Manners::SaysItTook => Ok(()),
+            Manners::Refuses | Manners::SaysItFailed => anyhow::bail!("no"),
+        }
+    }
+}
+
+pub fn delete_for_good(db: &Db, id: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    let os = FakeSystemTrash { dir: dir.path().join("os"), manners: Manners::Refuses };
+    Trash::new(db.clone(), dir.path().join(".trash"), Arc::new(os))
+        .delete(&id.parse().unwrap(), DeleteMode::Permanent)
+        .unwrap();
 }
