@@ -111,6 +111,8 @@ export interface ProviderCredentialStatus {
   maskedKey: string | null;
   envVar: string | null;
   hasEnvKey: boolean;
+  /** Why the saved keys can't be read, for a provider that needs one. */
+  error?: string | null;
 }
 
 export interface Settings {
