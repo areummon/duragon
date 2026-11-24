@@ -1,8 +1,9 @@
 <script lang="ts">
   import Check from 'lucide-svelte/icons/check';
   import Play from 'lucide-svelte/icons/play';
+  import { providerViews } from '../../api/providers';
   import type { Settings } from '../../api/types';
-  import { settings, updateSettings } from '../../state/settings.svelte';
+  import { credentialStatuses, settings, updateSettings } from '../../state/settings.svelte';
   import { readAloud, voice } from '../../state/voice.svelte';
   import Choice from './Choice.svelte';
   import ModelSlots from './ModelSlots.svelte';
@@ -54,6 +55,8 @@
   const secOn = (k: keyof typeof SECTIONS) => !q || SECTIONS[k].includes(q) || GROUPS[k].some((r) => ROWS[r].includes(q));
   const on = (k: keyof typeof SECTIONS, row: string) => !q || SECTIONS[k].includes(q) || ROWS[row].includes(q);
   const empty = $derived(!!q && !(Object.keys(SECTIONS) as (keyof typeof SECTIONS)[]).some(secOn));
+
+  const views = $derived(providerViews(s, credentialStatuses.value, credentialStatuses.error !== null));
 
   const INKS = [
     ['ink', 'Ink', 'var(--ink)'],
@@ -257,9 +260,7 @@
       showChat={on('models', 'chatModel')}
       showDraw={on('models', 'drawModel')}
     />
-    {#if on('models', 'providers')}
-      <ProvidersPanel />
-    {/if}
+    {#if on('models', 'providers')}<ProvidersPanel {views} />{/if}
   </section>
 {/if}
 
