@@ -264,3 +264,11 @@ Reproduce the measured timings in `reference-riddled.md` (Animation timings). Al
 - Speech to text: NVIDIA Parakeet TDT 0.6B v2 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2, English, CC-BY-4.0), run on CPU through ONNX Runtime from Rust using an int8 ONNX export of the same model. No GPU needed. The model is downloaded on first use into the app data dir, not bundled. Hold Alt to talk, tap Alt twice for hands-free (voice activity detection ends an utterance).
 - Text to speech: Kokoro-82M on CPU (ONNX), voices chosen in Customize → Voice.
 - Audio capture with cpal in Rust; the webview never touches the microphone.
+
+## Content security policy
+
+`app.security.csp` in `src-tauri/tauri.conf.json` is the one policy. Tauri sends it with the built app, and `vite.config.ts` sends it in dev, where Tauri doesn't, plus the hot-reload socket. It allows the app's own scripts, styles and fonts, `data:` fonts and images, and IPC. Everything else is refused.
+
+Inline styles stay allowed, because KaTeX and drawings are built from style attributes. Tauri would add a nonce to `style-src`, and browsers ignore `'unsafe-inline'` beside a nonce, so `dangerousDisableAssetCspModification` names `style-src`. Script sources are still hashed by Tauri.
+
+A policy doesn't stop navigation. A page the window is taken to gets no access to Duragon's commands.
