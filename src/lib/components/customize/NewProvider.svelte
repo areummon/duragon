@@ -41,7 +41,7 @@
       command: http ? null : command.trim(),
       args: http ? [] : words(options, /\s+/),
       envVar: null,
-      models: words(models, /,/),
+      models: [...new Set(words(models, /,/))],
       builtin: false,
     });
   }

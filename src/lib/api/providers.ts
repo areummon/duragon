@@ -145,7 +145,7 @@ export function isHttpKind(kind: ProviderKind): boolean {
 }
 
 export function mergeProviders(saved: ProviderConfig[] | undefined): ProviderConfig[] {
-  const base = saved && saved.length > 0 ? saved.map((p) => ({ ...p, args: [...(p.args ?? [])], models: [...(p.models ?? [])] })) : [];
+  const base = saved && saved.length > 0 ? saved.map((p) => ({ ...p, args: [...(p.args ?? [])], models: [...new Set(p.models ?? [])] })) : [];
   for (const preset of DEFAULT_PROVIDERS) {
     const existing = base.find((p) => p.id === preset.id);
     if (existing) {
