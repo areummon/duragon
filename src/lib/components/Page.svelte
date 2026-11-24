@@ -56,6 +56,17 @@
     else editor.once('create', select);
   });
 
+  /** A press on the blank page below the note goes on writing in its last line. */
+  function writeBelow(e: MouseEvent) {
+    if (!api || !page || e.button !== 0) return;
+    const { view, commands } = api.editor;
+    const blank = e.target === page || e.target === page.parentElement || e.target === view.dom.parentElement;
+    const { left, right, bottom } = view.dom.getBoundingClientRect();
+    if (!blank || e.clientY < bottom || e.clientX < left || e.clientX > right) return;
+    e.preventDefault();
+    commands.focus('end', { scrollIntoView: false });
+  }
+
   function drag(side: -1 | 1) {
     return (e: PointerEvent) => {
       if (e.button !== 0) return;
@@ -85,6 +96,8 @@
   }
   const reset = () => updateSettings({ pageWidth: null });
 </script>
+
+<svelte:window onmousedown={writeBelow} />
 
 <main class="stage" class:aside={app.chatOpen && !app.sidebarOpen && layout.vw >= 1100} class:shifted={app.sidebarOpen} class:dim={app.chatOpen && !chat.pinned}>
   <!-- Set on the page itself: a width variable on the root restyles the whole document, every sketch included, on each drag step. -->
