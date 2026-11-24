@@ -27,11 +27,11 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 
 | File | Feature | Last proven |
 | --- | --- | --- |
-| [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear, pin | 2026-11-24, e9b2a76, all |
+| [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear, pin | 2026-11-24, 4806311, all |
 | [margin-threads.md](margin-threads.md) | Margin questions, replies, pin and the thread options | 2026-11-24, e9b2a76, all |
-| [customize.md](customize.md) | Customize dialog, its switches and the mind editor | 2026-11-24, e9b2a76, all |
-| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, move, delete, folders | 2026-11-24, e9b2a76, all |
+| [customize.md](customize.md) | Customize dialog, its switches and the mind editor | 2026-11-24, 4806311, all |
+| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, move, delete, folders | 2026-11-24, 4806311, all |
 | [editor.md](editor.md) | Selection toolbar, Visualize, inline answers, last line, slash commands, code, math | 2026-11-24, e9b2a76, all |
-| [keys.md](keys.md) | Command palette, shortcuts, Escape layers, Tab | 2026-11-24, e9b2a76, all but Markdown export (needs Tauri) |
-| [note-header.md](note-header.md) | Mind, mode, Voice and Web switches, brief, PDF, page width | 2026-11-24, e9b2a76, all but Markdown and Word export (need Tauri) |
+| [keys.md](keys.md) | Command palette, shortcuts, Escape layers, Tab | 2026-11-24, 4806311, all but Markdown export (needs Tauri) |
+| [note-header.md](note-header.md) | Mind, mode, Voice and Web switches, brief, PDF, page width | 2026-11-24, 4806311, all but Markdown and Word export (need Tauri) |
 | [voice.md](voice.md) | Voice models, hold to speak, hands-free | 2026-11-24, e9b2a76, all, against the mock (no real audio) |
