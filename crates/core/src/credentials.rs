@@ -1,6 +1,6 @@
 //! Local `0600` API key storage (`credentials.json`) with environment-variable fallback.
 //! Raw keys stay in Rust; the frontend only receives masked status snapshots.
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -82,6 +82,18 @@ impl CredentialsStore {
         self.set_key(provider_id, "")
     }
 
+    /// Drops every key whose provider is not among `providers`.
+    pub fn prune(&self, providers: &[ProviderConfig]) -> Result<()> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let mut data = self.read_file();
+        let before = data.keys.len();
+        data.keys.retain(|id, _| providers.iter().any(|p| p.id == *id));
+        if data.keys.len() == before {
+            return Ok(());
+        }
+        self.write_file(&data)
+    }
+
     pub fn status_for(&self, provider: &ProviderConfig) -> ProviderCredentialStatus {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let data = self.read_file();
@@ -95,8 +107,15 @@ impl CredentialsStore {
     }
 }
 
-pub fn save_settings(db: &Db, _store: &CredentialsStore, settings: &Settings) -> Result<()> {
-    db.save_settings(settings)
+/// Saves the settings, and drops the keys of providers they no longer have.
+pub fn save_settings(db: &Db, store: &CredentialsStore, settings: &Settings) -> Result<()> {
+    db.save_settings(settings)?;
+    store.prune(&settings.resolved_providers())
+}
+
+fn known_provider(db: &Db, id: &str) -> Result<ProviderConfig> {
+    let providers = db.get_settings()?.resolved_providers();
+    providers.into_iter().find(|p| p.id == id).with_context(|| format!("there is no provider \"{id}\""))
 }
 
 pub fn set_provider_key(
@@ -105,15 +124,15 @@ pub fn set_provider_key(
     provider_id: &str,
     key: &str,
 ) -> Result<ProviderCredentialStatus> {
+    let provider = known_provider(db, provider_id)?;
     store.set_key(provider_id, key)?;
-    let settings = db.get_settings()?;
-    Ok(store.status_for(&settings.provider(provider_id)))
+    Ok(store.status_for(&provider))
 }
 
 pub fn delete_provider_key(db: &Db, store: &CredentialsStore, provider_id: &str) -> Result<ProviderCredentialStatus> {
+    let provider = known_provider(db, provider_id)?;
     store.delete_key(provider_id)?;
-    let settings = db.get_settings()?;
-    Ok(store.status_for(&settings.provider(provider_id)))
+    Ok(store.status_for(&provider))
 }
 
 fn status_from_data(data: &FileData, provider: &ProviderConfig) -> ProviderCredentialStatus {

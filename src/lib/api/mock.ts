@@ -1,12 +1,12 @@
 import type { Backend, Unsubscribe } from './backend';
 import { BUILTIN_RIDDLER } from './presets';
-import { DEFAULT_PROVIDER_ID, DEFAULT_PROVIDERS } from './providers';
+import { DEFAULT_PROVIDER_ID, DEFAULT_PROVIDERS, mergeProviders } from './providers';
 import { CHAT_BUDGET, SUMMARIZE_AFTER, SUMMARIZE_FOLD, SUMMARY_MAX_CHARS, TASK_BUDGET } from './limits';
 import {
   BUILTIN_RIDDLER_ID,
   type AiTask, type BackendEvents, type DeleteMode, type MathSymbol, type ExportFormat, type Folder, type Message,
-  type Note, type NoteMeta, type NoteMetaPatch, type ProviderCredentialStatus, type Riddler, type Settings,
-  type Thread, type ThreadKind, type ThreadStatus, type TrashList, type VoiceOption, type VoiceStatus,
+  type Note, type NoteMeta, type NoteMetaPatch, type ProviderConfig, type ProviderCredentialStatus, type Riddler,
+  type Settings, type Thread, type ThreadKind, type ThreadStatus, type TrashList, type VoiceOption, type VoiceStatus,
 } from './types';
 
 const QUOTE = 'Photosynthesis happens in the mitochondria.';
@@ -442,33 +442,44 @@ export class MockBackend implements Backend {
   }
   async saveSettings(settings: Settings) {
     this.settings = structuredClone(settings);
+    const ids = new Set(this.providers().map((p) => p.id));
+    for (const id of this.keys.keys()) if (!ids.has(id)) this.keys.delete(id);
   }
-  private credentialStatus(providerId: string): ProviderCredentialStatus {
-    const p = this.settings.providers.find((x) => x.id === providerId);
-    const stored = this.keys.get(providerId);
+  private providers() {
+    return mergeProviders(this.settings.providers);
+  }
+  private knownProvider(id: string) {
+    const p = this.providers().find((x) => x.id === id);
+    if (!p) throw new Error(`there is no provider "${id}"`);
+    return p;
+  }
+  private credentialStatus(p: ProviderConfig): ProviderCredentialStatus {
+    const stored = this.keys.get(p.id);
     const maskedKey = stored
       ? stored.length <= 8 ? '••••' : `${stored.slice(0, 4)}…${stored.slice(-4)}`
       : null;
     return {
-      providerId,
+      providerId: p.id,
       hasStoredKey: !!stored,
       maskedKey,
-      envVar: p?.envVar ?? null,
+      envVar: p.envVar ?? null,
       hasEnvKey: false,
     };
   }
   async listCredentialStatuses() {
-    return this.settings.providers.map((p) => this.credentialStatus(p.id));
+    return this.providers().map((p) => this.credentialStatus(p));
   }
   async setProviderKey(providerId: string, key: string) {
+    const p = this.knownProvider(providerId);
     const t = key.trim();
     if (t) this.keys.set(providerId, t);
     else this.keys.delete(providerId);
-    return this.credentialStatus(providerId);
+    return this.credentialStatus(p);
   }
   async deleteProviderKey(providerId: string) {
+    const p = this.knownProvider(providerId);
     this.keys.delete(providerId);
-    return this.credentialStatus(providerId);
+    return this.credentialStatus(p);
   }
   async listRiddlers() {
     return [...this.riddlers.values()];
