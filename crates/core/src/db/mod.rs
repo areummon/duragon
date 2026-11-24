@@ -15,6 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::doc;
 use crate::model::BUILTIN_RIDDLER_ID;
+use crate::private;
 
 const MIGRATIONS: &[&str] = &[r#"
 CREATE TABLE notes(
@@ -86,6 +87,17 @@ impl Db {
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
+        }
+        // SQLite gives the log beside it the same mode, so the database is private before SQLite opens it. One that
+        // exists is never opened here: closing it again would drop the locks of a connection already on it.
+        match private::options().create_new(true).open(path) {
+            Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => return Err(e.into()),
+            _ => {}
+        }
+        for suffix in ["", "-wal", "-shm"] {
+            let mut name = path.as_os_str().to_owned();
+            name.push(suffix);
+            private::file(Path::new(&name));
         }
         Self::init(Connection::open(path)?)
     }

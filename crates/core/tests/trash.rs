@@ -952,3 +952,23 @@ fn the_list_crosses_to_the_frontend_in_its_own_spelling() {
         json!({"notes": [{"id": id, "title": "Leaves", "deletedAt": list.notes[0].deleted_at}], "unreadable": 0})
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn only_the_owner_can_read_the_trash() {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &Path| fs::symlink_metadata(p).unwrap().permissions().mode() & 0o777;
+    let f = Fixture::new();
+    fs::create_dir(f.dir()).unwrap();
+    fs::set_permissions(f.dir(), fs::Permissions::from_mode(0o755)).unwrap();
+
+    let n = f.db.create_note(Some("Private")).unwrap();
+    f.trash.delete(&n.meta.id.parse().unwrap(), DeleteMode::Duragon).unwrap();
+
+    assert_eq!(mode(&f.dir()), 0o700);
+    let files: Vec<PathBuf> = fs::read_dir(f.dir()).unwrap().map(|e| e.unwrap().path()).collect();
+    assert_eq!(files.len(), 2, "the note and the lock: {files:?}");
+    for p in &files {
+        assert_eq!(mode(p), 0o600, "{}", p.display());
+    }
+}

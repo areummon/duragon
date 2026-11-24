@@ -377,3 +377,28 @@ fn an_older_database_gains_chat_summaries() {
     assert!(db.edit_chat_summary(&note, "", "Kept.").unwrap());
     assert_eq!(db.get_chat_summary(&note).unwrap().text, "Kept.");
 }
+
+#[cfg(unix)]
+#[test]
+fn only_the_owner_can_read_the_database() {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("d.db");
+    let files = ["d.db", "d.db-wal", "d.db-shm"].map(|n| dir.path().join(n));
+
+    let db = Db::open(&path).unwrap();
+    db.create_note(Some("Private")).unwrap();
+    for f in &files {
+        assert_eq!(mode(f), 0o600, "{}", f.display());
+        std::fs::set_permissions(f, std::fs::Permissions::from_mode(0o644)).unwrap();
+    }
+
+    // As an older Duragon left them, with the log still there.
+    let again = Db::open(&path).unwrap();
+    again.create_note(Some("Still private")).unwrap();
+    for f in &files {
+        assert_eq!(mode(f), 0o600, "{}", f.display());
+    }
+    assert_eq!(again.search_notes("private").unwrap().len(), 2);
+}

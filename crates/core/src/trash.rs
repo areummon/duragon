@@ -1,7 +1,7 @@
 //! Deleted notes. Each is one file in `.trash/`, and the database wins: a file whose note is live is hidden, so a
 //! delete or restore that stops halfway neither loses the note nor shows it twice.
 use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{ErrorKind, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::ai::{svg, tasks::clean_sources};
 use crate::db::{now_ms, Db, NoteBundle};
 use crate::model::*;
+use crate::private;
 
 /// Raise it when a file this code can't read would be written; older versions then leave that file alone.
 const FORMAT: u32 = 1;
@@ -141,8 +142,8 @@ impl Trash {
     /// One operation at a time, across windows and processes. Without it, a restore could remove the file a second
     /// delete had just written.
     fn lock(&self) -> Result<File> {
-        fs::create_dir_all(&self.dir)?;
-        let lock = OpenOptions::new().create(true).truncate(false).write(true).open(self.dir.join(".lock"))?;
+        private::dir(&self.dir)?;
+        let lock = private::options().create(true).truncate(false).open(self.dir.join(".lock"))?;
         lock.lock()?;
         Ok(lock)
     }
@@ -208,7 +209,7 @@ impl Trash {
 
         self.remove(id)?;
         let tmp = self.tmp(id);
-        let mut f = OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+        let mut f = private::options().create_new(true).open(&tmp)?;
         f.write_all(&bytes)?;
         f.sync_all()?;
         drop(f);
