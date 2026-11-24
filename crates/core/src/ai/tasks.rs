@@ -205,16 +205,19 @@ impl Ai {
         Self { db, events, bin: None, notes_search: None, credentials: None, summarizing: Arc::default() }
     }
 
-    fn resolve_api_key(&self, provider: &ProviderConfig) -> Option<String> {
+    fn resolve_api_key(&self, provider: &ProviderConfig) -> Result<Option<String>> {
+        if !provider.kind.needs_key() {
+            return Ok(None);
+        }
         if let Some(store) = &self.credentials {
             store.resolve(&provider.id, provider.env_var.as_deref())
         } else {
-            provider
+            Ok(provider
                 .env_var
                 .as_deref()
                 .and_then(|v| std::env::var(v).ok())
                 .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
+                .filter(|s| !s.is_empty()))
         }
     }
 
@@ -245,7 +248,7 @@ impl Ai {
         Ok(Ctx { note, riddler, settings: self.db.get_settings()? })
     }
 
-    fn request(&self, ctx: &Ctx, task: AiTask, payload: String) -> AiRequest {
+    fn request(&self, ctx: &Ctx, task: AiTask, payload: String) -> Result<AiRequest, AiError> {
         let spec = task.spec();
         let web = ctx.note.web_on && spec.web;
         let notes = match &self.notes_search {
@@ -270,8 +273,8 @@ impl Ai {
             prompts::add_symbols(&mut schema);
         }
         let provider = ctx.settings.provider(spec.model.provider_of(&ctx.settings));
-        let api_key = self.resolve_api_key(&provider);
-        AiRequest {
+        let api_key = self.resolve_api_key(&provider).map_err(|e| AiError::Failed(format!("{e:#}")))?;
+        Ok(AiRequest {
             provider,
             model: spec.model.of(&ctx.settings).to_string(),
             thinking: spec.model.thinking_of(&ctx.settings),
@@ -285,7 +288,7 @@ impl Ai {
             bin: self.bin.clone(),
             notes,
             db: Some(self.db.clone()),
-        }
+        })
     }
 
     /// Runs one task on its payload cut to the task's budget, and says whether the note itself was cut.
@@ -294,7 +297,11 @@ impl Ai {
         let note_id = &ctx.note.meta.id;
         let (payload, cut) = fit(&payload, task.spec().budget);
         let trimmed = cut.contains(&Stage::DistantNote);
-        let out = match run_ai(self.request(ctx, task, payload)).await {
+        let called = match self.request(ctx, task, payload) {
+            Ok(req) => run_ai(req).await,
+            Err(e) => Err(e),
+        };
+        let out = match called {
             Ok(v) => v,
             Err(AiError::Cancelled) => return None,
             Err(AiError::Failed(m)) => {
@@ -315,7 +322,7 @@ impl Ai {
     async fn background<T: DeserializeOwned>(&self, task: AiTask, settings: &Settings, payload: String) -> Option<T> {
         let spec = task.spec();
         let provider = settings.provider(spec.model.provider_of(settings));
-        let api_key = self.resolve_api_key(&provider);
+        let api_key = self.resolve_api_key(&provider).ok()?;
         let req = AiRequest {
             provider,
             model: spec.model.of(settings).to_string(),

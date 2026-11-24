@@ -70,6 +70,16 @@ str_enum!(
     }
 );
 
+impl ProviderKind {
+    /// The CLIs and agents bring their own login.
+    pub fn needs_key(self) -> bool {
+        match self {
+            ProviderKind::OpenAi | ProviderKind::Anthropic | ProviderKind::Gemini => true,
+            ProviderKind::ClaudeCli | ProviderKind::AgyAcp | ProviderKind::CodexCli | ProviderKind::Acp => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
@@ -104,6 +114,8 @@ pub struct ProviderCredentialStatus {
     pub masked_key: Option<String>,
     pub env_var: Option<String>,
     pub has_env_key: bool,
+    /// Why the stored keys can't be read, for a provider that needs one.
+    pub error: Option<String>,
 }
 
 pub const DEFAULT_PROVIDER_ID: &str = "claude-cli";

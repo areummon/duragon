@@ -1,9 +1,9 @@
 //! Local `0600` API key storage (`credentials.json`) with environment-variable fallback.
 //! Raw keys stay in Rust; the frontend only receives masked status snapshots.
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -12,8 +12,8 @@ use crate::model::{ProviderConfig, ProviderCredentialStatus, Settings};
 use crate::private;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FileData {
-    #[serde(default)]
     keys: BTreeMap<String, String>,
 }
 
@@ -28,12 +28,17 @@ impl CredentialsStore {
         Self { path, lock: Arc::new(Mutex::new(())) }
     }
 
-    fn read_file(&self) -> FileData {
-        let Ok(raw) = std::fs::read_to_string(&self.path) else {
-            return FileData::default();
+    /// Only a missing file holds no keys. The parser's own message is left out, because it can quote a key.
+    fn read_file(&self) -> Result<FileData> {
+        let unreadable = |why: String| anyhow!("The saved API keys in {} can't be read: {why}", self.path.display());
+        let raw = match std::fs::read(&self.path) {
+            Ok(raw) => raw,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(FileData::default()),
+            Err(e) => return Err(unreadable(e.to_string())),
         };
         private::file(&self.path);
-        serde_json::from_str(&raw).unwrap_or_default()
+        serde_json::from_slice(&raw)
+            .map_err(|_| unreadable("the file is damaged. Repair it, or delete it and add the keys again.".into()))
     }
 
     fn write_file(&self, data: &FileData) -> Result<()> {
@@ -53,22 +58,23 @@ impl CredentialsStore {
     }
 
     /// Resolves an API key: stored key in `credentials.json` first, then `env_var` fallback.
-    pub fn resolve(&self, provider_id: &str, env_var: Option<&str>) -> Option<String> {
+    /// An unreadable file may hold a key that outranks the environment's, so it is an error.
+    pub fn resolve(&self, provider_id: &str, env_var: Option<&str>) -> Result<Option<String>> {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-        let data = self.read_file();
+        let data = self.read_file()?;
         if let Some(k) = data.keys.get(provider_id).map(|s| s.trim()).filter(|s| !s.is_empty()) {
-            return Some(k.to_string());
+            return Ok(Some(k.to_string()));
         }
-        env_var
+        Ok(env_var
             .and_then(|name| std::env::var(name).ok())
             .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
+            .filter(|v| !v.is_empty()))
     }
 
     /// Stores or clears a key for `provider_id`.
     pub fn set_key(&self, provider_id: &str, key: &str) -> Result<()> {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-        let mut data = self.read_file();
+        let mut data = self.read_file()?;
         let trimmed = key.trim();
         if trimmed.is_empty() {
             data.keys.remove(provider_id);
@@ -85,7 +91,7 @@ impl CredentialsStore {
     /// Drops every key whose provider is not among `providers`.
     pub fn prune(&self, providers: &[ProviderConfig]) -> Result<()> {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-        let mut data = self.read_file();
+        let mut data = self.read_file()?;
         let before = data.keys.len();
         data.keys.retain(|id, _| providers.iter().any(|p| p.id == *id));
         if data.keys.len() == before {
@@ -96,21 +102,31 @@ impl CredentialsStore {
 
     pub fn status_for(&self, provider: &ProviderConfig) -> ProviderCredentialStatus {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-        let data = self.read_file();
+        let data = self.read_file().map_err(|e| format!("{e:#}"));
         status_from_data(&data, provider)
     }
 
     pub fn statuses(&self, providers: &[ProviderConfig]) -> Vec<ProviderCredentialStatus> {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-        let data = self.read_file();
+        let data = self.read_file().map_err(|e| format!("{e:#}"));
         providers.iter().map(|p| status_from_data(&data, p)).collect()
     }
 }
 
 /// Saves the settings, and drops the keys of providers they no longer have.
+/// Keys that can't be dropped are an error only to a save that removes a provider.
 pub fn save_settings(db: &Db, store: &CredentialsStore, settings: &Settings) -> Result<()> {
+    let providers = settings.resolved_providers();
+    let removes = db.get_settings()?.providers.iter().any(|old| providers.iter().all(|p| p.id != old.id));
     db.save_settings(settings)?;
-    store.prune(&settings.resolved_providers())
+    match store.prune(&providers) {
+        Err(e) if removes => Err(e.context("The provider was removed, but its API key could not be")),
+        Err(e) => {
+            eprintln!("duragon: could not drop the keys of removed providers: {e:#}");
+            Ok(())
+        }
+        Ok(()) => Ok(()),
+    }
 }
 
 fn known_provider(db: &Db, id: &str) -> Result<ProviderConfig> {
@@ -135,19 +151,27 @@ pub fn delete_provider_key(db: &Db, store: &CredentialsStore, provider_id: &str)
     Ok(store.status_for(&provider))
 }
 
-fn status_from_data(data: &FileData, provider: &ProviderConfig) -> ProviderCredentialStatus {
-    let stored = data.keys.get(&provider.id).map(|s| s.trim()).filter(|s| !s.is_empty());
-    let has_env_key = provider
-        .env_var
-        .as_deref()
-        .and_then(|v| std::env::var(v).ok())
-        .is_some_and(|v| !v.trim().is_empty());
+fn status_from_data(data: &Result<FileData, String>, provider: &ProviderConfig) -> ProviderCredentialStatus {
+    let error = data.as_ref().err().filter(|_| provider.kind.needs_key()).cloned();
+    let stored = data
+        .as_ref()
+        .ok()
+        .and_then(|d| d.keys.get(&provider.id))
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let has_env_key = error.is_none()
+        && provider
+            .env_var
+            .as_deref()
+            .and_then(|v| std::env::var(v).ok())
+            .is_some_and(|v| !v.trim().is_empty());
     ProviderCredentialStatus {
         provider_id: provider.id.clone(),
         has_stored_key: stored.is_some(),
         masked_key: stored.map(mask_key),
         env_var: provider.env_var.clone(),
         has_env_key,
+        error,
     }
 }
 
@@ -172,16 +196,16 @@ mod tests {
         let store = CredentialsStore::new(dir.path().join("credentials.json"));
         let openai = default_providers().into_iter().find(|p| p.id == "openai").unwrap();
 
-        assert_eq!(store.resolve("openai", None), None);
+        assert_eq!(store.resolve("openai", None).unwrap(), None);
         store.set_key("openai", "sk-proj-1234567890abcdef").unwrap();
-        assert_eq!(store.resolve("openai", None).as_deref(), Some("sk-proj-1234567890abcdef"));
+        assert_eq!(store.resolve("openai", None).unwrap().as_deref(), Some("sk-proj-1234567890abcdef"));
 
         let st = store.status_for(&openai);
         assert!(st.has_stored_key);
         assert_eq!(st.masked_key.as_deref(), Some("sk-p…cdef"));
 
         store.delete_key("openai").unwrap();
-        assert_eq!(store.resolve("openai", None), None);
+        assert_eq!(store.resolve("openai", None).unwrap(), None);
         assert!(!store.status_for(&openai).has_stored_key);
     }
 }
