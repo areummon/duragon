@@ -50,10 +50,10 @@ It is read-only. It checks that this run's Vite is alive, that it owns the port,
 Use `agent-browser` with `AGENT_BROWSER_SESSION=duragon-verify`, so this run's browser stays separate from any other. Prefer accessible names from `agent-browser snapshot -i` over CSS. These names are stable:
 
 - **Top bar.** The buttons are `Open notes` (or `Close notes` while open) and `Chat`.
-- **Note header row.** It holds the mind picker (button named after the mind, e.g. `Duragon`), `Tell Duragon`, the mode picker (`Thinks with you`), the switches `Voice` and `Web`, and `Export`.
+- **Note header row.** The toolbar `Note settings`. It holds the mind picker (button named after the mind, e.g. `Duragon`), `Tell Duragon`, the mode picker (`Thinks with you`), the switches `Voice` and `Web`, and `Export`. Once the note has a brief, the `Tell Duragon` button moves below the row and shows the brief.
 - **Editor.** The textbox is `Note`, and the title is the level-1 heading.
 - **Side chat.** The input is `Ask about this note`, plus the buttons `Send`, `Copy`, `Clear`, `Pin open while you write` and `Close`.
-- **Sidebar.** The navigation is `Notes`, with `Find or start a note Ctrl K`, `New note`, `New folder`, `Settings`, one button per note title and `Note options` per row. Entries in popover menus are `menuitem`, not `button`.
+- **Sidebar.** The navigation is `Notes`, with `Find or start a note Ctrl K`, `New note`, `New folder`, `Settings`, one button per note title and `Note options` per row. Entries in popover menus are `menuitem` (or `menuitemradio`, `menuitemcheckbox`), not `button`.
 - **Customize.** Press `Control+,`. You get the navigation `Settings sections` (`Customize Duragon`, `Minds`, `About you`, `Voice models`, `Help`), the searchbox `Search settings` and `Close`.
 - **Command palette.** Press `Control+k`. It is the dialog `Find a note`, with the combobox `Find a note, or name a new one` and the listbox `Notes`.
 - **Editor menus.** Selected words show the toolbar `Selection`. A `/` shows the listbox `Commands`. A code block has the select `Code language` and the button `Copy code`.
@@ -78,7 +78,7 @@ agent-browser eval '(async () => { const b = await (await import("/src/lib/api/b
 
 The import shares the page's module only while no file under `src/` has changed since `launch.sh` started Vite. After an edit, Vite serves the changed module as `…?t=<stamp>`, so the bare import loads a second copy with its own state. Run `cleanup.sh` and `launch.sh` again before you read the store.
 
-Front-end state is on `window.__duragon` in dev builds, always as the page's own instance: `app` (open panels, `note`, `sidebar`, `mindEditor`), `notes`, `threads` and `settings`. For example, `agent-browser eval '__duragon.app.customizeOpen'`.
+Front-end state is on `window.__duragon` in dev builds, always as the page's own instance: `app` (open panels, `note`, `sidebar`, `mindEditor`), `notes`, `threads`, `settings` and `voice`. For example, `agent-browser eval '__duragon.app.customizeOpen'`.
 
 Use both only to observe. Drive the change itself through the UI.
 
