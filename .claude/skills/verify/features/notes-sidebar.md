@@ -8,7 +8,7 @@ The sidebar lists notes and folders. From it the writer opens a note, starts a n
 - `sidebar-switch` opens another note.
 - `sidebar-new` creates a note.
 - `sidebar-rename` renames a note from `Note options`.
-- `sidebar-delete` deletes a note from `Note options`, with confirmation.
+- `sidebar-delete` deletes a note from `Note options`. `trash.md` covers where it goes.
 - `sidebar-folders` creates a folder and moves a note into it, from the menu or by dragging.
 
 `Find or start a note Ctrl K` opens the command palette. `keys.md` covers it.
@@ -35,7 +35,7 @@ Preconditions:
 - **New.** Run `agent-browser find role button click --name "New note" --exact`. `All notes 3` shows, a row `Untitled` comes first, and the stored title is `""`.
 - **Note menu.** Click a row's `Note options` by ref from `snapshot -i`. The menu has the menuitems `Rename`, `Move to folder` and `Delete`. Use `agent-browser find role menuitem click --name "…"`, not `role button`.
 - **Rename.** Choose `Rename`. The note opens with its whole title selected. Run `agent-browser wait 100`, `agent-browser keyboard type "New title"`, then `agent-browser wait 1500` for the save. The row and `listNotes` show the new title.
-- **Delete.** Choose `Delete`. The menu changes to "Delete this note for good?" with the menuitems `Delete` and `Keep it`. Choose `Delete` again. `All notes` drops by one. Deleting the open note goes back to the note open before it, else to the first in the list, or makes a new one. It works right after typing in it.
+- **Delete.** Choose `Delete`. `All notes` drops by one, and a toast offers `Undo`. Deleting the open note goes back to the note open before it, else to the first in the list, or makes a new one. It works right after typing in it.
 - **Folder.** Run `agent-browser find role button click --name "New folder"`, `agent-browser fill '[aria-label="Folder name"]' "Projects"`, `agent-browser press Enter`. The button `Projects` (`expanded=true`) and its `Folder options` appear.
 - **Move by menu.** On a note's `Note options`, choose `Move to folder`, then `Projects`. The note moves under `Projects`, and its stored `folderId` is the folder's id.
 - **Move by drag.** Read the centres of the note row and `Projects` with `getBoundingClientRect`. Run `agent-browser mouse move <note>`, `agent-browser mouse down`, `agent-browser mouse move` 10 px away, `agent-browser mouse move <Projects>`, `agent-browser mouse up`. The note's stored `folderId` is the folder's id. Drag it to blank space in the list instead, and `folderId` is `null`. Escape during a drag cancels it and leaves the sidebar open. Right after a drag, Enter on a focused `Folder options` opens its menu.

@@ -1,6 +1,7 @@
 import { getBackend } from '../api/backend';
 import { docTitle, plainText } from '../editor/plain';
 import { upsertMeta } from './notes.svelte';
+import { showToast } from './toast.svelte';
 
 const RETRY = 3000;
 
@@ -9,6 +10,8 @@ const waiting = new Map<string, unknown>();
 /** The saves on their way, at most one per note, so an older one never lands on a newer one. */
 const storing = new Map<string, Promise<void>>();
 const retries = new Map<string, number>();
+/** Told once, until a save works again. */
+let told = false;
 
 export function keepWords(id: string, doc: unknown) {
   waiting.set(id, doc);
@@ -35,8 +38,11 @@ async function store(id: string) {
         if (waiting.get(id) === doc) throw e;
       }
       if (waiting.get(id) === doc) waiting.delete(id);
+      told = false;
     }
   } catch (e) {
+    if (!told) showToast('Your last words couldn’t be saved. Trying again.');
+    told = true;
     retries.set(id, window.setTimeout(() => void storeNote(id).catch(() => {}), RETRY));
     throw e;
   } finally {

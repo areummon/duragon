@@ -6,7 +6,7 @@ The Customize dialog holds the reading, voice, look and model settings, plus the
 
 - `customize-open` opens the dialog from the keyboard and the sidebar's Settings menu.
 - `customize-search` filters settings by text.
-- `customize-switch` toggles a setting and stores it. On `Customize Duragon` the switches are `Web search in new notes` (`webInNewNotes`), `Search my other notes in chat` (`searchMyNotes`), `Explain symbols in formulas` (`explainSymbols`) and `New notes speak aloud` (`voiceInNewNotes`), all off by default. `About you` has `Duragon learns about you` (`learnAboutYou`, on by default).
+- `customize-switch` toggles a setting and stores it. On `Customize Duragon` the switches are `Web search in new notes` (`webInNewNotes`), `Search my other notes in chat` (`searchMyNotes`), `Explain symbols in formulas` (`explainSymbols`) and `New notes speak aloud` (`voiceInNewNotes`), all off by default. Under `Notes`, `Deleted notes` picks one of three radios (`deletedNotes`, `trash.md`). `About you` has `Duragon learns about you` (`learnAboutYou`, on by default).
 - `customize-pages` moves between `Customize Duragon`, `Minds`, `About you`, `Voice models` and `Help`. Help lists the shortcuts, including ```, `Esc`, `Tab` and `Shift Tab`.
 - `customize-minds` opens the mind editor from `New Mind` on the Minds page or from the mind picker in the note header.
 

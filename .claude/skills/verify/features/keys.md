@@ -13,9 +13,9 @@ App-wide shortcuts open the palette, the chat and Customize, make and copy notes
 ## How to get to it (user POV)
 
 - Press `Control+k`, or choose `Find or start a note Ctrl K` in the sidebar. Type to filter, press Arrow keys to move, and press Enter to pick. The last option is `New note: <query>` unless the query matches a title exactly.
-- Press Escape. These layers close newest first: the sidebar, the Tell card, the side chat, the palette, Customize, the mind editor, the thread dialog, the drawing dialog, an open thread, the thread menu, popover menus, the selection toolbar and the slash list. `src/lib/escape.ts` keeps the order. A field that uses Escape itself, such as `Folder name`, takes it first. Escape also stops hands-free listening (`voice.md`).
+- Press Escape. These layers close newest first: the sidebar, the Tell card, the side chat, the palette, Customize, the mind editor, the Trash and a question in it, the thread dialog, the drawing dialog, an open thread, the thread menu, popover menus, the selection toolbar and the slash list. `src/lib/escape.ts` keeps the order. A field that uses Escape itself, such as `Folder name`, takes it first. Escape also stops hands-free listening (`voice.md`).
 - Press Tab or Shift+Tab. In a list or code it indents or outdents, after `/` it picks, and in the title it goes to the text. Anywhere else in the note it moves on. With words selected it goes to their toolbar first. In a menu it closes the menu and goes on from the button that opened it. In a menu opened with the mouse, the first Tab goes to its first item. `src/lib/focus.ts` holds the rules.
-- The dialogs are Customize, the mind editor, the thread dialog, the drawing dialog and the palette.
+- The dialogs are Customize, the mind editor, the Trash, the thread dialog, the drawing dialog and the palette.
 
 ## Driving it with agent-browser
 
