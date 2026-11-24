@@ -18,7 +18,8 @@
   import { getBackend } from '../api/backend';
   import { TEXT_COLORS } from '../editor/textcolor';
   import { selectionOccurrence } from '../editor/plain';
-  import { kbd } from '../keys';
+  import { closeOnEscape } from '../escape';
+  import { isMod, kbd } from '../keys';
   import { rise } from '../motion/transitions';
   import { app } from '../state/app.svelte';
   import { MARGIN_GAP, marginWidth, selectionUi } from '../state/layout.svelte';
@@ -27,10 +28,13 @@
   interface Props { editor: Editor; page: HTMLElement }
   let { editor, page }: Props = $props();
 
-  interface Sel { from: number; to: number; text: string; top: number; left: number; below: boolean }
+  interface Sel { from: number; to: number; text: string; top: number; left: number }
   const MENU_W = 252;
 
   let sel = $state<Sel | null>(null);
+  // Kept apart from sel, which is already null when the menu's closing transition reads where it sat.
+  let below = $state(false);
+  const shown = $derived(sel !== null);
   let asking = $state(false);
   let question = $state('');
   let version = $state(0);
@@ -58,13 +62,17 @@
     const a = editor.view.coordsAtPos(from, 1);
     const b = editor.view.coordsAtPos(to, -1);
     const room = marginWidth() > 0;
+    below = !room;
     sel = {
       from, to, text,
       top: (room ? a.top : b.bottom + 10) - box.top,
       left: room ? box.width + MARGIN_GAP : Math.max(0, Math.min(a.left - box.left, box.width - MENU_W)),
-      below: !room,
     };
   }
+
+  $effect(() => {
+    if (shown) return closeOnEscape(hide);
+  });
 
   $effect(() => {
     const onTx = () => {
@@ -84,21 +92,22 @@
       pointer = false;
       requestAnimationFrame(sync);
     };
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && sel) {
-        e.preventDefault();
-        hide();
-      }
+    // Taken before the editor sees it, whose own Mod-Enter would replace the selected words with a line break.
+    const send = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || !isMod(e) || !sel || asking || !ed.view.hasFocus()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void fire('riddle');
     };
     window.addEventListener('mousedown', down);
     window.addEventListener('mouseup', up);
-    window.addEventListener('keydown', key);
+    window.addEventListener('keydown', send, true);
     return () => {
       ed.off('selectionUpdate', onSel);
       ed.off('transaction', onTx);
       window.removeEventListener('mousedown', down);
       window.removeEventListener('mouseup', up);
-      window.removeEventListener('keydown', key);
+      window.removeEventListener('keydown', send, true);
     };
   });
 
@@ -152,7 +161,7 @@
 {#if sel}
   <div
     class="menu"
-    class:below={sel.below}
+    class:below
     bind:this={menuEl}
     role="toolbar"
     tabindex="-1"
@@ -160,7 +169,7 @@
     style:top="{sel.top}px"
     style:left="{sel.left}px"
     style:width="{MENU_W}px"
-    transition:rise={{ y: sel.below ? -4 : 0, scale: 0.97, duration: 160 }}
+    transition:rise={{ y: below ? -4 : 0, scale: 0.97, duration: 160 }}
     onmousedown={(e) => e.target instanceof HTMLInputElement || keep(e)}
   >
     <div class="row">

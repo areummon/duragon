@@ -1,14 +1,16 @@
 <script lang="ts">
   import X from 'lucide-svelte/icons/x';
+  import { closeOnEscape } from '../escape';
   import { pop, veil } from '../motion/transitions';
   import { find, threads } from '../state/threads.svelte';
   import Thread from './Thread.svelte';
 
   const thread = $derived(find(threads.fullId));
   const close = () => (threads.fullId = null);
+  $effect(() => {
+    if (threads.fullId) return closeOnEscape(close);
+  });
 </script>
-
-<svelte:window onkeydown={(e) => e.key === 'Escape' && threads.fullId && !e.defaultPrevented && close()} />
 
 {#if thread}
   <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:veil>

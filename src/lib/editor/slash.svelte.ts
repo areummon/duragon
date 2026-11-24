@@ -55,6 +55,12 @@ function close() {
   slash.index = 0;
 }
 
+/** Escape: closes the menu and keeps it closed while the caret stays after this slash. */
+export function dismissSlash() {
+  dismissedAt = slash.from;
+  close();
+}
+
 export function runSlash(editor: Editor, item: SlashItem) {
   const range = { from: slash.from, to: slash.to };
   close();
@@ -100,10 +106,7 @@ export const SlashCommands = Extension.create({
             if (event.key === 'ArrowDown') slash.index = (slash.index + 1) % items.length;
             else if (event.key === 'ArrowUp') slash.index = (slash.index - 1 + items.length) % items.length;
             else if (event.key === 'Enter' || event.key === 'Tab') runSlash(editor, items[slash.index]);
-            else if (event.key === 'Escape') {
-              dismissedAt = slash.from;
-              close();
-            } else return false;
+            else return false;
             event.preventDefault();
             return true;
           },

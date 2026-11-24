@@ -2,6 +2,7 @@
   import Search from 'lucide-svelte/icons/search';
   import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
+  import { closeOnEscape } from '../../escape';
   import { pop, rise, veil } from '../../motion/transitions';
   import { app, type CustomizePage } from '../../state/app.svelte';
   import AboutPage from './AboutPage.svelte';
@@ -29,15 +30,10 @@
     else query = '';
   });
 
-  function onkeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && app.customizeOpen && !app.mindEditor) {
-      e.preventDefault();
-      close();
-    }
-  }
+  $effect(() => {
+    if (app.customizeOpen) return closeOnEscape(close);
+  });
 </script>
-
-<svelte:window {onkeydown} />
 
 {#if app.customizeOpen}
   <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil>

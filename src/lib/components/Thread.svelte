@@ -14,6 +14,7 @@
   import Blot from './Blot.svelte';
   import Drawing from './Drawing.svelte';
   import InkText from './InkText.svelte';
+  import { closeOnEscape } from '../escape';
   import { askAboutSymbol } from '../symbolTip';
   import ThreadMenu, { type ThreadAction } from './ThreadMenu.svelte';
 
@@ -106,22 +107,17 @@
     if (!el) return;
     const enter = () => (threads.hoverId = thread.id);
     const leave = () => (threads.hoverId = null);
-    el.addEventListener('keydown', keydown);
     el.addEventListener('mouseenter', enter);
     el.addEventListener('mouseleave', leave);
     return () => {
-      el.removeEventListener('keydown', keydown);
       el.removeEventListener('mouseenter', enter);
       el.removeEventListener('mouseleave', leave);
     };
   });
 
-  function keydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && variant !== 'dialog' && isOpen) {
-      e.stopPropagation();
-      openThread(null);
-    }
-  }
+  $effect(() => {
+    if (variant !== 'dialog' && threads.openId === thread.id) return closeOnEscape(() => openThread(null));
+  });
 
   /** A press anywhere outside an open, unpinned thread folds it. */
   function outside(e: PointerEvent) {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { closeOnEscape } from '../escape';
   import { rise } from '../motion/transitions';
 
   interface Props {
@@ -14,6 +15,10 @@
   }
   let { open, onclose, align = 'left', up = false, at, width, label, children }: Props = $props();
 
+  $effect(() => {
+    if (open) return closeOnEscape(() => onclose());
+  });
+
   function dismiss(node: HTMLElement) {
     // A menu under its button counts the button as inside, so pressing it toggles. One opened at the pointer has no
     // button beside it, and its parent can hold the whole page, so only the menu itself is inside.
@@ -22,11 +27,7 @@
       if (!inside?.contains(e.target as Node)) onclose();
     };
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        e.preventDefault();
-        onclose();
-      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         const items = [...node.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
         const i = items.indexOf(document.activeElement as HTMLElement);
         const next = e.key === 'ArrowDown' ? i + 1 : i - 1;

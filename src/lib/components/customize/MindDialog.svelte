@@ -3,6 +3,7 @@
   import { tick } from 'svelte';
   import { BUILTIN_RIDDLER_ID, type Frequency, type Tone } from '../../api/types';
   import { RIDDLER_PRESETS } from '../../api/presets';
+  import { closeOnEscape } from '../../escape';
   import { pop, veil } from '../../motion/transitions';
   import { app, updateMeta } from '../../state/app.svelte';
   import { notes, removeMind, saveMind } from '../../state/notes.svelte';
@@ -84,13 +85,13 @@
     if (app.note?.riddlerId === id) await updateMeta({ riddlerId: BUILTIN_RIDDLER_ID });
   }
 
+  $effect(() => {
+    if (app.mindEditor) return closeOnEscape(close);
+  });
+
   function onkeydown(e: KeyboardEvent) {
     if (!app.mindEditor) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      close();
-    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       void save();
     }

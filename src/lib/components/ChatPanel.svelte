@@ -3,6 +3,7 @@
   import Pin from 'lucide-svelte/icons/pin';
   import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
+  import { closeOnEscape } from '../escape';
   import { app } from '../state/app.svelte';
   import { chat, chatAsText, clearChat, loadChat, send } from '../state/chat.svelte';
   import { enlarge } from '../state/layout.svelte';
@@ -36,6 +37,9 @@
 
   const messages = $derived(chat.messages);
   const open = $derived(app.chatOpen);
+  $effect(() => {
+    if (open) return closeOnEscape(() => (app.chatOpen = false));
+  });
   const dim = $derived(open && !chat.pinned);
   const nThreads = $derived(threads.list.length);
   const nOpen = $derived(threads.list.filter((t) => t.status === 'open').length);
@@ -62,8 +66,6 @@
   }
 
 </script>
-
-<svelte:window onkeydown={(e) => e.key === 'Escape' && open && !e.defaultPrevented && (app.chatOpen = false)} />
 
 {#if dim}
   <div class="scrim" role="presentation" onclick={() => (app.chatOpen = false)}></div>

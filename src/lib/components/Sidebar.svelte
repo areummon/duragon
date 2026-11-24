@@ -12,6 +12,7 @@
   import type { Folder, NoteMeta } from '../api/types';
   import { app, deleteNote, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
   import { createFolder, deleteFolder, folderWithin, moveFolder, notes, renameFolder } from '../state/notes.svelte';
+  import { closeOnEscape } from '../escape';
   import { kbd } from '../keys';
   import { unfold, veil } from '../motion/transitions';
   import Blot from './Blot.svelte';
@@ -30,6 +31,10 @@
   let folderMenu = $state<{ id: string; at: { x: number; y: number }; confirm: boolean } | null>(null);
   let editing = $state<{ id: string | null; name: string } | null>(null);
   let settingsOpen = $state(false);
+
+  $effect(() => {
+    if (app.sidebarOpen) return closeOnEscape(() => setSidebar(false));
+  });
 
   function openNoteMenu(e: MouseEvent, n: NoteMeta) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();

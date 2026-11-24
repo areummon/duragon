@@ -1,9 +1,13 @@
 <script lang="ts">
   import type { Editor } from '@tiptap/core';
-  import { runSlash, slash, slashMatches } from './slash.svelte';
+  import { closeOnEscape } from '../escape';
+  import { dismissSlash, runSlash, slash, slashMatches } from './slash.svelte';
 
   let { editor }: { editor: Editor } = $props();
   const items = $derived(slashMatches(slash.query));
+  $effect(() => {
+    if (slash.open) return closeOnEscape(dismissSlash);
+  });
 
   /** The page stage slides with a transform when chat or the sidebar opens, which would re-anchor a fixed menu. */
   function portal(node: HTMLElement) {

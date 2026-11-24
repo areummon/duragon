@@ -6,6 +6,7 @@
   import type { Thread } from '../api/types';
   import { makeNote, moveToMargin, setStatus, threads, threadText } from '../state/threads.svelte';
   import { readAloud, stopSpeaking, voice } from '../state/voice.svelte';
+  import { closeOnEscape } from '../escape';
   import { rise } from '../motion/transitions';
 
   interface Props {
@@ -42,6 +43,8 @@
     margin: () => void moveToMargin(thread.id),
     dismiss: () => onleave('dismissed'),
   };
+
+  $effect(() => closeOnEscape(() => onclose()));
 
   function run(a: ThreadAction) {
     onclose();

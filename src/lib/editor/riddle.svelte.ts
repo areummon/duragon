@@ -13,7 +13,7 @@ import { measureLines } from './pencil';
 import { current } from './current';
 import { QUIET } from './create';
 import { TextSelection } from '@tiptap/pm/state';
-import { docBlocks, lineOccurrence, selectionOccurrence } from './plain';
+import { docBlocks, lineOccurrence } from './plain';
 import type { BlockChange } from './Editor.svelte';
 
 const PACE = { regular: 900, slow: 1800 } as const;
@@ -181,17 +181,6 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     });
   });
 
-  const keydown = (e: KeyboardEvent) => {
-    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
-    const { from, to, empty } = editor.state.selection;
-    if (empty) return;
-    e.preventDefault();
-    const text = editor.state.doc.textBetween(from, to, '\n');
-    const nth = selectionOccurrence(editor.state.doc, from, text);
-    void getBackend().then((be) => be.aiAsk(noteId, text, null, nth));
-  };
-  view.dom.addEventListener('keydown', keydown);
-
   async function answer(text: string, copies: number, nth: number) {
     answered.take(text);
     if (threads.list.filter((t) => t.kind === 'reply' && t.quote === text).length >= copies) return;
@@ -254,7 +243,6 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
       stop();
       ro.disconnect();
       cancelAnimationFrame(frame);
-      view.dom.removeEventListener('keydown', keydown);
       editor.off('update', measure);
       if (!view.isDestroyed) editor.unregisterPlugin(anchorKey);
       if (current.editor === editor) current.editor = null;

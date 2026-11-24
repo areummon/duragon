@@ -3,6 +3,7 @@
   import Plus from 'lucide-svelte/icons/plus';
   import { getBackend } from '../api/backend';
   import type { NoteMeta } from '../api/types';
+  import { closeOnEscape } from '../escape';
   import { app, newNote, openNote } from '../state/app.svelte';
 
   let query = $state('');
@@ -27,13 +28,15 @@
       });
   });
 
-  $effect(() => {
-    input?.focus();
-  });
-
   function close() {
     app.paletteOpen = false;
   }
+
+  // Before the field takes focus, so Escape hands focus back to what had it.
+  $effect(() => closeOnEscape(close));
+  $effect(() => {
+    input?.focus();
+  });
 
   async function pick(i: number) {
     close();
@@ -42,10 +45,7 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      close();
-    } else if (e.key === 'ArrowDown' && count) {
+    if (e.key === 'ArrowDown' && count) {
       e.preventDefault();
       index = (index + 1) % count;
     } else if (e.key === 'ArrowUp' && count) {
@@ -59,7 +59,7 @@
 </script>
 
 <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()}>
-  <div class="box">
+  <div class="box" role="dialog" aria-modal="true" aria-label="Find a note">
     <input
       bind:this={input}
       bind:value={query}

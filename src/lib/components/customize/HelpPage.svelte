@@ -6,6 +6,8 @@
     [kbd('N'), 'New note'],
     ['/', 'Commands: headings, lists, quote, code block, divider'],
     ['---', 'A divider'],
+    ['```', 'A code block. ``` and Enter on its last line closes it'],
+    ['Esc', 'Close the menu, panel or dialog on top'],
     [kbd('J'), 'Open the chat'],
     [kbd(','), 'Customize'],
     [kbd('C', true), 'Copy this note'],

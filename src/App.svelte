@@ -13,9 +13,10 @@
   import MindDialog from './lib/components/customize/MindDialog.svelte';
   import Toast from './lib/components/Toast.svelte';
   import { initVoice, stopHandsFree, voice, voiceBlur, voiceKeydown, voiceKeyup } from './lib/state/voice.svelte';
+  import { closeTop } from './lib/escape';
   import { isMod } from './lib/keys';
   import {
-    app, copyNote, exportNote, initApp, newNote, setSidebar, toggleChat, toggleJustMyWords,
+    app, copyNote, exportNote, initApp, newNote, toggleJustMyWords,
   } from './lib/state/app.svelte';
 
   onMount(() => {
@@ -24,9 +25,10 @@
 
   function onkeydown(e: KeyboardEvent) {
     voiceKeydown(e);
+    // ProseMirror marks every Escape handled, so defaultPrevented can't tell; a field that uses Escape stops it first.
     if (e.key === 'Escape') {
       stopHandsFree();
-      if (!e.defaultPrevented && app.sidebarOpen && !app.paletteOpen) setSidebar(false);
+      if (!e.isComposing) closeTop();
       return;
     }
     const ctrl = e.ctrlKey && !e.metaKey;
@@ -35,9 +37,14 @@
       e.preventDefault();
       fn();
     };
-    if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') handled(() => (app.paletteOpen = !app.paletteOpen));
-    else if (mod && !e.shiftKey && e.key.toLowerCase() === 'j') handled(toggleChat);
-    else if (mod && !e.shiftKey && e.key === ',') handled(() => (app.customizeOpen = !app.customizeOpen));
+    // A shortcut can close its panel, but not open one beneath a dialog, where Escape would close it out of sight.
+    const toggle = (open: boolean, set: (open: boolean) => void) =>
+      handled(() => {
+        if (open || !document.querySelector('[aria-modal="true"]:not([inert])')) set(!open);
+      });
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') toggle(app.paletteOpen, (v) => (app.paletteOpen = v));
+    else if (mod && !e.shiftKey && e.key.toLowerCase() === 'j') toggle(app.chatOpen, (v) => (app.chatOpen = v));
+    else if (mod && !e.shiftKey && e.key === ',') toggle(app.customizeOpen, (v) => (app.customizeOpen = v));
     else if (mod && e.shiftKey && e.code === 'KeyC') handled(() => void copyNote());
     else if (mod && e.shiftKey && e.code === 'KeyE') handled(() => void exportNote('md'));
     else if (mod && e.shiftKey && e.code === 'Period') handled(() => void toggleJustMyWords());

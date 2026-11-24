@@ -1,13 +1,15 @@
 <script lang="ts">
   import X from 'lucide-svelte/icons/x';
   import { lightbox } from '../state/layout.svelte';
+  import { closeOnEscape } from '../escape';
   import { pop, veil } from '../motion/transitions';
   import Drawing from './Drawing.svelte';
 
   const close = () => (lightbox.svg = null);
+  $effect(() => {
+    if (lightbox.svg) return closeOnEscape(close);
+  });
 </script>
-
-<svelte:window onkeydown={(e) => e.key === 'Escape' && lightbox.svg && (e.stopPropagation(), close())} />
 
 {#if lightbox.svg}
   <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:veil>
