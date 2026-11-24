@@ -2,7 +2,7 @@ import { riddlerName } from '../state/riddler';
 import { Editor, Extension } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Selection } from '@tiptap/pm/state';
+import { Plugin, Selection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { Caret } from './caret';
 import { CodeBlock } from './codeblock';
@@ -51,20 +51,57 @@ const TabKey = Extension.create({
   },
 });
 
+const isEmptyLine = (node: PMNode) => node.type.name === 'paragraph' && node.content.size === 0;
+
+// The note always ends with an empty line to go on writing in. Backspace on it goes up to the text and Delete before it
+// does nothing, both without an edit to undo. Whatever else takes it away, such as a cut, it comes back. Empty lines
+// above it delete as usual.
+const LastLine = Extension.create({
+  name: 'lastLine',
+  priority: 1000,
+  addKeyboardShortcuts() {
+    const backspace = ({ editor }: { editor: Editor }) => {
+      const { doc, selection } = editor.state;
+      const start = doc.content.size - doc.lastChild!.nodeSize;
+      const above = doc.child(doc.childCount - 2);
+      if (!selection.empty || selection.from !== start + 1 || isEmptyLine(above)) return false;
+      return editor.commands.command(({ tr }) => {
+        tr.setSelection(Selection.near(doc.resolve(start), -1)).scrollIntoView();
+        return true;
+      });
+    };
+    const del = ({ editor }: { editor: Editor }) => {
+      const { doc, selection } = editor.state;
+      const { $from, empty } = selection;
+      const atEnd = $from.pos + $from.depth === doc.content.size - doc.lastChild!.nodeSize;
+      return empty && atEnd && $from.depth > 0 && !isEmptyLine($from.parent);
+    };
+    return { Backspace: backspace, 'Mod-Backspace': backspace, 'Shift-Backspace': backspace, Delete: del, 'Mod-Delete': del };
+  },
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        appendTransaction(_transactions, _before, { doc, schema, tr }) {
+          if (isEmptyLine(doc.lastChild!)) return null;
+          return tr.insert(doc.content.size, schema.nodes.paragraph.create());
+        },
+      }),
+    ];
+  },
+});
+
 interface PlaceholderProps {
   editor: Editor;
   node: PMNode;
-  pos: number;
   hasAnchor: boolean;
 }
 
 // A brand-new note invites writing; any other empty line shows the hint only where the caret is.
-function placeholder({ editor, node, pos, hasAnchor }: PlaceholderProps) {
+function placeholder({ editor, node, hasAnchor }: PlaceholderProps) {
   if (node.type.name === 'title') return 'Untitled';
   const doc = editor.state.doc;
   if (doc.childCount === 2 && doc.child(1) === node && node.type.name === 'paragraph') return 'Just start writing.';
   if (!hasAnchor || node.type.name !== 'paragraph') return '';
-  if (doc.resolve(pos).parent.type.name === 'listItem') return 'List';
   return `Write, talk to ${riddlerName()}, or type / for commands…`;
 }
 
@@ -79,6 +116,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
         codeBlock: false,
         heading: { levels: [1, 2, 3, 4] },
         link: false,
+        trailingNode: false,
       }),
       NoteDocument,
       TextColor,
@@ -90,6 +128,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),
       SkipEmpty,
       TabKey,
+      LastLine,
     ],
     editorProps: { attributes: { class: 'note-body', spellcheck: 'true', 'aria-label': 'Note' } },
     onUpdate: ({ editor, transaction }) => onUpdate(editor, transaction.getMeta(QUIET) === true),

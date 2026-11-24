@@ -21,7 +21,7 @@
   import { registerFlush } from '../state/app.svelte';
   import { upsertMeta } from '../state/notes.svelte';
   import { createEditor } from './create';
-  import { changedBlocks, docBlocks, docTitle, normalizeDoc, plainText } from './plain';
+  import { changedBlocks, docBlocks, docTitle, normalizeDoc, plainText, withoutLastLine } from './plain';
   import { findQuote } from './quote';
   import SlashMenu from './SlashMenu.svelte';
 
@@ -54,7 +54,7 @@
       window.clearTimeout(timer);
       if (!dirty) return;
       dirty = false;
-      await persist(id, ed.getJSON());
+      await persist(id, withoutLastLine(ed.getJSON()));
     };
 
     const flushChanges = () => {
@@ -87,7 +87,7 @@
       window.clearTimeout(changeTimer);
       registerFlush(null);
       onReady?.(null);
-      const last = dirty ? ed.getJSON() : null;
+      const last = dirty ? withoutLastLine(ed.getJSON()) : null;
       ed.destroy();
       editor = undefined;
       if (last) void persist(id, last);

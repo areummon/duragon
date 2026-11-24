@@ -71,15 +71,23 @@ export function docTitle(doc: unknown): string {
   return blockTexts(doc)[0] ?? '';
 }
 
-/** Makes sure the doc starts with a title block and has at least one body block. */
+const isEmptyLine = (n: JsonNode | undefined) => n?.type === 'paragraph' && !n.content?.length;
+
+/** Makes sure the doc starts with a title block and ends with the empty line the editor keeps there. */
 export function normalizeDoc(doc: unknown, title: string): JsonNode {
   const root = (doc as JsonNode | null) ?? { type: 'doc', content: [] };
   const content = [...(root.content ?? [])];
   if (content[0]?.type !== 'title') {
     content.unshift({ type: 'title', content: title ? [{ type: 'text', text: title }] : [] });
   }
-  if (content.length < 2) content.push({ type: 'paragraph' });
+  if (!isEmptyLine(content.at(-1))) content.push({ type: 'paragraph' });
   return { ...root, type: 'doc', content };
+}
+
+/** The doc as it is saved: without the editor's empty last line, unless that is the whole body. */
+export function withoutLastLine<T extends { content?: unknown[] }>(doc: T): T {
+  const content = doc.content ?? [];
+  return content.length > 2 && isEmptyLine(content.at(-1) as JsonNode) ? { ...doc, content: content.slice(0, -1) } : doc;
 }
 
 function md(n: JsonNode, indent: string, out: string[], counter?: { n: number }) {

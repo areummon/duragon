@@ -41,7 +41,7 @@ Preconditions:
 - A thread's buttons sit inside a collapsed `<button>` until it is opened. Open it before looking for formula symbols or the reply box.
 - With `Thread options` open, `Resolve` exists as a button and a menuitem, and `Open full screen` matches both. Use `--exact`, or `role menuitem`.
 - Margins need a wide window. Below 1258 px at the default page width, or with placement set to marks, each question is a `?` button named `Open Duragon’s thought` (after the note’s mind) instead.
-- The editor focuses the end of the note on load. Don't click the last paragraph to place the caret: the click can land on the underlined seed quote and open its thread.
+- The editor focuses the empty last line on load. Don't click the last paragraph to place the caret: the click can land on the underlined seed quote and open its thread.
 - A new question needs its own paragraph of at least 12 characters that doesn't end in `?` or start with a request word (those get an inline answer). A block that already holds an open thread's quote is not read again. The mock stays quiet on about one line in four, chosen by a hash of the text. "Plants make their food from sunlight and water." asks. "Rivers always flow from north to south." stays quiet and shows "Nothing to add." for 2.4 s. Don't keep typing on the line while it reads, or the read is cancelled.
 - The question arrives 2.4–3.9 s after the last keystroke (900 ms pause plus the mock's delay). `wait 5000` covers it.
 - With the side chat open, `Pin open while you write` exists twice.
