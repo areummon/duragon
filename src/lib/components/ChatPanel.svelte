@@ -50,7 +50,7 @@
   });
 
   $effect(() => {
-    if (open) window.setTimeout(() => input?.focus(), 380);
+    if (open) input?.focus({ preventScroll: true });
   });
 
   $effect(() => {

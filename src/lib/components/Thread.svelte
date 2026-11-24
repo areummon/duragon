@@ -160,7 +160,7 @@
 
   {#if !isOpen}
     <div class="collapsed">
-      <button class="first" onclick={() => openThread(thread.id)}>
+      <button class="first" onmousedown={(e) => e.preventDefault()} onclick={() => openThread(thread.id)}>
         {#if first}<InkText text={first.text} animate={!!threads.freshText[first.id]} copyable={false} />{/if}
         {#if replies > 0}<span class="replies">{replies} {replies === 1 ? 'reply' : 'replies'}</span>{/if}
       </button>

@@ -27,13 +27,12 @@
 
   interface Props {
     note: Note;
-    focusTitle?: boolean;
     onBlocksChanged?: (change: BlockChange) => void;
     onEdit?: () => void;
     changeDelay?: () => number;
     onReady?: (api: EditorApi | null) => void;
   }
-  let { note, focusTitle = false, onBlocksChanged, onEdit, changeDelay = () => 900, onReady }: Props = $props();
+  let { note, onBlocksChanged, onEdit, changeDelay = () => 900, onReady }: Props = $props();
 
   const SAVE_DEBOUNCE = 600;
   let element: HTMLDivElement;
@@ -68,7 +67,7 @@
     const ed = createEditor({
       element,
       content: doc,
-      autofocus: focusTitle || !n.title ? 'start' : 'end',
+      autofocus: n.title ? 'end' : 'start',
       onUpdate: (_, quiet) => {
         dirty = true;
         if (!quiet) onEdit?.();

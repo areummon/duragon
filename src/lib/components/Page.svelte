@@ -46,8 +46,14 @@
   $effect(() => {
     if (!app.focusTitle || !api) return;
     app.focusTitle = false;
-    const title = api.editor.state.doc.firstChild!;
-    api.editor.chain().focus().setTextSelection({ from: 1, to: 1 + title.content.size }).run();
+    const { editor } = api;
+    const select = () => {
+      const title = editor.state.doc.firstChild!;
+      editor.chain().focus().setTextSelection({ from: 1, to: 1 + title.content.size }).run();
+    };
+    // A note that just opened focuses itself once its editor starts, which would move the caret off the title.
+    if (editor.isInitialized) select();
+    else editor.once('create', select);
   });
 
   function drag(side: -1 | 1) {
