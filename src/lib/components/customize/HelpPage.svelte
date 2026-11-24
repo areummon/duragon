@@ -8,6 +8,8 @@
     ['---', 'A divider'],
     ['```', 'A code block. ``` and Enter on its last line closes it'],
     ['Esc', 'Close the menu, panel or dialog on top'],
+    ['Tab', 'Move to the next control, or indent in a list or code'],
+    ['Shift Tab', 'Move back, or outdent'],
     [kbd('J'), 'Open the chat'],
     [kbd(','), 'Customize'],
     [kbd('C', true), 'Copy this note'],

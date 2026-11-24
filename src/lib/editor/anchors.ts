@@ -103,7 +103,8 @@ function build(doc: PMNode, input: AnchorInput, h: AnchorHandlers, kept = new Ma
           b.addEventListener('mousedown', (e) => e.preventDefault());
           b.addEventListener('click', () => h.onOpen(t.id));
           return b;
-        }, { side: 1, key: `mark-${t.id}`, ignoreSelection: true }),
+          // Its own keys, or Enter on a focused mark would break the line in the note.
+        }, { side: 1, key: `mark-${t.id}`, ignoreSelection: true, stopEvent: (e) => e.type.startsWith('key') }),
       );
       if (t.id === input.openId) {
         decos.push(

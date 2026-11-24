@@ -19,7 +19,7 @@
   import { TEXT_COLORS } from '../editor/textcolor';
   import { selectionOccurrence } from '../editor/plain';
   import { closeOnEscape } from '../escape';
-  import { isMod, kbd } from '../keys';
+  import { isMod, isTab, kbd } from '../keys';
   import { rise } from '../motion/transitions';
   import { app } from '../state/app.svelte';
   import { MARGIN_GAP, marginWidth, selectionUi } from '../state/layout.svelte';
@@ -99,15 +99,26 @@
       e.stopPropagation();
       void fire('riddle');
     };
+    // Once the editor has passed on it: Tab goes to the toolbar ahead of the answers and marks inside the note.
+    const tab = (e: KeyboardEvent) => {
+      if (!isTab(e) || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || !sel) return;
+      const first = menuEl?.querySelector('button');
+      const to = e.shiftKey ? document.activeElement === first && ed.view.dom : ed.view.hasFocus() && first;
+      if (!to) return;
+      e.preventDefault();
+      to.focus();
+    };
     window.addEventListener('mousedown', down);
     window.addEventListener('mouseup', up);
     window.addEventListener('keydown', send, true);
+    window.addEventListener('keydown', tab);
     return () => {
       ed.off('selectionUpdate', onSel);
       ed.off('transaction', onTx);
       window.removeEventListener('mousedown', down);
       window.removeEventListener('mouseup', up);
       window.removeEventListener('keydown', send, true);
+      window.removeEventListener('keydown', tab);
     };
   });
 

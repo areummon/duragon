@@ -128,9 +128,10 @@
       />
     {/if}
     {#if api && page}
+      <!-- Before the margin, so Tab goes on from the toolbar to the margin. -->
+      <SelectionMenu editor={api.editor} {page} />
       <Margin />
       <ReadingPencil editor={api.editor} {page} />
-      <SelectionMenu editor={api.editor} {page} />
     {/if}
   </div>
 </main>

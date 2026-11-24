@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { closeOnEscape } from '../escape';
+  import { menuKeys } from '../focus';
   import { rise } from '../motion/transitions';
 
   interface Props {
@@ -26,21 +27,10 @@
       const inside = at ? node : node.parentElement;
       if (!inside?.contains(e.target as Node)) onclose();
     };
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        const items = [...node.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
-        const i = items.indexOf(document.activeElement as HTMLElement);
-        const next = e.key === 'ArrowDown' ? i + 1 : i - 1;
-        items[(next + items.length) % items.length]?.focus();
-        e.preventDefault();
-      }
-    };
     window.addEventListener('pointerdown', away, true);
-    window.addEventListener('keydown', key, true);
     return {
       destroy() {
         window.removeEventListener('pointerdown', away, true);
-        window.removeEventListener('keydown', key, true);
       },
     };
   }
@@ -58,6 +48,7 @@
     style:top={at ? `${at.y}px` : undefined}
     style:min-width={width ? `${width}px` : undefined}
     use:dismiss
+    use:menuKeys={() => onclose()}
     transition:rise={{ y: up ? 4 : -4, scale: 0.97, duration: 180 }}
   >
     {@render children()}

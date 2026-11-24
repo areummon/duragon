@@ -1,7 +1,12 @@
+import { current } from './editor/current';
+import { focusLost, topDialog } from './focus';
+
 interface Layer {
   close: () => void;
   /** What had focus when the layer opened. It gets focus back when closing leaves focus nowhere. */
   from: Element | null;
+  /** Stands in for `from` when opening the layer removed it. */
+  instead?: () => HTMLElement | null | undefined;
 }
 
 /**
@@ -10,13 +15,29 @@ interface Layer {
  */
 const layers: Layer[] = [];
 
+let lastFocused: Element | null = null;
+window.addEventListener('focusin', (e) => (lastFocused = e.target as Element));
+
+const usable = (el: Element | null | undefined): el is HTMLElement =>
+  el instanceof HTMLElement && el !== document.body && el.isConnected && !el.closest('[inert]');
+
+/** To what had focus before the layer opened, else to the note. */
+function giveBack(layer: Layer) {
+  if (!focusLost()) return;
+  const to = [layer.from, layer.instead?.(), topDialog() ?? current.editor?.view.dom].find(usable);
+  to?.focus({ preventScroll: true });
+}
+
 /** Lets Escape close something while it is open; returns the function that takes it off again. */
-export function closeOnEscape(close: () => void): () => void {
-  const layer = { close, from: document.activeElement };
+export function closeOnEscape(close: () => void, instead?: Layer['instead']): () => void {
+  const layer = { close, from: document.activeElement, instead };
   layers.push(layer);
   return () => {
     const i = layers.indexOf(layer);
-    if (i >= 0) layers.splice(i, 1);
+    if (i < 0) return;
+    layers.splice(i, 1);
+    // Closed some other way. Focus that went with it comes back; focus the writer took elsewhere stays.
+    if (!usable(lastFocused)) giveBack(layer);
   };
 }
 
@@ -25,9 +46,5 @@ export function closeTop() {
   const layer = layers.pop();
   if (!layer) return;
   layer.close();
-  requestAnimationFrame(() => {
-    const now = document.activeElement;
-    if (now && now !== document.body && !now.closest('[inert]')) return;
-    if (layer.from instanceof HTMLElement && layer.from.isConnected) layer.from.focus({ preventScroll: true });
-  });
+  requestAnimationFrame(() => giveBack(layer));
 }

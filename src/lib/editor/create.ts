@@ -2,6 +2,7 @@ import { riddlerName } from '../state/riddler';
 import { Editor, Extension } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { Selection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { Caret } from './caret';
 import { CodeBlock } from './codeblock';
@@ -27,6 +28,26 @@ const SkipEmpty = Extension.create({
   name: 'skipEmpty',
   dispatchTransaction({ transaction: tr, next }) {
     if (tr.docChanged || tr.selectionSet || tr.storedMarksSet || tr.scrolledIntoView || !tr.isGeneric) next(tr);
+  },
+});
+
+// Tab indents lists and code, and from the title it goes to the text. Anywhere else it moves focus on, as it does outside
+// the note. A list item that can't indent further keeps Tab, so a press too many doesn't leave the note mid-list.
+const TabKey = Extension.create({
+  name: 'tabKey',
+  priority: 1,
+  addKeyboardShortcuts() {
+    return {
+      Tab: ({ editor }) => {
+        const { doc, selection } = editor.state;
+        if (editor.isActive('listItem')) return true;
+        if (selection.$from.parent.type.name !== 'title') return false;
+        return editor.commands.command(({ tr }) => {
+          tr.setSelection(Selection.near(doc.resolve(doc.firstChild!.nodeSize))).scrollIntoView();
+          return true;
+        });
+      },
+    };
   },
 });
 
@@ -68,6 +89,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       SlashCommands,
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),
       SkipEmpty,
+      TabKey,
     ],
     editorProps: { attributes: { class: 'note-body', spellcheck: 'true', 'aria-label': 'Note' } },
     onUpdate: ({ editor, transaction }) => onUpdate(editor, transaction.getMeta(QUIET) === true),

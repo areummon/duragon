@@ -7,6 +7,7 @@
   import { makeNote, moveToMargin, setStatus, threads, threadText } from '../state/threads.svelte';
   import { readAloud, stopSpeaking, voice } from '../state/voice.svelte';
   import { closeOnEscape } from '../escape';
+  import { menuKeys } from '../focus';
   import { rise } from '../motion/transitions';
 
   interface Props {
@@ -52,7 +53,7 @@
   }
 </script>
 
-<div class="popover menu" role="menu" transition:rise|global={{ y: -4, scale: 0.97, duration: 160 }}>
+<div class="popover menu" role="menu" use:menuKeys={() => onclose()} transition:rise|global={{ y: -4, scale: 0.97, duration: 160 }}>
   {#each actions as a (a)}
     <button class="menu-item" role="menuitem" onclick={() => run(a)}>{LABEL[a]()}</button>
   {/each}

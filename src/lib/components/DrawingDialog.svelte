@@ -2,6 +2,7 @@
   import X from 'lucide-svelte/icons/x';
   import { lightbox } from '../state/layout.svelte';
   import { closeOnEscape } from '../escape';
+  import { takeFocus } from '../focus';
   import { pop, veil } from '../motion/transitions';
   import Drawing from './Drawing.svelte';
 
@@ -13,7 +14,7 @@
 
 {#if lightbox.svg}
   <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:veil>
-    <div class="card" role="dialog" aria-modal="true" aria-label="The drawing, larger" tabindex="-1" in:pop out:pop={{ duration: 140 }}>
+    <div class="card" role="dialog" aria-modal="true" aria-label="The drawing, larger" tabindex="-1" use:takeFocus in:pop out:pop={{ duration: 140 }}>
       <header>
         <h2>The drawing, larger</h2>
         <button aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
@@ -41,6 +42,7 @@
     border-radius: 14px;
     background: var(--paper);
     box-shadow: var(--lift);
+    outline: none;
   }
   header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
   h2 { margin: 0; font-family: var(--font-voice); font-size: 18px; font-weight: 400; color: var(--riddle); }

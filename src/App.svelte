@@ -14,6 +14,7 @@
   import Toast from './lib/components/Toast.svelte';
   import { initVoice, stopHandsFree, voice, voiceBlur, voiceKeydown, voiceKeyup } from './lib/state/voice.svelte';
   import { closeTop } from './lib/escape';
+  import { cycleTab, topDialog } from './lib/focus';
   import { isMod } from './lib/keys';
   import {
     app, copyNote, exportNote, initApp, newNote, toggleJustMyWords,
@@ -25,6 +26,7 @@
 
   function onkeydown(e: KeyboardEvent) {
     voiceKeydown(e);
+    cycleTab(e);
     // ProseMirror marks every Escape handled, so defaultPrevented can't tell; a field that uses Escape stops it first.
     if (e.key === 'Escape') {
       stopHandsFree();
@@ -40,7 +42,7 @@
     // A shortcut can close its panel, but not open one beneath a dialog, where Escape would close it out of sight.
     const toggle = (open: boolean, set: (open: boolean) => void) =>
       handled(() => {
-        if (open || !document.querySelector('[aria-modal="true"]:not([inert])')) set(!open);
+        if (open || !topDialog()) set(!open);
       });
     if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') toggle(app.paletteOpen, (v) => (app.paletteOpen = v));
     else if (mod && !e.shiftKey && e.key.toLowerCase() === 'j') toggle(app.chatOpen, (v) => (app.chatOpen = v));

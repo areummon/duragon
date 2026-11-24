@@ -7,3 +7,6 @@ export function kbd(key: string, shift = false): string {
 }
 
 export const isMod = (e: KeyboardEvent) => (mac ? e.metaKey : e.ctrlKey);
+
+/** By its place on the keyboard: WebKitGTK reports Shift+Tab's `key` as "Unidentified". */
+export const isTab = (e: KeyboardEvent) => e.code === 'Tab';

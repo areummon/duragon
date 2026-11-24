@@ -40,7 +40,7 @@
   user-select: none;
 }
 
-button:focus-visible, select:focus-visible {
+button:focus-visible, select:focus-visible, [role='button']:focus-visible {
   outline: 1px solid var(--riddle-line);
   outline-offset: 2px;
 }

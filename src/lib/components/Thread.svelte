@@ -116,8 +116,16 @@
   });
 
   $effect(() => {
-    if (variant !== 'dialog' && threads.openId === thread.id) return closeOnEscape(() => openThread(null));
+    if (variant !== 'dialog' && threads.openId === thread.id) return closeOnEscape(() => openThread(null), () => article?.querySelector<HTMLElement>('.first'));
   });
+
+  /** Opened from the keyboard, the reply box takes the focus the button had. A click leaves focus where it was. */
+  async function openFirst(e: MouseEvent) {
+    openThread(thread.id);
+    if (e.detail > 0) return;
+    await tick();
+    field?.focus({ preventScroll: true });
+  }
 
   /** A press anywhere outside an open, unpinned thread folds it. */
   function outside(e: PointerEvent) {
@@ -160,7 +168,7 @@
 
   {#if !isOpen}
     <div class="collapsed">
-      <button class="first" onmousedown={(e) => e.preventDefault()} onclick={() => openThread(thread.id)}>
+      <button class="first" onmousedown={(e) => e.preventDefault()} onclick={openFirst}>
         {#if first}<InkText text={first.text} animate={!!threads.freshText[first.id]} copyable={false} />{/if}
         {#if replies > 0}<span class="replies">{replies} {replies === 1 ? 'reply' : 'replies'}</span>{/if}
       </button>
