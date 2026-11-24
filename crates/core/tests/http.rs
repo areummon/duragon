@@ -52,3 +52,15 @@ async fn a_redirect_takes_the_key_and_the_note_nowhere_else() {
         assert!(matches!(&result, Err(AiError::Failed(m)) if m.contains("307")), "{kind:?}: {result:?}");
     }
 }
+
+#[tokio::test]
+async fn the_writers_own_provider_without_an_address_gets_no_key() {
+    for kind in [ProviderKind::OpenAi, ProviderKind::Anthropic, ProviderKind::Gemini] {
+        for base_url in [None, Some(""), Some("  ")] {
+            let mut req = request(kind, String::new());
+            req.provider.base_url = base_url.map(Into::into);
+            let result = run_ai(req).await;
+            assert!(matches!(&result, Err(AiError::Failed(m)) if m.contains("no address")), "{kind:?} {base_url:?}: {result:?}");
+        }
+    }
+}
