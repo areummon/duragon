@@ -170,6 +170,10 @@ fn open_trash(root: &Path, db: &Db, manners: Manners) -> Trash {
     Trash::new(db.clone(), root.join(".trash"), Arc::new(FakeSystemTrash { dir: root.join("os"), manners }))
 }
 
+fn now() -> i64 {
+    std::time::UNIX_EPOCH.elapsed().unwrap().as_millis() as i64
+}
+
 fn names(dir: &Path) -> Vec<String> {
     let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
     let mut names: Vec<String> = entries.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
@@ -291,7 +295,7 @@ fn a_file_is_named_after_its_note_in_a_way_any_system_can_hold() {
     for (title, want) in cases {
         let f = Fixture::new();
         let id = f.note("x");
-        f.db.save_note(&id.to_string(), title, &json!({"type":"doc"}), "").unwrap();
+        f.db.save_note(&id.to_string(), title, &json!({"type":"doc","content":[]}), "").unwrap();
         f.trash.delete(&id, DeleteMode::Duragon).unwrap();
         assert_eq!(f.files(), vec![format!("{want} {id}.json")], "{title:?}");
         assert_eq!(f.listed(), vec![title.to_string()], "the list shows the real title");
@@ -301,7 +305,7 @@ fn a_file_is_named_after_its_note_in_a_way_any_system_can_hold() {
 
     let f = Fixture::new();
     let id = f.note("x");
-    f.db.save_note(&id.to_string(), &emoji, &json!({"type":"doc"}), "").unwrap();
+    f.db.save_note(&id.to_string(), &emoji, &json!({"type":"doc","content":[]}), "").unwrap();
     f.trash.delete(&id, DeleteMode::Duragon).unwrap();
     let name = f.files().remove(0);
     assert!(name.len() + ".trashinfo".len() <= 255 && name.ends_with(&format!(" {id}.json")), "{name}");
@@ -424,7 +428,7 @@ fn a_restore_that_stopped_before_its_unlink_leaves_the_note_live_once() {
     let file = fs::read(&path).unwrap();
     f.trash.restore(&id).unwrap();
     fs::write(&path, &file).unwrap();
-    f.db.save_note(&id.to_string(), "Edited since", &json!({"type":"doc"}), "edited since").unwrap();
+    f.db.save_note(&id.to_string(), "Edited since", &json!({"type":"doc","content":[]}), "edited since").unwrap();
     let edited = f.whole(&id);
 
     assert!(f.listed().is_empty());
@@ -525,7 +529,7 @@ fn the_newest_copy_of_a_note_is_the_one_restored() {
     let old = names(&f.os()).remove(0);
     fs::copy(f.os().join(&old), f.dir().join(&old)).unwrap();
     f.trash.restore(&id).unwrap();
-    f.db.save_note(&id.to_string(), "Second", &json!({"type":"doc"}), "").unwrap();
+    f.db.save_note(&id.to_string(), "Second", &json!({"type":"doc","content":[]}), "").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(3));
     f.trash.delete(&id, DeleteMode::Duragon).unwrap();
     fs::rename(f.os().join(&old), f.dir().join(&old)).unwrap();
@@ -595,7 +599,7 @@ fn v1(id: &NoteId, title: &str) -> String {
     json!({
         "duragonTrash": 1, "deletedAt": 5,
         "note": {
-            "id": id, "title": title, "folderId": null, "updatedAt": 2, "hasOpenQuestion": false, "doc": {"type": "doc"},
+            "id": id, "title": title, "folderId": null, "updatedAt": 2, "hasOpenQuestion": false, "doc": {"type": "doc", "content": []},
             "riddlerId": BUILTIN_RIDDLER_ID, "mode": "thinks", "voiceOn": false, "webOn": false, "brief": "", "createdAt": 1
         },
         "plain": "", "threads": [], "chat": [], "summary": {"text": "", "through": null}
@@ -629,6 +633,9 @@ fn files_that_are_not_a_whole_note_are_counted_and_left() {
         (format!("version 0 {id}.json"), edit(&|v| v["duragonTrash"] = json!(0))),
         (format!("no doc {id}.json"), edit(&|v| v["note"]["doc"] = json!(null))),
         (format!("other doc {id}.json"), edit(&|v| v["note"]["doc"] = json!({"type": "paragraph"}))),
+        (format!("no content {id}.json"), edit(&|v| v["note"]["doc"] = json!({"type": "doc"}))),
+        (format!("content is text {id}.json"), edit(&|v| v["note"]["doc"] = json!({"type": "doc", "content": "words"}))),
+        (format!("content is an object {id}.json"), edit(&|v| v["note"]["doc"] = json!({"type": "doc", "content": {}}))),
         (format!("no chat {id}.json"), edit(&|v| { v.as_object_mut().unwrap().remove("chat"); })),
         (format!("id is a path {id}.json"), edit(&|v| v["note"]["id"] = json!("../../x"))),
     ];
@@ -741,7 +748,7 @@ fn a_note_whose_mind_and_folder_are_gone_still_restores() {
 
 #[test]
 fn the_system_trash_takes_the_file_and_can_give_it_back() {
-    for manners in [Manners::Takes, Manners::SaysItFailed] {
+    for manners in [Manners::Takes, Manners::SaysItFailed, Manners::TakesAndPanics] {
         let f = Fixture::with(manners);
         let id = f.full_note();
         let before = f.whole(&id);
@@ -761,7 +768,7 @@ fn the_system_trash_takes_the_file_and_can_give_it_back() {
 
 #[test]
 fn a_note_the_system_trash_refused_stays_in_duragons() {
-    for manners in [Manners::Refuses, Manners::SaysItTook] {
+    for manners in [Manners::Refuses, Manners::SaysItTook, Manners::Panics] {
         let f = Fixture::with(manners);
         let id = f.full_note();
         let before = f.whole(&id);
@@ -770,6 +777,64 @@ fn a_note_the_system_trash_refused_stays_in_duragons() {
         f.trash.restore(&id).unwrap();
         assert_eq!(f.whole(&id), before);
     }
+}
+
+#[test]
+fn a_note_already_deleted_is_never_reported_as_a_failed_delete() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::with(Manners::Refuses);
+    let id = f.full_note();
+    f.trash.delete(&id, DeleteMode::Duragon).unwrap();
+    fs::set_permissions(f.dir(), fs::Permissions::from_mode(0o333)).unwrap();
+    let went = f.trash.delete(&id, DeleteMode::System);
+    fs::set_permissions(f.dir(), fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(went.unwrap(), DeleteMode::Duragon);
+    assert_eq!(f.listed(), vec!["Leaves 🍃"]);
+}
+
+#[test]
+fn times_out_of_any_calendar_are_brought_into_it() {
+    let f = Fixture::new();
+    let id = f.full_note();
+    f.trash.delete(&id, DeleteMode::Duragon).unwrap();
+    let before = now();
+    f.tamper(|v| {
+        v["deletedAt"] = json!(i64::MAX);
+        v["note"]["updatedAt"] = json!(i64::MAX);
+        v["note"]["createdAt"] = json!(i64::MIN);
+        v["threads"][0]["createdAt"] = json!(i64::MAX);
+        v["threads"][1]["createdAt"] = json!(-1);
+        v["threads"][0]["messages"][0]["createdAt"] = json!(i64::MAX);
+        v["chat"][0]["createdAt"] = json!(i64::MIN);
+        v["chat"][1]["createdAt"] = json!(i64::MAX);
+    });
+    let listed = f.trash.list().unwrap().notes.remove(0);
+    assert!((before..=now()).contains(&listed.deleted_at), "{}", listed.deleted_at);
+
+    f.trash.restore(&id).unwrap();
+    let after = now();
+    let hits = f.db.search_other_notes("chloroplasts", "", 5).unwrap();
+    assert_eq!(hits.iter().map(|h| &h.id).collect::<Vec<_>>(), vec![&id.to_string()]);
+    let Whole { note, threads, chat, .. } = f.whole(&id);
+    assert!((before..=after).contains(&note.meta.updated_at));
+    assert_eq!(note.created_at, 0);
+    let mut times: Vec<i64> = threads.iter().flat_map(|t| t.messages.iter().map(|m| m.created_at).chain([t.created_at])).collect();
+    times.extend(chat.iter().map(|m| m.created_at));
+    assert!(times.iter().all(|t| (0..=after).contains(t)), "{times:?}");
+}
+
+#[test]
+fn a_deeply_nested_drawing_in_a_file_is_dropped() {
+    let f = Fixture::new();
+    let id = f.full_note();
+    f.trash.delete(&id, DeleteMode::Duragon).unwrap();
+    f.tamper(|v| {
+        v["chat"][1]["svg"] = json!(format!("<svg>{}{}</svg>", "<g>".repeat(200_000), "</g>".repeat(200_000)));
+    });
+    f.trash.restore(&id).unwrap();
+    let chat = f.whole(&id).chat;
+    assert_eq!((chat[1].drawing, chat[1].svg.clone()), (DrawingState::Failed, None));
+    assert_eq!(chat[1].text, "The second line.");
 }
 
 #[test]

@@ -94,8 +94,50 @@ fn write(node: Node, out: &mut String, root: bool) {
     out.push('>');
 }
 
+/// More than a drawing needs. The parser and `write` recurse into each element, so nesting costs stack.
+const MAX_DEPTH: usize = 64;
+
+/// Whether elements nest past `MAX_DEPTH`. It reads markup the way the parser does, up to where the parser would refuse it.
+fn too_deep(mut rest: &str) -> bool {
+    let mut depth = 0usize;
+    while let Some(at) = rest.find('<') {
+        rest = &rest[at..];
+        let verbatim = [("<!--", "-->"), ("<![CDATA[", "]]>"), ("<?", "?>")];
+        if let Some((open, close)) = verbatim.into_iter().find(|(open, _)| rest.starts_with(open)) {
+            let Some(end) = rest[open.len()..].find(close) else { return false };
+            rest = &rest[open.len() + end + close.len()..];
+            continue;
+        }
+        let mut quote = None;
+        let Some(end) = rest.bytes().position(|b| {
+            match quote {
+                Some(q) if b == q => quote = None,
+                None if matches!(b, b'"' | b'\'') => quote = Some(b),
+                _ => {}
+            }
+            quote.is_none() && b == b'>'
+        }) else {
+            return false;
+        };
+        let tag = &rest[..end];
+        if tag.starts_with("</") {
+            depth = depth.saturating_sub(1);
+        } else if !tag.ends_with('/') {
+            depth += 1;
+            if depth > MAX_DEPTH {
+                return true;
+            }
+        }
+        rest = &rest[end + 1..];
+    }
+    false
+}
+
 /// Returns a re-serialized, allow-listed SVG, or an error when the input is not an SVG document.
 pub fn sanitize(input: &str) -> Result<String, String> {
+    if too_deep(input) {
+        return Err("elements nest too deep".into());
+    }
     let doc = Document::parse(input.trim()).map_err(|e| format!("invalid SVG: {e}"))?;
     let root = doc.root_element();
     if root.tag_name().name() != "svg" {

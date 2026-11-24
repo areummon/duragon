@@ -53,6 +53,45 @@ fn sanitizer_keeps_only_the_renderer_arrow_marker() {
     assert_eq!(sanitize(&out).unwrap(), out);
 }
 
+/// On a stack the size a spawned thread gets.
+fn sanitize_on_a_thread(svg: String) -> Result<String, String> {
+    std::thread::Builder::new().stack_size(2 << 20).spawn(move || sanitize(&svg)).unwrap().join().unwrap()
+}
+
+#[test]
+fn sanitizer_refuses_deep_nesting_however_it_is_written() {
+    let openings = [
+        "<g>",
+        "<g a=\"/>\">",
+        "<g a='/>' style=\"'/>\">",
+        "<g\n>",
+        "<g><!-- </g> -->",
+        "<g><!--></g>-->",
+        "<g><![CDATA[</g>]]>",
+        "<g><?x </g>?>",
+        "<g><path d=\"M0 0\"/>",
+        "<g></g><g>",
+    ];
+    for n in [100, 5_000, 20_000, 200_000] {
+        for open in openings {
+            let svg = format!("<svg>{}{}</svg>", open.repeat(n), "</g>".repeat(n));
+            assert!(sanitize_on_a_thread(svg).is_err(), "{open} {n}");
+        }
+        assert!(sanitize_on_a_thread("<svg>".repeat(n)).is_err(), "unclosed {n}");
+    }
+}
+
+#[test]
+fn sanitizer_takes_a_long_or_moderately_nested_drawing() {
+    let long = format!(
+        "<?xml version=\"1.0\"?><!-- <g><g> --><svg>{}</svg>",
+        "<g a=\">\"><path d=\"M0 0\"/><!-- <g> --><text>a > b<![CDATA[<g>]]></text></g>".repeat(5_000)
+    );
+    assert_eq!(sanitize_on_a_thread(long).unwrap().matches("<path").count(), 5_000);
+    let nested = format!("<svg>{}<path d=\"M0 0\"/>{}</svg>", "<g>".repeat(30), "</g>".repeat(30));
+    assert!(sanitize_on_a_thread(nested).unwrap().contains("<path"));
+}
+
 #[test]
 fn sanitizer_rejects_non_svg() {
     assert!(sanitize("<div>hi</div>").is_err());

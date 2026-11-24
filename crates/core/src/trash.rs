@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Write};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -53,7 +54,7 @@ fn parse(bytes: &[u8], id: &NoteId) -> Result<TrashFile<NoteBundle>> {
     let file: TrashFile<NoteBundle> = serde_json::from_slice(bytes)?;
     let note = &file.bundle.note;
     ensure!(note.meta.id == id.to_string(), "the file holds another note");
-    ensure!(note.doc["type"] == "doc", "the note has no document");
+    ensure!(note.doc["type"] == "doc" && note.doc["content"].is_array(), "the note has no document");
     Ok(file)
 }
 
@@ -89,8 +90,14 @@ fn safe_title(title: &str) -> String {
     if out.is_empty() { "Untitled".into() } else { out.into() }
 }
 
+/// Dates a query or the page works out fail on a time too far off.
+fn sane(ms: i64) -> i64 {
+    ms.clamp(0, now_ms())
+}
+
 /// What a file says is not trusted: a drawing is markup the page runs, and a source is a link it opens.
 fn clean(m: &mut Message) {
+    m.created_at = sane(m.created_at);
     (m.drawing, m.svg) = match (m.drawing, m.svg.take().map(|s| svg::sanitize(&s))) {
         (DrawingState::Done, Some(Ok(svg))) => (DrawingState::Done, Some(svg)),
         (DrawingState::None, _) => (DrawingState::None, None),
@@ -101,6 +108,12 @@ fn clean(m: &mut Message) {
 }
 
 fn cleaned(mut bundle: NoteBundle) -> NoteBundle {
+    let note = &mut bundle.note;
+    note.created_at = sane(note.created_at);
+    note.meta.updated_at = sane(note.meta.updated_at);
+    for t in &mut bundle.threads {
+        t.created_at = sane(t.created_at);
+    }
     bundle.threads.iter_mut().flat_map(|t| &mut t.messages).chain(&mut bundle.chat).for_each(clean);
     bundle.summary.text = bundle.summary.text.chars().take(SUMMARY_MAX_CHARS).collect();
     bundle
@@ -189,7 +202,7 @@ impl Trash {
             .expect("the names never run out")
     }
 
-    fn write(&self, id: &NoteId, bundle: &NoteBundle) -> Result<()> {
+    fn write(&self, id: &NoteId, bundle: &NoteBundle) -> Result<PathBuf> {
         let bytes = serde_json::to_vec_pretty(&TrashFile { duragon_trash: FORMAT, deleted_at: now_ms(), bundle })?;
         parse(&bytes, id).context("the note could not be read back")?;
 
@@ -199,32 +212,47 @@ impl Trash {
         f.write_all(&bytes)?;
         f.sync_all()?;
         drop(f);
-        fs::rename(&tmp, self.free_path(id, &bundle.note.meta.title))?;
-        self.sync_dir()
+        let path = self.free_path(id, &bundle.note.meta.title);
+        fs::rename(&tmp, &path)?;
+        self.sync_dir()?;
+        Ok(path)
+    }
+
+    /// Whether the system trash now has the file. Its code may fail or panic before or after moving it.
+    fn hand_over(&self, path: &Path) -> bool {
+        let result = catch_unwind(AssertUnwindSafe(|| self.os.take(path))).unwrap_or_else(|_| Err(anyhow!("it panicked")));
+        let gone = fs::symlink_metadata(path).is_err_and(|e| e.kind() == ErrorKind::NotFound);
+        if let (false, Err(e)) = (gone, result) {
+            eprintln!("duragon: the system trash refused a note: {e:#}");
+        }
+        gone
     }
 
     /// Deletes a note and says where it went: `Duragon` when the system trash refused it. A note already deleted is
     /// not deleted again, but one still waiting for the system trash goes there.
     pub fn delete(&self, id: &NoteId, mode: DeleteMode) -> Result<DeleteMode> {
         let _lock = self.lock()?;
-        self.db.take_note(&id.to_string(), |bundle| match mode {
-            DeleteMode::Duragon | DeleteMode::System => self.write(id, bundle),
-            DeleteMode::Permanent => self.remove(id),
+        let mut written = None;
+        self.db.take_note(&id.to_string(), |bundle| {
+            match mode {
+                DeleteMode::Duragon | DeleteMode::System => written = Some(self.write(id, bundle)?),
+                DeleteMode::Permanent => self.remove(id)?,
+            }
+            Ok(())
         })?;
         if mode != DeleteMode::System {
             return Ok(mode);
         }
-        let mut went = DeleteMode::System;
-        for c in self.copies(id)? {
-            let result = self.os.take(&c.path);
-            if fs::symlink_metadata(&c.path).is_ok() {
-                went = DeleteMode::Duragon;
-                if let Err(e) = result {
-                    eprintln!("duragon: the system trash refused a note: {e:#}");
-                }
-            }
-        }
-        Ok(went)
+        // The note is deleted, so nothing from here on is a failed delete.
+        let paths = match written {
+            Some(path) => vec![path],
+            None => match self.copies(id) {
+                Ok(copies) => copies.into_iter().map(|c| c.path).collect(),
+                Err(_) => return Ok(DeleteMode::Duragon),
+            },
+        };
+        let kept = paths.iter().filter(|p| !self.hand_over(p)).count();
+        Ok(if kept == 0 { DeleteMode::System } else { DeleteMode::Duragon })
     }
 
     pub fn list(&self) -> Result<TrashList> {
@@ -242,6 +270,9 @@ impl Trash {
         notes.sort_by_key(|n| std::cmp::Reverse(n.deleted_at));
         let mut seen = HashSet::new();
         notes.retain(|n| seen.insert(n.id));
+        for n in &mut notes {
+            n.deleted_at = sane(n.deleted_at);
+        }
         Ok(TrashList { notes, unreadable })
     }
 

@@ -74,17 +74,21 @@ pub enum Manners {
     SaysItTook,
     /// Takes the file and says it failed.
     SaysItFailed,
+    Panics,
+    /// Takes the file, then panics.
+    TakesAndPanics,
 }
 
 impl SystemTrash for FakeSystemTrash {
     fn take(&self, file: &Path) -> anyhow::Result<()> {
-        if matches!(self.manners, Manners::Takes | Manners::SaysItFailed) {
+        if matches!(self.manners, Manners::Takes | Manners::SaysItFailed | Manners::TakesAndPanics) {
             std::fs::create_dir_all(&self.dir)?;
             std::fs::rename(file, self.dir.join(file.file_name().unwrap()))?;
         }
         match self.manners {
             Manners::Takes | Manners::SaysItTook => Ok(()),
             Manners::Refuses | Manners::SaysItFailed => anyhow::bail!("no"),
+            Manners::Panics | Manners::TakesAndPanics => panic!("the system trash panicked"),
         }
     }
 }
