@@ -1,4 +1,5 @@
 //! Files and folders only the writer's own account can open.
+use std::env;
 use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -24,12 +25,28 @@ pub(crate) fn file(path: &Path) {
     tighten(path, 0o600);
 }
 
+/// Where calls work. Agents look for hooks and settings in the folders above theirs, so on Linux it is not /tmp,
+/// where any account can put some. Elsewhere each account has its own.
+fn work_root() -> io::Result<PathBuf> {
+    let folder = |key| env::var_os(key).map(PathBuf::from).filter(|p| p.is_absolute() && p.is_dir());
+    if !cfg!(target_os = "linux") {
+        return Ok(env::temp_dir());
+    }
+    if let Some(runtime) = folder("XDG_RUNTIME_DIR") {
+        return Ok(runtime);
+    }
+    let Some(home) = folder("HOME") else { return Ok(env::temp_dir()) };
+    let cache = home.join(".cache/duragon");
+    dir(&cache)?;
+    Ok(cache)
+}
+
 /// A new empty folder for one AI call to work in, removed with what the call left there.
 pub(crate) struct WorkDir(PathBuf);
 
 impl WorkDir {
     pub(crate) fn new() -> io::Result<Self> {
-        let path = std::env::temp_dir().join(format!("duragon-{}", uuid::Uuid::new_v4()));
+        let path = work_root()?.join(format!("duragon-{}", uuid::Uuid::new_v4()));
         let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
