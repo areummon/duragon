@@ -57,26 +57,31 @@ fn thread_row(r: &Row) -> rusqlite::Result<Thread> {
 
 pub(super) fn read_threads(conn: &Connection, note_id: &str) -> rusqlite::Result<Vec<Thread>> {
     let mut threads: Vec<Thread> = conn
-        .prepare(
+        .prepare_cached(
             "SELECT id,note_id,kind,quote,status,pinned,created_at FROM threads
              WHERE note_id=?1 ORDER BY created_at, rowid",
         )?
         .query_map([note_id], thread_row)?
         .collect::<Result<_, _>>()?;
-    let mut st = conn.prepare(&format!(
+    if threads.is_empty() {
+        return Ok(threads);
+    }
+    let index: std::collections::HashMap<String, usize> =
+        threads.iter().enumerate().map(|(i, t)| (t.id.clone(), i)).collect();
+    let mut st = conn.prepare_cached(&format!(
         "SELECT {MSG_COLS} FROM messages WHERE note_id=?1 AND thread_id IS NOT NULL ORDER BY created_at, rowid"
     ))?;
     for m in st.query_map([note_id], msg_row)? {
         let m = m?;
-        if let Some(t) = threads.iter_mut().find(|t| Some(&t.id) == m.thread_id.as_ref()) {
-            t.messages.push(m);
+        if let Some(&i) = m.thread_id.as_deref().and_then(|id| index.get(id)) {
+            threads[i].messages.push(m);
         }
     }
     Ok(threads)
 }
 
 pub(super) fn read_chat(conn: &Connection, note_id: &str) -> rusqlite::Result<Vec<Message>> {
-    conn.prepare(&format!(
+    conn.prepare_cached(&format!(
         "SELECT {MSG_COLS} FROM messages WHERE note_id=?1 AND thread_id IS NULL ORDER BY created_at, rowid"
     ))?
     .query_map([note_id], msg_row)?

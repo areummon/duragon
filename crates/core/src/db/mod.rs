@@ -65,7 +65,13 @@ r#"ALTER TABLE messages ADD COLUMN trimmed INTEGER NOT NULL DEFAULT 0;"#,
 r#"CREATE TABLE IF NOT EXISTS chat_summaries(
   note_id TEXT PRIMARY KEY REFERENCES notes(id) ON DELETE CASCADE,
   chat_summary TEXT NOT NULL DEFAULT '', chat_summarized_through TEXT
-);"#];
+);"#,
+r#"CREATE INDEX IF NOT EXISTS threads_note_status ON threads(note_id, status);
+DROP TRIGGER IF EXISTS notes_au;
+CREATE TRIGGER notes_au AFTER UPDATE OF title, plain ON notes BEGIN
+  INSERT INTO notes_fts(notes_fts, rowid, title, plain) VALUES ('delete', old.rowid, old.title, old.plain);
+  INSERT INTO notes_fts(rowid, title, plain) VALUES (new.rowid, new.title, new.plain);
+END;"#];
 
 #[derive(Clone)]
 pub struct Db {
@@ -105,6 +111,9 @@ impl Db {
     /// For a second process that only reads, such as the notes search server: no migrations, no seeding, no writes.
     pub fn open_read_only(path: &Path) -> Result<Self> {
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+        let _ = conn.pragma_update(None, "cache_size", -2000);
+        let _ = conn.pragma_update(None, "mmap_size", 0);
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 
@@ -113,8 +122,13 @@ impl Db {
     }
 
     fn init(conn: Connection) -> Result<Self> {
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
+        conn.pragma_update(None, "cache_size", -2000)?;
+        conn.pragma_update(None, "mmap_size", 0)?;
         let db = Self { conn: Arc::new(Mutex::new(conn)) };
         db.migrate()?;
         db.seed()?;

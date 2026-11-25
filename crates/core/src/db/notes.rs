@@ -38,7 +38,15 @@ fn note_row(r: &Row) -> rusqlite::Result<Note> {
 }
 
 pub(super) fn read_note(conn: &Connection, id: &str) -> rusqlite::Result<Option<Note>> {
-    conn.query_row(&format!("SELECT {NOTE_COLS} FROM notes n WHERE n.id=?1"), [id], note_row).optional()
+    conn.prepare_cached(&format!("SELECT {NOTE_COLS} FROM notes n WHERE n.id=?1"))?
+        .query_row([id], note_row)
+        .optional()
+}
+
+fn read_note_meta(conn: &Connection, id: &str) -> rusqlite::Result<Option<NoteMeta>> {
+    conn.prepare_cached(&format!("SELECT {META_COLS} FROM notes n WHERE n.id=?1"))?
+        .query_row([id], meta_row)
+        .optional()
 }
 
 /// Quote each token and append `*`, so user input can never be FTS5 syntax.
@@ -55,7 +63,7 @@ fn fts_query(input: &str) -> Option<String> {
 impl Db {
     pub fn list_notes(&self) -> Result<Vec<NoteMeta>> {
         let conn = self.conn();
-        let mut st = conn.prepare(&format!(
+        let mut st = conn.prepare_cached(&format!(
             "SELECT {META_COLS} FROM notes n ORDER BY n.updated_at DESC, n.rowid DESC"
         ))?;
         let rows = st.query_map([], meta_row)?.collect::<Result<_, _>>()?;
@@ -67,7 +75,7 @@ impl Db {
             return self.list_notes();
         };
         let conn = self.conn();
-        let mut st = conn.prepare(&format!(
+        let mut st = conn.prepare_cached(&format!(
             "SELECT {META_COLS} FROM notes_fts f JOIN notes n ON n.rowid=f.rowid
              WHERE notes_fts MATCH ?1 ORDER BY rank"
         ))?;
@@ -79,7 +87,7 @@ impl Db {
     pub fn search_other_notes(&self, query: &str, exclude: &str, limit: usize) -> Result<Vec<NoteHit>> {
         let Some(q) = fts_query(query) else { return Ok(Vec::new()) };
         let conn = self.conn();
-        let mut st = conn.prepare(
+        let mut st = conn.prepare_cached(
             "SELECT n.id, n.title, date(n.updated_at / 1000, 'unixepoch', 'localtime'),
                snippet(notes_fts, 1, '', '', '…', 24)
              FROM notes_fts f JOIN notes n ON n.rowid=f.rowid
@@ -141,14 +149,19 @@ impl Db {
     }
 
     pub fn save_note(&self, id: &str, title: &str, document: &Value, plain: &str) -> Result<NoteMeta> {
-        let n = self.conn().execute(
-            "UPDATE notes SET title=?2, doc=?3, plain=?4, updated_at=?5 WHERE id=?1",
-            params![id, title, document.to_string(), plain, now_ms()],
+        self.save_note_raw(id, title, &document.to_string(), plain)
+    }
+
+    /// Saves a note whose `doc` is already serialized JSON, avoiding an unnecessary parse + re-serialize cycle.
+    pub fn save_note_raw(&self, id: &str, title: &str, doc_json: &str, plain: &str) -> Result<NoteMeta> {
+        let conn = self.conn();
+        let n = conn.prepare_cached("UPDATE notes SET title=?2, doc=?3, plain=?4, updated_at=?5 WHERE id=?1")?.execute(
+            params![id, title, doc_json, plain, now_ms()],
         )?;
         if n == 0 {
             return Err(anyhow!("note not found: {id}"));
         }
-        Ok(self.get_note(id)?.meta)
+        read_note_meta(&conn, id)?.ok_or_else(|| anyhow!("note not found: {id}"))
     }
 
     pub fn update_note_meta(&self, id: &str, patch: &NoteMetaPatch) -> Result<Note> {

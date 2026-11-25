@@ -23,7 +23,7 @@ const RIDDLER_COLS: &str = "id,name,description,how_it_thinks,tone,frequency,bui
 impl Db {
     pub fn list_folders(&self) -> Result<Vec<Folder>> {
         let conn = self.conn();
-        let mut st = conn.prepare("SELECT id,name,parent_id,created_at FROM folders ORDER BY name COLLATE NOCASE, rowid")?;
+        let mut st = conn.prepare_cached("SELECT id,name,parent_id,created_at FROM folders ORDER BY name COLLATE NOCASE, rowid")?;
         let rows = st
             .query_map([], |r| Ok(Folder { id: r.get(0)?, name: r.get(1)?, parent_id: r.get(2)?, created_at: r.get(3)? }))?
             .collect::<Result<_, _>>()?;
@@ -102,7 +102,7 @@ impl Db {
 
     pub fn list_riddlers(&self) -> Result<Vec<Riddler>> {
         let conn = self.conn();
-        let mut st = conn.prepare(&format!(
+        let mut st = conn.prepare_cached(&format!(
             "SELECT {RIDDLER_COLS} FROM riddlers ORDER BY builtin DESC, name COLLATE NOCASE, rowid"
         ))?;
         let rows = st.query_map([], riddler_row)?.collect::<Result<_, _>>()?;
