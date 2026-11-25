@@ -2,6 +2,8 @@ import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 
+const BLINK_MS = 1060;
+
 /**
  * Draws the caret instead of WebKit. WebKit stretches its own caret on a wrapped line up into the leading above,
  * so past the first line of a paragraph it stood half again as tall. This one is always the height of the text.
@@ -23,11 +25,10 @@ function caretView(view: EditorView) {
   // Blinks on a timer, two repaints a second. A running animation keeps WebKit drawing every frame, and on X11 that
   // cost about a CPU core while the caret sat still, which slowed the keys typed against it.
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const half = (parseFloat(getComputedStyle(host).getPropertyValue('--dur-caret')) || 1060) / 2;
   let timer = 0;
   const blink = (shown: boolean) => {
     bar.style.visibility = shown ? '' : 'hidden';
-    timer = window.setTimeout(() => blink(!shown), half);
+    timer = window.setTimeout(() => blink(!shown), BLINK_MS / 2);
   };
   let height = '';
 
