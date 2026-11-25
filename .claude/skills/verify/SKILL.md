@@ -103,6 +103,7 @@ Save proofs under `$VERIFY_DIR/evidence/<feature>/` (default `/tmp/duragon-verif
 
 ```sh
 nix develop -c cargo test -p duragon-core                     # fake `claude` scripts, no network
+nix develop -c cargo build -p duragon-voice                   # the voice helper, which Tauri's own commands build first
 nix develop -c cargo build -p duragon                         # the Tauri binary, including --notes-mcp
 nix develop -c cargo test -p duragon-core --test real_cli -- --ignored --nocapture <test name>
 ```
