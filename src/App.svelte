@@ -47,7 +47,7 @@
     else if (mod && e.shiftKey && e.code === 'KeyC') handled(() => void copyNote());
     else if (mod && e.shiftKey && e.code === 'KeyE') handled(() => void exportNote('md'));
     else if (mod && e.shiftKey && e.code === 'Period') handled(() => void toggleJustMyWords());
-    else if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'n') handled(() => void newNote());
+    else if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'n') toggle(false, () => void newNote());
   }
 </script>
 
