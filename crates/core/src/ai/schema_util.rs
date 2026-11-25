@@ -87,6 +87,12 @@ pub fn strip_nulls(v: Value) -> Value {
     }
 }
 
+/// Whether an answer has every field its schema requires.
+pub fn has_required(answer: &Value, schema: &Value) -> bool {
+    let required = schema["required"].as_array().into_iter().flatten().filter_map(Value::as_str);
+    required.into_iter().all(|key| answer.get(key).is_some())
+}
+
 /// Extracts a JSON object from raw model text (handles plain JSON, ```json fences,
 /// or leading/trailing prose around a `{ ... }` object).
 pub fn extract_json(raw: &str) -> Result<Value, String> {

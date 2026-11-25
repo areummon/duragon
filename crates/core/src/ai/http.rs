@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 
 use super::notes_mcp;
 use super::runner::{AiError, AiRequest};
-use super::schema_util::{extract_json, gemini_schema, json_instruction, strict_schema, strip_nulls};
+use super::schema_util::{extract_json, gemini_schema, has_required, json_instruction, strict_schema, strip_nulls};
 use crate::model::ThinkingLevel;
 
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
@@ -218,7 +218,24 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
     fail(format!("{} exceeded maximum tool-call rounds", req.provider.name))
 }
 
-/// Anthropic Messages API (`POST /v1/messages`).
+/// How a request asks Claude to think. Which one a model takes depends on its age.
+#[derive(Clone, Copy)]
+enum Thinking {
+    ModelsOwn,
+    Effort,
+    Budget,
+}
+
+fn budget_of(level: ThinkingLevel) -> u32 {
+    match level {
+        ThinkingLevel::Default | ThinkingLevel::Low => 1024,
+        ThinkingLevel::Medium => 4096,
+        ThinkingLevel::High => 10_000,
+        ThinkingLevel::XHigh => 24_000,
+    }
+}
+
+/// Anthropic Messages API (`POST /v1/messages`). `respond` can't be forced, because newer models refuse that.
 pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
     let key = require_key(req)?;
     let base = base_url(req, "https://api.anthropic.com")?;
@@ -258,39 +275,33 @@ pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
         }));
     }
 
-    let thinking_budget: Option<u32> = match req.thinking {
-        ThinkingLevel::Default => None,
-        ThinkingLevel::Low => Some(1024),
-        ThinkingLevel::Medium => Some(4096),
-        ThinkingLevel::High => Some(10000),
-        ThinkingLevel::XHigh => Some(24000),
-    };
-    // Anthropic forbids combining forced `tool_choice` with extended thinking.
-    let forced = !has_notes && !req.web && thinking_budget.is_none();
+    let system = format!(
+        "{}\n\nWhen you have your final answer, call the `respond` tool with it. Do not write it as text.",
+        req.system_prompt
+    );
     let mut messages = vec![json!({ "role": "user", "content": req.payload })];
-    let system = if forced {
-        req.system_prompt.clone()
-    } else {
-        format!(
-            "{}\n\nWhen you have your final answer, call the `respond` tool with your JSON output.",
-            req.system_prompt
-        )
-    };
+    let mut thinking = if req.thinking == ThinkingLevel::Default { Thinking::ModelsOwn } else { Thinking::Effort };
+    let mut rounds = 0;
 
-    for _round in 0..MAX_TOOL_ROUNDS {
-        let max_tokens = thinking_budget.map(|b| b + 8192).unwrap_or(8192);
+    while rounds < MAX_TOOL_ROUNDS {
         let mut body = json!({
             "model": req.model.trim(),
-            "max_tokens": max_tokens,
+            "max_tokens": 16_000,
             "system": system,
             "messages": messages,
             "tools": tools,
         });
-        if let Some(budget) = thinking_budget {
-            body["thinking"] = json!({ "type": "enabled", "budget_tokens": budget });
-        }
-        if forced {
-            body["tool_choice"] = json!({ "type": "tool", "name": "respond" });
+        match thinking {
+            Thinking::ModelsOwn => {}
+            Thinking::Effort => {
+                body["max_tokens"] = json!(32_000);
+                body["thinking"] = json!({ "type": "adaptive" });
+                body["output_config"] = json!({ "effort": req.thinking.as_str() });
+            }
+            Thinking::Budget => {
+                body["max_tokens"] = json!(32_000);
+                body["thinking"] = json!({ "type": "enabled", "budget_tokens": budget_of(req.thinking) });
+            }
         }
 
         let resp = CLIENT
@@ -308,9 +319,24 @@ pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
             .await
             .map_err(|e| AiError::Failed(format!("Anthropic read failed: {e}")))?;
         if !status.is_success() {
+            // Newer models take an effort, older ones a budget, and the oldest neither.
+            if status.as_u16() == 400 && (text.contains("thinking") || text.contains("effort")) {
+                match thinking {
+                    Thinking::Effort => {
+                        thinking = Thinking::Budget;
+                        continue;
+                    }
+                    Thinking::Budget => {
+                        thinking = Thinking::ModelsOwn;
+                        continue;
+                    }
+                    Thinking::ModelsOwn => {}
+                }
+            }
             let preview: String = text.chars().take(350).collect();
             return fail(format!("Anthropic HTTP {}: {preview}", status.as_u16()));
         }
+        rounds += 1;
 
         let parsed: Value = serde_json::from_str(&text)
             .map_err(|e| AiError::Failed(format!("Anthropic invalid JSON: {e}")))?;
@@ -352,20 +378,27 @@ pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
             continue;
         }
 
-        // Fallback: try extracting JSON from text blocks.
-        let combined: String = content
-            .iter()
-            .filter_map(|b| {
-                (b.get("type").and_then(Value::as_str) == Some("text"))
-                    .then(|| b.get("text").and_then(Value::as_str))
-                    .flatten()
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        return extract_json(&combined).map_err(|e| AiError::Failed(format!("Anthropic: {e}")));
+        match parsed["stop_reason"].as_str() {
+            Some("refusal") => return fail("Claude declined to answer this"),
+            Some("max_tokens") => return fail("Claude ran out of room before it finished"),
+            Some("pause_turn") => {
+                messages.push(json!({ "role": "assistant", "content": content }));
+                continue;
+            }
+            _ => {}
+        }
+        let said: Vec<&str> = content.iter().filter_map(|b| b["text"].as_str()).collect();
+        match extract_json(&said.join("\n")) {
+            Ok(answer) if has_required(&answer, &req.schema) => return Ok(answer),
+            _ if content.is_empty() => return fail("Claude answered with nothing"),
+            _ => {
+                messages.push(json!({ "role": "assistant", "content": content }));
+                messages.push(json!({ "role": "user", "content": "Call the `respond` tool with that answer." }));
+            }
+        }
     }
 
-    fail("Anthropic exceeded maximum tool-call rounds")
+    fail("Claude did not give its answer in the form Duragon needs")
 }
 
 /// Google Gemini API (`POST /models/{model}:generateContent`).

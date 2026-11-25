@@ -7,7 +7,7 @@ use std::time::Duration;
 use super::budget::tokens;
 use super::http::{note_tools, run_note_tool};
 use super::runner::{AiError, AiRequest};
-use super::schema_util::{extract_json, json_instruction, strict_schema};
+use super::schema_util::{extract_json, has_required, json_instruction, strict_schema};
 use crate::credentials::{self, CredentialsStore};
 use crate::db::Db;
 use crate::model::{ProviderConfig, ProviderKind, ThinkingLevel};
@@ -206,11 +206,6 @@ pub(super) async fn payload_budget(req: &AiRequest, budget: usize) -> Result<usi
         ));
     }
     Ok(room.min(budget))
-}
-
-fn has_required(answer: &Value, schema: &Value) -> bool {
-    let required = schema["required"].as_array().into_iter().flatten().filter_map(Value::as_str);
-    required.into_iter().all(|key| answer.get(key).is_some())
 }
 
 pub async fn run_local(req: &AiRequest) -> Result<Value, AiError> {
