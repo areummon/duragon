@@ -71,6 +71,18 @@ impl CredentialsStore {
             .filter(|v| !v.is_empty()))
     }
 
+    /// The key a call to `provider` carries. A server the writer runs works without one, so a damaged file can't stop it.
+    pub fn resolve_for(&self, provider: &ProviderConfig) -> Result<Option<String>> {
+        let key = || self.resolve(&provider.id, provider.env_var.as_deref());
+        if provider.kind.is_local_server() {
+            Ok(key().unwrap_or_default())
+        } else if provider.kind.needs_key() {
+            key()
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Stores or clears a key for `provider_id`.
     pub fn set_key(&self, provider_id: &str, key: &str) -> Result<()> {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -126,7 +138,7 @@ pub fn save_settings(db: &Db, store: &CredentialsStore, settings: &Settings) -> 
     db.save_settings(settings)
 }
 
-fn known_provider(db: &Db, id: &str) -> Result<ProviderConfig> {
+pub(crate) fn known_provider(db: &Db, id: &str) -> Result<ProviderConfig> {
     let providers = db.get_settings()?.resolved_providers();
     providers.into_iter().find(|p| p.id == id).with_context(|| format!("there is no provider \"{id}\""))
 }

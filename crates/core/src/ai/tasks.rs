@@ -6,11 +6,14 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use super::budget::{fit, Section, Stage};
+use super::local::payload_budget;
 use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
 use super::runner::{cancel, run_ai, AiError, AiRequest, CancelKey};
+use super::spec::TaskSpec;
 use super::svg;
 use crate::credentials::CredentialsStore;
 use crate::db::{Db, NewMessage};
@@ -200,17 +203,23 @@ fn normalize(s: &str) -> (Vec<char>, Vec<(usize, usize)>) {
     (chars, spans)
 }
 
+/// A model on the writer's own computer can take minutes to read a note.
+const LOCAL_PATIENCE: u32 = 5;
+
+fn timeout_of(provider: &ProviderConfig, spec: TaskSpec) -> Duration {
+    if provider.kind.is_local_server() { spec.timeout * LOCAL_PATIENCE } else { spec.timeout }
+}
+
 impl Ai {
     pub fn new(db: Db, events: Arc<dyn Events>) -> Self {
         Self { db, events, bin: None, notes_search: None, credentials: None, summarizing: Arc::default() }
     }
 
     fn resolve_api_key(&self, provider: &ProviderConfig) -> Result<Option<String>> {
-        if !provider.kind.needs_key() {
-            return Ok(None);
-        }
         if let Some(store) = &self.credentials {
-            store.resolve(&provider.id, provider.env_var.as_deref())
+            store.resolve_for(provider)
+        } else if !provider.kind.needs_key() {
+            Ok(None)
         } else {
             Ok(provider
                 .env_var
@@ -248,9 +257,11 @@ impl Ai {
         Ok(Ctx { note, riddler, settings: self.db.get_settings()? })
     }
 
-    fn request(&self, ctx: &Ctx, task: AiTask, payload: String) -> Result<AiRequest, AiError> {
+    /// A request still without its payload.
+    fn request(&self, ctx: &Ctx, task: AiTask) -> Result<AiRequest, AiError> {
         let spec = task.spec();
-        let web = ctx.note.web_on && spec.web;
+        let provider = ctx.settings.provider(spec.model.provider_of(&ctx.settings));
+        let web = ctx.note.web_on && spec.web && provider.searches_web();
         let notes = match &self.notes_search {
             Some(server) if spec.notes && ctx.settings.search_my_notes => {
                 Some(NotesTool { server: server.clone(), open_note_id: ctx.note.meta.id.clone() })
@@ -272,18 +283,17 @@ impl Ai {
             system_prompt.push_str(prompts::EXPLAIN_SYMBOLS);
             prompts::add_symbols(&mut schema);
         }
-        let provider = ctx.settings.provider(spec.model.provider_of(&ctx.settings));
         let api_key = self.resolve_api_key(&provider).map_err(|e| AiError::Failed(format!("{e:#}")))?;
         Ok(AiRequest {
-            provider,
             model: spec.model.of(&ctx.settings).to_string(),
             thinking: spec.model.thinking_of(&ctx.settings),
             api_key,
             system_prompt,
             schema,
-            payload,
+            payload: String::new(),
             web,
-            timeout: spec.timeout,
+            timeout: timeout_of(&provider, spec),
+            provider,
             cancel: Some(CancelKey { note_id: ctx.note.meta.id.clone(), task }),
             bin: self.bin.clone(),
             notes,
@@ -295,12 +305,15 @@ impl Ai {
     /// Emits `ai:error` and returns `None` on failure; cancellation is silent.
     async fn call<T: DeserializeOwned>(&self, ctx: &Ctx, task: AiTask, payload: Vec<Section>) -> Option<Called<T>> {
         let note_id = &ctx.note.meta.id;
-        let (payload, cut) = fit(&payload, task.spec().budget);
-        let trimmed = cut.contains(&Stage::DistantNote);
-        let called = match self.request(ctx, task, payload) {
-            Ok(req) => run_ai(req).await,
-            Err(e) => Err(e),
-        };
+        let mut trimmed = false;
+        let called = async {
+            let mut req = self.request(ctx, task)?;
+            let (payload, cut) = fit(&payload, payload_budget(&req, task.spec().budget).await?);
+            trimmed = cut.contains(&Stage::DistantNote);
+            req.payload = payload;
+            run_ai(req).await
+        }
+        .await;
         let out = match called {
             Ok(v) => v,
             Err(AiError::Cancelled) => return None,
@@ -324,7 +337,6 @@ impl Ai {
         let provider = settings.provider(spec.model.provider_of(settings));
         let api_key = self.resolve_api_key(&provider).ok()?;
         let req = AiRequest {
-            provider,
             model: spec.model.of(settings).to_string(),
             thinking: spec.model.thinking_of(settings),
             api_key,
@@ -332,7 +344,8 @@ impl Ai {
             schema: prompts::schema(task, false),
             payload,
             web: false,
-            timeout: spec.timeout,
+            timeout: timeout_of(&provider, spec),
+            provider,
             cancel: None,
             bin: self.bin.clone(),
             notes: None,

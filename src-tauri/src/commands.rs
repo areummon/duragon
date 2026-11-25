@@ -1,4 +1,5 @@
 //! One command per method of the frontend `Backend` interface (src/lib/api/tauri.ts).
+use duragon_core::ai::local;
 use duragon_core::credentials;
 use duragon_core::export::{to_docx, to_markdown};
 use duragon_core::model::*;
@@ -176,6 +177,11 @@ pub async fn delete_provider_key(
 }
 
 #[tauri::command]
+pub async fn local_models(state: State<'_, AppState>, provider_id: String) -> Res<Vec<String>> {
+    s(local::local_models(&state.db, &state.credentials, &provider_id).await)
+}
+
+#[tauri::command]
 pub async fn list_riddlers(state: State<'_, AppState>) -> Res<Vec<Riddler>> {
     s(state.db.list_riddlers())
 }
@@ -312,7 +318,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         list_folders, create_folder, rename_folder, move_folder, delete_folder,
         list_threads, set_thread_status, set_thread_pinned, set_thread_kind, thread_to_note, list_chat,
         get_chat_summary, save_chat_summary, clear_chat,
-        get_settings, save_settings, list_credential_statuses, set_provider_key, delete_provider_key,
+        get_settings, save_settings, list_credential_statuses, set_provider_key, delete_provider_key, local_models,
         list_riddlers, save_riddler, delete_riddler,
         ai_read, ai_answer, ai_reply, ai_chat, ai_ask, ai_visualize, ai_cancel_read, export_note,
         voice_status, voice_install, list_voices, listen_start, listen_stop, speak, stop_speaking,

@@ -67,16 +67,24 @@ str_enum!(
         OpenAi => "openai",
         Anthropic => "anthropic",
         Gemini => "gemini",
+        Ollama => "ollama",
+        Local => "local",
     }
 );
 
 impl ProviderKind {
-    /// The CLIs and agents bring their own login.
+    /// The CLIs and agents bring their own login, and a server the writer runs may ask for nothing.
     pub fn needs_key(self) -> bool {
         match self {
             ProviderKind::OpenAi | ProviderKind::Anthropic | ProviderKind::Gemini => true,
             ProviderKind::ClaudeCli | ProviderKind::AgyAcp | ProviderKind::CodexCli | ProviderKind::Acp => false,
+            ProviderKind::Ollama | ProviderKind::Local => false,
         }
+    }
+
+    /// A model server the writer runs.
+    pub fn is_local_server(self) -> bool {
+        matches!(self, ProviderKind::Ollama | ProviderKind::Local)
     }
 }
 
@@ -106,6 +114,17 @@ pub struct ProviderConfig {
     pub builtin: bool,
 }
 
+impl ProviderConfig {
+    /// Whether it can look things up, when the note allows the web.
+    pub fn searches_web(&self) -> bool {
+        match self.kind {
+            ProviderKind::OpenAi => self.base_url.as_deref().is_some_and(|u| u.contains("openrouter.ai")),
+            ProviderKind::Ollama | ProviderKind::Local => false,
+            _ => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderCredentialStatus {
@@ -122,6 +141,17 @@ pub const DEFAULT_PROVIDER_ID: &str = "claude-cli";
 
 pub fn default_providers() -> Vec<ProviderConfig> {
     let s = |v: &[&str]| v.iter().map(|x| (*x).to_string()).collect::<Vec<_>>();
+    let server = |id: &str, name: &str, kind, url: &str| ProviderConfig {
+        id: id.into(),
+        name: name.into(),
+        kind,
+        base_url: Some(url.into()),
+        command: None,
+        args: vec![],
+        env_var: None,
+        models: vec![],
+        builtin: true,
+    };
     vec![
         ProviderConfig {
             id: "claude-cli".into(),
@@ -162,6 +192,9 @@ pub fn default_providers() -> Vec<ProviderConfig> {
             models: s(&["gpt-5.4", "gpt-5.3-codex", "o3", "o4-mini"]),
             builtin: true,
         },
+        server("ollama", "Ollama", ProviderKind::Ollama, "http://localhost:11434"),
+        server("llama-cpp", "llama.cpp", ProviderKind::Local, "http://localhost:8080/v1"),
+        server("vllm", "vLLM", ProviderKind::Local, "http://localhost:8000/v1"),
         ProviderConfig {
             id: "openrouter".into(),
             name: "OpenRouter".into(),

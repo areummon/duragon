@@ -52,7 +52,7 @@ fn base_url<'a>(req: &'a AiRequest, default: &'a str) -> Result<&'a str, AiError
     }
 }
 
-fn run_note_tool(req: &AiRequest, name: &str, args: &Value) -> String {
+pub(super) fn run_note_tool(req: &AiRequest, name: &str, args: &Value) -> String {
     let (Some(db), Some(notes)) = (&req.db, &req.notes) else {
         return "Notes search is unavailable.".into();
     };
@@ -73,7 +73,7 @@ fn run_note_tool(req: &AiRequest, name: &str, args: &Value) -> String {
     }
 }
 
-fn openai_note_tools() -> Value {
+pub(super) fn note_tools() -> Value {
     json!([
         {
             "type": "function",
@@ -150,7 +150,7 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
             body["reasoning_effort"] = json!(effort);
         }
         if req.notes.is_some() && req.db.is_some() {
-            body["tools"] = openai_note_tools();
+            body["tools"] = note_tools();
         }
 
         let mut builder = CLIENT

@@ -13,6 +13,7 @@ use tokio::sync::Notify;
 use super::acp::run_acp;
 use super::codex::run_codex;
 use super::http::{run_anthropic, run_gemini, run_openai};
+use super::local::run_local;
 use super::notes_mcp::{NotesTool, TOOL_NAMES};
 use crate::db::Db;
 use crate::model::{AiTask, ProviderConfig, ProviderKind, ThinkingLevel};
@@ -286,6 +287,7 @@ pub async fn run_ai(req: AiRequest) -> Result<Value, AiError> {
             ProviderKind::OpenAi => run_openai(&req).await,
             ProviderKind::Anthropic => run_anthropic(&req).await,
             ProviderKind::Gemini => run_gemini(&req).await,
+            ProviderKind::Ollama | ProviderKind::Local => run_local(&req).await,
         }
     };
 
