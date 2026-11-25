@@ -278,3 +278,29 @@ async fn a_model_that_cannot_search_is_not_told_the_web_is_on() {
         assert!(!chats[0].body["messages"][0]["content"].as_str().unwrap().contains("sources"));
     }
 }
+
+#[tokio::test]
+async fn a_read_cancelled_while_the_server_lists_its_models_is_never_sent() {
+    let server = Server::start(|g| {
+        if !g.path.contains("chat") {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+        (200, if g.path.contains("chat") { said("{\"said\":true,\"quote\":\"The cell\",\"message\":\"Which?\"}") } else { listed() })
+    });
+    let db = Db::open_in_memory().unwrap();
+    let mut settings = Settings { learn_about_you: false, read_provider: "here".into(), read_model: "small".into(), ..Settings::default() };
+    settings.providers.push(provider(ProviderKind::Local, &server.url));
+    db.save_settings(&settings).unwrap();
+    let id = db.create_note(Some("Cells")).unwrap().meta.id;
+    let cap = Arc::new(Capture::default());
+    let ai = Ai::new(db, cap.clone());
+    let reading = tokio::spawn({
+        let (ai, id) = (ai.clone(), id.clone());
+        async move { ai.read(&id, "The cell divides.", 0).await.unwrap() }
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    duragon_core::ai::cancel(&id, AiTask::Read);
+    reading.await.unwrap();
+    assert!(server.chats().is_empty(), "the note was sent");
+    assert_eq!(cap.names(), ["ai:thinking"]);
+}
