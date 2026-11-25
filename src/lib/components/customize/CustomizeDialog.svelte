@@ -80,9 +80,8 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--veil);
   }
-  :global([data-theme='light']) .scrim { background: rgba(29, 28, 26, 0.2); }
   .card {
     display: flex;
     width: min(860px, 100%);

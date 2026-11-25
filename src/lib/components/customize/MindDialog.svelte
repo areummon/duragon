@@ -161,8 +161,7 @@
 {/if}
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: 75; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, 0.3); overflow-y: auto; }
-  :global([data-theme='light']) .scrim { background: rgba(29, 28, 26, 0.12); }
+  .scrim { position: fixed; inset: 0; z-index: 75; display: grid; place-items: center; padding: 24px; background: var(--veil-soft); overflow-y: auto; }
   .card {
     position: relative;
     width: min(622px, 100%);

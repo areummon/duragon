@@ -1,68 +1,135 @@
+/* Colours with no meaning of their own. Only the roles below name them. */
+:root {
+  --sand-50: #f8f7f4;
+  --sand-100: #f1f0ec;
+  --sand-200: #ebe9e3;
+  --sand-300: #dedbd4;
+  --sand-600: #8e8a83;
+  --sand-650: #858179;
+  --sand-800: #5c5953;
+  --sand-900: #2a2824;
+  --sand-1000: #1d1c1a;
+  --ink-50: #151514;
+  --ink-100: #1a1a19;
+  --ink-300: #33322f;
+  --ink-600: #7a776f;
+  --ink-700: #9a968e;
+  --ink-800: #a9a69e;
+  --ink-900: #e9e7e2;
+  --ink-1000: #ebe8e2;
+  --gold-600: #d99a1e;
+  --gold-400: #f2b84b;
+  --brown-600: #8a5a3b;
+  --brown-400: #c4976f;
+  --red-600: #b23b33;
+  --red-400: #e8796e;
+  --orange-600: #b5621f;
+  --orange-400: #e59b5b;
+  --green-600: #47763d;
+  --green-400: #8fc183;
+  --blue-600: #33689c;
+  --blue-400: #84afe3;
+  --purple-600: #774f9c;
+  --purple-400: #bc98e4;
+  --rose-700: #8a3a5e;
+  --rose-300: #e0a2c0;
+  --moss-700: #3f6b4c;
+  --moss-300: #a3cdab;
+  --amber-700: #9a5418;
+  --amber-300: #e8b27c;
+  --navy-700: #2f5687;
+  --navy-300: #a6c6ea;
+  --olive-700: #74602a;
+  --olive-300: #d8c68e;
+  --violet-700: #6a4a8e;
+  --violet-300: #c9b0e8;
+  --black-a115: #00000073;
+  --black-a153: #00000099;
+  --white-a18: #ffffff12;
+  --black-a77: #0000004d;
+  --ink-900-a20: #e9e7e214;
+  --ink-900-a87: #e9e7e257;
+  --sand-1000-a10: #1d1c1a0a;
+  --sand-1000-a14: #1d1c1a0e;
+  --sand-1000-a18: #1d1c1a12;
+  --sand-1000-a31: #1d1c1a1f;
+  --sand-1000-a41: #1d1c1a29;
+  --sand-1000-a51: #1d1c1a33;
+  --sand-1000-a82: #1d1c1a52;
+}
+
+/* Roles. A theme changes only what they point to, so nothing else needs to know the theme. */
 :root,
 [data-theme='light'] {
   color-scheme: light;
-  --paper: #f8f7f4;
-  --shelf: #f1f0ec;
-  --code: #ebe9e3;
-  --ink: #1d1c1a;
-  --graphite: #5c5953;
-  --faint: #8e8a83;
-  --rule: #dedbd4;
-  --riddle: #2a2824;
-  --riddle-ink: #2a2824;
-  --riddle-wash: #1d1c1a0e;
-  --bulb: #d99a1e;
-  --riddle-line: #1d1c1a52;
-  --lift: 0 0 0 1px #1d1c1a12, 0 1px 1px #1d1c1a0a, 0 6px 16px -8px #1d1c1a29;
+  --paper: var(--sand-50);
+  --shelf: var(--sand-100);
+  --code: var(--sand-200);
+  --ink: var(--sand-1000);
+  --graphite: var(--sand-800);
+  --faint: var(--sand-600);
+  --rule: var(--sand-300);
+  --riddle: var(--sand-900);
+  --riddle-ink: var(--sand-900);
+  --riddle-wash: var(--sand-1000-a14);
+  --bulb: var(--gold-600);
+  --riddle-line: var(--sand-1000-a82);
+  --lift: 0 0 0 1px var(--sand-1000-a18), 0 1px 1px var(--sand-1000-a10), 0 6px 16px -8px var(--sand-1000-a41);
   --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 
-  --text-gray: #858179;
-  --text-brown: #8a5a3b;
-  --text-red: #b23b33;
-  --text-orange: #b5621f;
-  --text-green: #47763d;
-  --text-blue: #33689c;
-  --text-purple: #774f9c;
+  --veil: var(--sand-1000-a51);
+  --veil-soft: var(--sand-1000-a31);
 
-  --code-keyword: #8a3a5e;
-  --code-string: #3f6b4c;
-  --code-number: #9a5418;
-  --code-title: #2f5687;
-  --code-type: #74602a;
-  --code-attr: #6a4a8e;
+  --text-gray: var(--sand-650);
+  --text-brown: var(--brown-600);
+  --text-red: var(--red-600);
+  --text-orange: var(--orange-600);
+  --text-green: var(--green-600);
+  --text-blue: var(--blue-600);
+  --text-purple: var(--purple-600);
+
+  --code-keyword: var(--rose-700);
+  --code-string: var(--moss-700);
+  --code-number: var(--amber-700);
+  --code-title: var(--navy-700);
+  --code-type: var(--olive-700);
+  --code-attr: var(--violet-700);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --paper: #1a1a19;
-  --shelf: #151514;
-  --code: #151514;
-  --ink: #e9e7e2;
-  --graphite: #a9a69e;
-  --faint: #7a776f;
-  --rule: #33322f;
-  --riddle: #ebe8e2;
-  --riddle-ink: #ebe8e2;
-  --riddle-wash: #e9e7e214;
-  --bulb: #f2b84b;
-  --riddle-line: #e9e7e257;
-  --lift: 0 0 0 1px #ffffff12, 0 8px 20px -8px #0009;
+  --paper: var(--ink-100);
+  --shelf: var(--ink-50);
+  --code: var(--ink-50);
+  --ink: var(--ink-900);
+  --graphite: var(--ink-800);
+  --faint: var(--ink-600);
+  --rule: var(--ink-300);
+  --riddle: var(--ink-1000);
+  --riddle-ink: var(--ink-1000);
+  --riddle-wash: var(--ink-900-a20);
+  --bulb: var(--gold-400);
+  --riddle-line: var(--ink-900-a87);
+  --lift: 0 0 0 1px var(--white-a18), 0 8px 20px -8px var(--black-a153);
   --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 
-  --text-gray: #9a968e;
-  --text-brown: #c4976f;
-  --text-red: #e8796e;
-  --text-orange: #e59b5b;
-  --text-green: #8fc183;
-  --text-blue: #84afe3;
-  --text-purple: #bc98e4;
+  --veil: var(--black-a115);
+  --veil-soft: var(--black-a77);
 
-  --code-keyword: #e0a2c0;
-  --code-string: #a3cdab;
-  --code-number: #e8b27c;
-  --code-title: #a6c6ea;
-  --code-type: #d8c68e;
-  --code-attr: #c9b0e8;
+  --text-gray: var(--ink-700);
+  --text-brown: var(--brown-400);
+  --text-red: var(--red-400);
+  --text-orange: var(--orange-400);
+  --text-green: var(--green-400);
+  --text-blue: var(--blue-400);
+  --text-purple: var(--purple-400);
+
+  --code-keyword: var(--rose-300);
+  --code-string: var(--moss-300);
+  --code-number: var(--amber-300);
+  --code-title: var(--navy-300);
+  --code-type: var(--olive-300);
+  --code-attr: var(--violet-300);
 }
 
 :root {
