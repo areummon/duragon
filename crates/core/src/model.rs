@@ -494,6 +494,7 @@ pub struct Settings {
     pub read_thinking: ThinkingLevel,
     pub chat_thinking: ThinkingLevel,
     pub draw_thinking: ThinkingLevel,
+    #[serde(deserialize_with = "readable")]
     pub providers: Vec<ProviderConfig>,
     pub sidebar_open: bool,
     pub deleted_notes: DeleteMode,
@@ -559,6 +560,12 @@ impl Settings {
             .or_else(|| list.into_iter().find(|p| p.id == DEFAULT_PROVIDER_ID))
             .unwrap_or_else(|| default_providers().into_iter().next().unwrap())
     }
+}
+
+/// Leaves out what can't be read, so one provider never costs the rest of the settings.
+fn readable<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<ProviderConfig>, D::Error> {
+    let all = Vec::<serde_json::Value>::deserialize(d)?;
+    Ok(all.into_iter().filter_map(|p| serde_json::from_value(p).ok()).collect())
 }
 
 /// Distinguishes an absent field (`None`) from an explicit `null` (`Some(None)`).
