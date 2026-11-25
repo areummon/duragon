@@ -164,7 +164,7 @@ impl VoiceClient {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
-            .map_err(|e| anyhow!("could not start voice helper ({}): {e}", bin.display()))?;
+            .map_err(|e| anyhow!("could not start voice helper ({}): {e}. Build it with: cargo build -p duragon-voice", bin.display()))?;
         let stdin = child.stdin.take().ok_or_else(|| anyhow!("voice helper stdin unavailable"))?;
         let stdout = child.stdout.take().ok_or_else(|| anyhow!("voice helper stdout unavailable"))?;
         let pending: Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value>>>>> = Arc::default();
@@ -202,8 +202,12 @@ impl VoiceClient {
                 for (_, tx) in pending_reader.lock().unwrap_or_else(|e| e.into_inner()).drain() {
                     let _ = tx.send(Err(anyhow!("voice helper exited")));
                 }
-                *shared.last_status.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                *shared.worker.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                // A newer one may have taken its place before its output closed.
+                let mut slot = shared.worker.lock().unwrap_or_else(|e| e.into_inner());
+                if slot.as_ref().is_none_or(|w| Arc::ptr_eq(&w.pending, &pending_reader)) {
+                    *slot = None;
+                    *shared.last_status.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                }
             })?;
 
         *slot = Some(Worker { child, stdin, pending });
