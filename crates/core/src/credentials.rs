@@ -7,10 +7,10 @@ use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use crate::consent::{asks, Asks};
 use crate::db::Db;
 use crate::model::{ProviderConfig, ProviderCredentialStatus, Settings};
 use crate::private;
-use crate::programs::new_programs;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -131,17 +131,17 @@ impl CredentialsStore {
 /// Saves the settings, after forgetting the keys of the providers they remove.
 /// Saved settings that can't be parsed remove none, because their providers are unknown.
 ///
-/// `allow` asks the writer about programs the settings would newly run. It must not be the page that answers: markup
-/// that got past the cleaning could otherwise start anything.
+/// `allow` asks the writer about the programs and addresses the settings add. It must not be the page that answers:
+/// markup that got past the cleaning could otherwise start anything, or send the notes and keys anywhere.
 pub fn save_settings(
     db: &Db,
     store: &CredentialsStore,
     settings: &Settings,
-    allow: impl FnOnce(&[String]) -> bool,
+    allow: impl FnOnce(&Asks) -> bool,
 ) -> Result<()> {
-    let programs = new_programs(db.stored_settings()?.as_ref(), settings);
-    if !programs.is_empty() && !allow(&programs) {
-        bail!("The command was not allowed");
+    let asks = asks(db.stored_settings()?.as_ref(), settings);
+    if !asks.is_empty() && !allow(&asks) {
+        bail!("The change was not allowed");
     }
     let kept = settings.resolved_providers();
     let stored = db.stored_settings()?.map(|s| s.resolved_providers()).unwrap_or_default();

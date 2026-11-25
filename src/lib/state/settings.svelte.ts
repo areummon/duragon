@@ -94,8 +94,8 @@ function inTurn<T>(act: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** What the core says when the writer answers no to running a new command. */
-const NOT_ALLOWED = 'The command was not allowed';
+/** What the core says when the writer answers no to a new command or address. */
+const NOT_ALLOWED = 'The change was not allowed';
 
 let edits = 0;
 
@@ -114,7 +114,7 @@ export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
       if (edit !== edits) return false;
       if (stored) Object.assign(settings.value, stored);
       apply();
-      showToast(reasonOf(e) === NOT_ALLOWED ? 'That command wasn’t allowed.' : 'That change couldn’t be saved.');
+      showToast(reasonOf(e) === NOT_ALLOWED ? 'That wasn’t allowed, so it wasn’t saved.' : 'That change couldn’t be saved.');
       return false;
     }
     if (patch.providers) {

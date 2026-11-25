@@ -1,3 +1,4 @@
+use duragon_core::consent::Asks;
 use duragon_core::credentials::{save_settings, set_provider_key, CredentialsStore};
 use duragon_core::db::Db;
 use duragon_core::model::*;
@@ -18,10 +19,10 @@ impl App {
     }
 
     /// Saves, answering the writer's question with `answer`. Gives what was asked.
-    fn save(&self, settings: &Settings, answer: bool) -> (Vec<String>, anyhow::Result<()>) {
-        let mut asked = vec![];
-        let result = save_settings(&self.db, &self.store, settings, |programs| {
-            asked = programs.to_vec();
+    fn save(&self, settings: &Settings, answer: bool) -> (Asks, anyhow::Result<()>) {
+        let mut asked = Asks::default();
+        let result = save_settings(&self.db, &self.store, settings, |asks| {
+            asked = Asks { programs: asks.programs.clone(), addresses: asks.addresses.clone() };
             answer
         });
         (asked, result)
@@ -55,15 +56,9 @@ fn preset(id: &str, change: impl Fn(&mut ProviderConfig)) -> Settings {
 }
 
 #[test]
-fn nothing_is_asked_about_what_comes_with_duragon_or_runs_no_program() {
+fn nothing_is_asked_about_what_comes_with_duragon() {
     let app = App::new();
-    let mut settings = Settings { just_my_words: true, chat_model: "opus".into(), ..Settings::default() };
-    settings.providers.push(ProviderConfig {
-        kind: ProviderKind::OpenAi,
-        base_url: Some("https://api.example.com".into()),
-        command: None,
-        ..agent("", &[])
-    });
+    let settings = Settings { just_my_words: true, chat_model: "opus".into(), ..Settings::default() };
     let (asked, result) = app.save(&settings, false);
     assert!(asked.is_empty() && result.is_ok(), "{asked:?} {result:?}");
 }
@@ -81,7 +76,7 @@ fn a_new_program_or_new_options_are_asked_about_once() {
     ] {
         let (asked, result) = app.save(&settings, true);
         result.unwrap();
-        assert_eq!(asked, [shown]);
+        assert_eq!(asked, Asks { programs: vec![shown.into()], addresses: vec![] });
         let changed = Settings { just_my_words: !settings.just_my_words, ..settings };
         assert!(app.save(&changed, false).0.is_empty(), "{shown} was asked about again");
     }
@@ -96,15 +91,15 @@ fn going_back_to_what_came_with_duragon_is_not_asked_about() {
 }
 
 #[test]
-fn a_program_that_is_not_allowed_saves_nothing_and_forgets_no_key() {
+fn what_is_not_allowed_saves_nothing_and_forgets_no_key() {
     let app = App::new();
-    app.save(&with(ProviderConfig { kind: ProviderKind::OpenAi, ..agent("", &[]) }), true).1.unwrap();
+    app.save(&with(api("mine", "https://api.example.com/v1")), true).1.unwrap();
     set_provider_key(&app.db, &app.store, "mine", "sk-mine-12345678").unwrap();
     let before = app.db.get_settings().unwrap();
     let mut settings = with(ProviderConfig { id: "other".into(), ..agent("sh", &["-c", "x"]) });
     settings.just_my_words = true;
     let (_, result) = app.save(&settings, false);
-    assert_eq!(result.unwrap_err().to_string(), "The command was not allowed");
+    assert_eq!(result.unwrap_err().to_string(), "The change was not allowed");
     assert_eq!(app.db.get_settings().unwrap(), before);
     assert_eq!(app.store.resolve("mine", None).unwrap().as_deref(), Some("sk-mine-12345678"));
 }
@@ -115,5 +110,43 @@ fn settings_that_cannot_be_read_allow_no_program() {
     let settings = with(agent("my-agent", &[]));
     app.save(&settings, true).1.unwrap();
     rusqlite::Connection::open(app.dir.path().join("d.db")).unwrap().execute("UPDATE kv SET value='garbled' WHERE key='settings'", []).unwrap();
-    assert_eq!(app.save(&settings, true).0, ["my-agent"]);
+    assert_eq!(app.save(&settings, true).0.programs, ["my-agent"]);
+}
+
+fn api(id: &str, url: &str) -> ProviderConfig {
+    ProviderConfig { id: id.into(), kind: ProviderKind::OpenAi, base_url: Some(url.into()), command: None, ..agent("", &[]) }
+}
+
+#[test]
+fn a_new_address_is_asked_about_once_and_named_by_its_host() {
+    let app = App::new();
+    for (settings, shown) in [
+        (with(api("mine", "https://api.example.com/v1")), "api.example.com, for Mine\nhttps://api.example.com/v1"),
+        (with(api("mine", "https://api.openai.com@evil.com/v1")), "evil.com, for Mine\nhttps://api.openai.com@evil.com/v1"),
+        (with(ProviderConfig { kind: ProviderKind::Local, ..api("mine", "http://10.0.0.9:1234") }), "10.0.0.9, for Mine\nhttp://10.0.0.9:1234"),
+        (preset("ollama", |p| p.base_url = Some("http://192.168.1.5:11434".into())), "192.168.1.5, for Ollama\nhttp://192.168.1.5:11434"),
+    ] {
+        let (asked, result) = app.save(&settings, true);
+        result.unwrap();
+        assert_eq!(asked, Asks { programs: vec![], addresses: vec![shown.into()] });
+        let changed = Settings { just_my_words: !settings.just_my_words, ..settings };
+        assert!(app.save(&changed, false).0.is_empty(), "{shown} was asked about again");
+    }
+}
+
+#[test]
+fn a_key_is_not_turned_to_another_providers_address_or_another_variable() {
+    let app = App::new();
+    let deepseek = "https://api.deepseek.com/v1";
+    for settings in [
+        preset("openai", |p| p.base_url = Some(deepseek.into())),
+        preset("openrouter", |p| p.base_url = None),
+        preset("deepseek", |p| p.env_var = Some("AWS_SECRET_ACCESS_KEY".into())),
+    ] {
+        let (asked, result) = app.save(&settings, false);
+        assert_eq!(asked.addresses.len(), 1, "{asked:?}");
+        assert!(result.is_err());
+    }
+    let named = app.save(&preset("deepseek", |p| p.env_var = Some("AWS_SECRET_ACCESS_KEY".into())), false).0;
+    assert!(named.addresses[0].contains("with the key in AWS_SECRET_ACCESS_KEY"), "{named:?}");
 }

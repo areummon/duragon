@@ -1,5 +1,6 @@
 //! One command per method of the frontend `Backend` interface (src/lib/api/tauri.ts).
 use duragon_core::ai::local;
+use duragon_core::consent::Asks;
 use duragon_core::credentials;
 use duragon_core::export::{to_docx, to_markdown};
 use duragon_core::model::*;
@@ -152,19 +153,23 @@ pub async fn get_settings(state: State<'_, AppState>) -> Res<Settings> {
 #[tauri::command]
 pub async fn save_settings(window: WebviewWindow, state: State<'_, AppState>, settings: Settings) -> Res<()> {
     let (db, credentials) = (state.db.clone(), state.credentials.clone());
-    blocking(move || credentials::save_settings(&db, &credentials, &settings, |programs| may_run(&window, programs))).await
+    blocking(move || credentials::save_settings(&db, &credentials, &settings, |asks| allowed(&window, asks))).await
 }
 
 /// Asks in a window the page can't reach.
-fn may_run(window: &WebviewWindow, programs: &[String]) -> bool {
-    let message = format!(
-        "Duragon will run this on your computer when a job uses it:\n\n{}\n\nAllow it only if you just set it up yourself.",
-        programs.join("\n")
-    );
+fn allowed(window: &WebviewWindow, asks: &Asks) -> bool {
+    let mut message = String::new();
+    if !asks.programs.is_empty() {
+        message.push_str(&format!("Duragon will run this on your computer when a job uses it:\n\n{}\n\n", asks.programs.join("\n")));
+    }
+    if !asks.addresses.is_empty() {
+        message.push_str(&format!("Duragon will send what it reads, and the provider’s key, here:\n\n{}\n\n", asks.addresses.join("\n\n")));
+    }
+    message.push_str("Allow it only if you just set it up yourself.");
     window
         .dialog()
         .message(message)
-        .title("Run this command?")
+        .title(if asks.programs.is_empty() { "Use this address?" } else { "Run this command?" })
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom("Allow".into(), "Don’t allow".into()))
         .parent(window)
