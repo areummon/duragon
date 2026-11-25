@@ -86,11 +86,12 @@
         width = Math.round(Math.min(PAGE_WIDTH_MAX, Math.max(PAGE_WIDTH_MIN, start + side * 2 * (m.clientX - startX))));
         layout.dragWidth = width;
       };
-      const up = () => {
+      const up = (u: PointerEvent) => {
         el.removeEventListener('pointermove', move);
         el.removeEventListener('pointerup', up);
         el.removeEventListener('pointercancel', up);
-        void updateSettings({ pageWidth: width === PAGE_WIDTH_DEFAULT ? null : width });
+        // A window narrower than the page shows it narrower, and a press alone doesn't keep that.
+        if (u.clientX !== startX) void updateSettings({ pageWidth: width === PAGE_WIDTH_DEFAULT ? null : width });
         layout.dragWidth = null;
         dragSide = null;
       };
