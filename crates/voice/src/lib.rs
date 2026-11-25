@@ -76,6 +76,13 @@ struct Inner {
     speak: Option<Speak>,
 }
 
+impl Inner {
+    /// A voice that reaches its end leaves its thread here, finished.
+    fn speaking(&self) -> bool {
+        self.speak.as_ref().is_some_and(|s| !s.join.is_finished())
+    }
+}
+
 struct Cached<T> {
     model: Arc<T>,
     last_used: Instant,
@@ -257,7 +264,7 @@ impl Voice {
     pub fn unload_idle(&self, max_idle: Duration) -> bool {
         let active = {
             let g = lock(&self.inner);
-            (g.listen.is_some(), g.speak.is_some())
+            (g.listen.is_some(), g.speaking())
         };
         let mut dropped = false;
         if !active.0 {
@@ -284,7 +291,7 @@ impl Voice {
     pub fn is_busy(&self) -> bool {
         let g = lock(&self.inner);
         g.listen.is_some()
-            || g.speak.is_some()
+            || g.speaking()
             || g.status.stt == ModelState::Downloading
             || g.status.tts == ModelState::Downloading
     }
