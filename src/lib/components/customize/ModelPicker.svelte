@@ -34,8 +34,9 @@
 
   const groups = $derived.by(() => {
     const q = typed.toLowerCase();
-    const found = choices.map(({ provider }) => {
-      const listed = modelsOf(provider);
+    const found = choices.map((view) => {
+      const { provider } = view;
+      const listed = modelsOf(view);
       const models = provider === current.provider && model && !listed.includes(model) ? [model, ...listed] : listed;
       const matches = provider.name.toLowerCase().includes(q) ? (models.length ? models : ['']) : models.filter((m) => m.toLowerCase().includes(q));
       return { label: provider.name, options: matches.map((m): Option => ({ provider, model: m, text: m || 'Type the name of its model' })) };

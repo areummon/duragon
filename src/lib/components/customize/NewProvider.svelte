@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isHttpKind } from '../../api/providers';
+  import { isHttpKind, isServerKind } from '../../api/providers';
   import type { ProviderConfig, ProviderKind } from '../../api/types';
   import Field from './Field.svelte';
   import Pills from './Pills.svelte';
@@ -10,7 +10,8 @@
     { id: 'openai', name: 'OpenAI' },
     { id: 'anthropic', name: 'Anthropic' },
     { id: 'gemini', name: 'Gemini' },
-    { id: 'acp', name: 'A command on this computer' },
+    { id: 'local', name: 'A local server' },
+    { id: 'acp', name: 'A command' },
   ];
 
   let kind = $state<ProviderKind>('openai');
@@ -21,7 +22,9 @@
   let models = $state('');
   let nameInput = $state<HTMLInputElement>();
 
-  const http = $derived(isHttpKind(kind));
+  const http = $derived(isHttpKind(kind) || isServerKind(kind));
+  const NAMES: Partial<Record<ProviderKind, string>> = { local: 'LM Studio', acp: 'My agent' };
+  const ADDRESSES: Partial<Record<ProviderKind, string>> = { openai: 'https://api.groq.com/openai/v1', local: 'http://localhost:1234/v1' };
   const ready = $derived(!!name.trim() && !!(http ? address : command).trim());
 
   $effect(() => nameInput?.focus({ preventScroll: true }));
@@ -54,17 +57,21 @@
     <Pills labelledby="works-like" options={KINDS} value={kind} onpick={(k) => (kind = k)} />
   </div>
   <div class="two">
-    <Field label="Name" placeholder="Groq" bind:value={name} bind:input={nameInput} />
+    <Field label="Name" placeholder={NAMES[kind] ?? 'Groq'} bind:value={name} bind:input={nameInput} />
     {#if http}
-      <Field label="Address" placeholder={kind === 'openai' ? 'https://api.groq.com/openai/v1' : 'https://api.example.com'} bind:value={address} />
+      <Field label="Address" placeholder={ADDRESSES[kind] ?? 'https://api.example.com'} bind:value={address} />
     {:else}
       <Field label="Command" placeholder="my-agent" bind:value={command} />
     {/if}
   </div>
-  <div class:two={!http}>
-    {#if !http}<Field label="Options" placeholder="acp" bind:value={options} />{/if}
-    <Field label="Models" hint="Optional, separated by commas" placeholder="llama-3.3-70b-versatile, openai/gpt-oss-120b" bind:value={models} />
-  </div>
+  {#if isServerKind(kind)}
+    <p class="help">It speaks OpenAI’s API, and lists its own models.</p>
+  {:else}
+    <div class:two={!http}>
+      {#if !http}<Field label="Options" placeholder="acp" bind:value={options} />{/if}
+      <Field label="Models" hint="Optional, separated by commas" placeholder="llama-3.3-70b-versatile, openai/gpt-oss-120b" bind:value={models} />
+    </div>
+  {/if}
   <div class="actions">
     <button type="button" class="quiet" onclick={oncancel}>Cancel</button>
     <button class="solid" disabled={!ready}>Add provider</button>
@@ -76,6 +83,7 @@
   h5 { display: flex; align-items: center; min-height: 38px; margin: 0 0 -12px; font-size: 13.5px; line-height: 1.3; font-weight: 500; }
   .label { margin-bottom: 6px; font-size: 13px; line-height: 1.3; color: var(--graphite); }
   .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .help { font-size: 13px; line-height: 1.4; color: var(--faint); }
   .actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
   .quiet { height: 34px; padding: 0 8px; font-size: 13px; color: var(--graphite); transition: color 150ms var(--ease-ui); }
   .quiet:hover { color: var(--ink); }

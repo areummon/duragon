@@ -91,7 +91,9 @@ export type ProviderKind =
   | 'acp'
   | 'openai'
   | 'anthropic'
-  | 'gemini';
+  | 'gemini'
+  | 'ollama'
+  | 'local';
 
 export interface ProviderConfig {
   id: string;

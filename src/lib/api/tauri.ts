@@ -42,6 +42,7 @@ export class TauriBackend implements Backend {
   getSettings = () => invoke<Settings>('get_settings');
   saveSettings = (settings: Settings) => invoke<void>('save_settings', { settings });
   listCredentialStatuses = () => invoke<ProviderCredentialStatus[]>('list_credential_statuses');
+  localModels = (providerId: string) => invoke<string[]>('local_models', { providerId });
   setProviderKey = (providerId: string, key: string) =>
     invoke<ProviderCredentialStatus>('set_provider_key', { providerId, key });
   deleteProviderKey = (providerId: string) =>

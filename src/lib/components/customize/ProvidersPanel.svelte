@@ -1,7 +1,7 @@
 <script lang="ts">
   import Plus from 'lucide-svelte/icons/plus';
   import { tick } from 'svelte';
-  import type { ProviderView } from '../../api/providers';
+  import { isServerKind, type ProviderView } from '../../api/providers';
   import type { ProviderConfig } from '../../api/types';
   import { closeOnEscape } from '../../escape';
   import { unfold } from '../../motion/transitions';
@@ -22,6 +22,10 @@
 
   const shown = $derived(views.filter((v) => v.listed || v.provider.id in rows));
   const others = $derived(views.filter((v) => !shown.includes(v)));
+  const groups = $derived([
+    { label: 'On this computer', views: others.filter((v) => isServerKind(v.provider.kind)) },
+    { label: 'With an API key', views: others.filter((v) => !isServerKind(v.provider.kind)) },
+  ].filter((g) => g.views.length));
 
   export function openAdd() {
     addButton?.focus({ preventScroll: true });
@@ -81,13 +85,13 @@
         <Plus size={14} strokeWidth={1.5} />Add
       </button>
       <Popover open={menuOpen} onclose={() => (menuOpen = false)} align="right" width={270} label="Add a provider">
-        {#if others.length}
-          <div class="glabel">With an API key</div>
-          {#each others as v (v.provider.id)}
+        {#each groups as g (g.label)}
+          <div class="glabel">{g.label}</div>
+          {#each g.views as v (v.provider.id)}
             <button class="menu-item" role="menuitem" onclick={() => chooseOther(v.provider.id)}>{v.provider.name}</button>
           {/each}
           <div class="menu-sep"></div>
-        {/if}
+        {/each}
         <button class="menu-item" role="menuitem" onclick={create}>Something else…</button>
       </Popover>
       {#if menuOpen}<Reach />{/if}

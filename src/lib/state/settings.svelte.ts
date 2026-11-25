@@ -1,5 +1,5 @@
 import { getBackend } from '../api/backend';
-import { DEFAULT_MODELS, DEFAULT_PROVIDER_ID, DEFAULT_PROVIDERS, mergeProviders, withoutProvider } from '../api/providers';
+import { DEFAULT_MODELS, DEFAULT_PROVIDER_ID, DEFAULT_PROVIDERS, isServerKind, mergeProviders, withoutProvider, type Server } from '../api/providers';
 import type { ProviderCredentialStatus, Settings } from '../api/types';
 import { showToast } from './toast.svelte';
 
@@ -64,6 +64,24 @@ async function refreshCredentials() {
   }
 }
 
+export const servers = $state<Record<string, Server>>({});
+
+/** Asks the writer's model servers what they have. */
+export async function checkServers(only?: string) {
+  const backend = await getBackend();
+  // The core asks the address it has stored.
+  await last;
+  const asked = settings.value.providers.filter((p) => isServerKind(p.kind) && (!only || p.id === only));
+  await Promise.all(asked.map(async ({ id }) => {
+    servers[id] ??= { kind: 'checking' };
+    try {
+      servers[id] = { kind: 'running', models: [...new Set(await backend.localModels(id))] };
+    } catch (e) {
+      servers[id] = { kind: 'stopped', reason: reasonOf(e) };
+    }
+  }));
+}
+
 let last: Promise<unknown> = Promise.resolve();
 
 /** Saves and key changes run one at a time, in order, whether or not the one before worked. */
@@ -93,7 +111,10 @@ export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
       showToast('That change couldn’t be saved.');
       return false;
     }
-    if (patch.providers) await refreshCredentials();
+    if (patch.providers) {
+      await refreshCredentials();
+      void checkServers();
+    }
     return true;
   });
 }
@@ -114,6 +135,7 @@ export function setProviderKey(providerId: string, key: string) {
   return inTurn(async () => {
     await (await getBackend()).setProviderKey(providerId, key);
     await refreshCredentials();
+    void checkServers(providerId);
   });
 }
 
@@ -121,6 +143,7 @@ export function deleteProviderKey(providerId: string) {
   return inTurn(async () => {
     await (await getBackend()).deleteProviderKey(providerId);
     await refreshCredentials();
+    void checkServers(providerId);
   });
 }
 

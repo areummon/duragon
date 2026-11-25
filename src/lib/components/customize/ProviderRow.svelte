@@ -1,10 +1,10 @@
 <script lang="ts">
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import { tick } from 'svelte';
-  import { accessProblem, accessText, DEFAULT_PROVIDERS, hostOf, isHttpKind, type ProviderView } from '../../api/providers';
+  import { accessProblem, accessText, DEFAULT_PROVIDERS, hostOf, isHttpKind, isServerKind, type ProviderView } from '../../api/providers';
   import type { ProviderConfig, ProviderKind } from '../../api/types';
   import { unfold } from '../../motion/transitions';
-  import { deleteProviderKey, reasonOf, setProviderKey, settings, updateSettings } from '../../state/settings.svelte';
+  import { checkServers, deleteProviderKey, reasonOf, setProviderKey, settings, updateSettings } from '../../state/settings.svelte';
   import Field from './Field.svelte';
   import { follow } from './follow';
 
@@ -21,11 +21,16 @@
     'codex-cli': 'Uses your ChatGPT subscription. Run codex login once in a terminal to sign in.',
     'agy-acp': 'Uses your Antigravity account. Run agy once in a terminal to sign in.',
   };
+  const SERVERS: Record<string, string> = {
+    ollama: 'Get a model with ollama pull, and it shows up here.',
+    'llama-cpp': 'Start llama-server with a model, and it shows up here.',
+    vllm: 'Start vllm serve with a model, and it shows up here.',
+  };
   const LIST = new Intl.ListFormat('en-GB');
 
   const p = $derived(view.provider);
   const preset = $derived(DEFAULT_PROVIDERS.find((d) => d.id === p.id));
-  const saved = $derived(view.access.kind === 'saved');
+  const saved = $derived(view.saved);
   const jobs = $derived(view.jobs.length ? `for ${LIST.format(view.jobs.map((j) => j.name))}` : '');
 
   let key = $state('');
@@ -124,6 +129,27 @@
             <div class="gap"><Field label="Address" value={p.baseUrl ?? ''} bind:input={addressInput} oncommit={(t) => commit(t, 'baseUrl')} /></div>
           </div>
         {/if}
+      {:else if isServerKind(p.kind)}
+        <Field label="Address" value={p.baseUrl ?? ''} error={view.access.kind === 'stopped' ? `${view.access.reason}.` : null} oncommit={(t) => commit(t, 'baseUrl')}>
+          {#snippet after()}<button class="solid" onclick={() => void checkServers(p.id)}>Check</button>{/snippet}
+        </Field>
+        <p class="help">{SERVERS[p.id] ?? 'Its models show up here while it runs.'} It can’t search the web.</p>
+        {#if p.kind === 'local'}
+          <div class="gap">
+            <Field
+              label="API key"
+              hint="Only if it asks for one"
+              type="password"
+              placeholder={saved ? 'Paste a new key to replace it' : 'Paste a key'}
+              bind:value={key}
+              bind:input={keyInput}
+              {error}
+              onkeydown={(e) => e.key === 'Enter' && !e.isComposing && void saveKey()}
+            >
+              {#snippet after()}<button class="solid" disabled={!key.trim()} onclick={saveKey}>Save</button>{/snippet}
+            </Field>
+          </div>
+        {/if}
       {:else}
         <div class="two">
           <Field label="Command" value={p.command ?? ''} oncommit={(t) => commit(t, 'command')} {error} />
@@ -131,7 +157,7 @@
         </div>
         {#if SIGN_IN[p.kind]}<p class="help">{SIGN_IN[p.kind]}</p>{/if}
       {/if}
-      {#if p.baseUrl || !p.builtin}
+      {#if (p.baseUrl && isHttpKind(p.kind)) || saved || !p.builtin}
         <div class="foot">
           {#if p.baseUrl && isHttpKind(p.kind)}
             <span class="to">

@@ -1,10 +1,10 @@
 <script lang="ts">
   import Check from 'lucide-svelte/icons/check';
   import Play from 'lucide-svelte/icons/play';
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { JOBS, providerViews } from '../../api/providers';
   import type { Settings } from '../../api/types';
-  import { credentialStatuses, settings, updateSettings } from '../../state/settings.svelte';
+  import { checkServers, credentialStatuses, servers, settings, updateSettings } from '../../state/settings.svelte';
   import { readAloud, voice } from '../../state/voice.svelte';
   import Choice from './Choice.svelte';
   import JobRow from './JobRow.svelte';
@@ -44,7 +44,7 @@
     readModel: 'reading reads along and asks in the margin model provider thinking effort',
     chatModel: 'chat answers in the side chat, and when you say its name model provider thinking effort',
     drawModel: 'drawing sketches beside your notes model provider thinking effort',
-    providers: `providers where models come from api keys address command subscription custom claude antigravity agy acp codex openai oauth zlm ${s.providers.map((p) => p.name).join(' ').toLowerCase()}`,
+    providers: `providers where models come from api keys address command subscription custom local server ollama llama.cpp vllm claude antigravity agy acp codex openai oauth zlm ${s.providers.map((p) => p.name).join(' ').toLowerCase()}`,
   });
   const GROUPS: Record<keyof typeof SECTIONS, string[]> = {
     reading: ['start', 'pace', 'place', 'web', 'notes', 'symbols'],
@@ -57,9 +57,11 @@
   const on = (k: keyof typeof SECTIONS, row: string) => !q || SECTIONS[k].includes(q) || ROWS[row].includes(q);
   const empty = $derived(!!q && !(Object.keys(SECTIONS) as (keyof typeof SECTIONS)[]).some(secOn));
 
-  const views = $derived(providerViews(s, credentialStatuses.value, credentialStatuses.error !== null));
+  const views = $derived(providerViews(s, credentialStatuses.value, credentialStatuses.error !== null, servers));
   const jobs = $derived(JOBS.filter((job) => on('models', job.modelKey)));
   let panel = $state<ProvidersPanel>();
+
+  onMount(() => void checkServers());
 
   async function onsetup() {
     if (!panel) query = '';

@@ -469,6 +469,11 @@ export class MockBackend implements Backend {
   async listCredentialStatuses() {
     return this.providers().map((p) => this.credentialStatus(p));
   }
+  async localModels(providerId: string) {
+    const p = this.settings.providers.find((x) => x.id === providerId);
+    if (p?.kind === 'ollama' && p.baseUrl === 'http://localhost:11434') return ['qwen3:8b', 'llama3.2:3b'];
+    throw `Nothing answers at ${p?.baseUrl}`;
+  }
   async setProviderKey(providerId: string, key: string) {
     const p = this.knownProvider(providerId);
     const t = key.trim();

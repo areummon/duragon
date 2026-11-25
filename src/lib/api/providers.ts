@@ -44,6 +44,9 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     models: ['gpt-5.4', 'gpt-5.3-codex', 'o3', 'o4-mini'],
     builtin: true,
   },
+  { id: 'ollama', name: 'Ollama', kind: 'ollama', baseUrl: 'http://localhost:11434', command: null, args: [], envVar: null, models: [], builtin: true },
+  { id: 'llama-cpp', name: 'llama.cpp', kind: 'local', baseUrl: 'http://localhost:8080/v1', command: null, args: [], envVar: null, models: [], builtin: true },
+  { id: 'vllm', name: 'vLLM', kind: 'local', baseUrl: 'http://localhost:8000/v1', command: null, args: [], envVar: null, models: [], builtin: true },
   {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -144,8 +147,14 @@ export function isHttpKind(kind: ProviderKind): boolean {
   return kind === 'openai' || kind === 'anthropic' || kind === 'gemini';
 }
 
+/** A model server the writer runs. */
+export const isServerKind = (kind: ProviderKind): boolean => kind === 'ollama' || kind === 'local';
+
 /** What a job can pick. The CLIs and agents take `default` as no model, and choose their own. */
-export const modelsOf = ({ kind, models }: ProviderConfig): string[] => (models.length || isHttpKind(kind) ? models : ['default']);
+export function modelsOf({ provider: { kind, models }, access }: ProviderView): string[] {
+  if (access.kind === 'running') return access.models;
+  return models.length || isHttpKind(kind) || isServerKind(kind) ? models : ['default'];
+}
 
 export function mergeProviders(saved: ProviderConfig[] | undefined): ProviderConfig[] {
   const base = saved && saved.length > 0 ? saved.map((p) => ({ ...p, args: [...(p.args ?? [])], models: [...new Set(p.models ?? [])] })) : [];
@@ -179,42 +188,47 @@ export const JOBS = [
 
 export type Job = (typeof JOBS)[number];
 
+/** A model server, as last asked for its models. */
+export type Server = { kind: 'checking' } | { kind: 'running'; models: string[] } | { kind: 'stopped'; reason: string };
+
 /** How Duragon gets into a provider. `unknown` means the saved keys can't be read. */
 export type Access =
   | { kind: 'local' }
   | { kind: 'saved'; masked: string }
   | { kind: 'system'; envVar: string }
   | { kind: 'missing' }
+  | Server
   | { kind: 'unknown' };
 
 export interface ProviderView {
   provider: ProviderConfig;
   access: Access;
+  /** Has a saved key, which a server may not need. */
+  saved: boolean;
   jobs: Job[];
   /** Set up or in use. The others wait under Add. */
   listed: boolean;
 }
 
-export const isReady = ({ access }: ProviderView) => access.kind !== 'missing' && access.kind !== 'unknown';
+export const isReady = ({ access }: ProviderView) => access.kind === 'local' || access.kind === 'saved' || access.kind === 'system' || access.kind === 'running';
 
 /** The provider that does a job. The core falls back the same way when a saved one is gone. */
 export const jobProvider = (views: ProviderView[], settings: Settings, job: Job): ProviderView =>
   views.find((v) => v.provider.id === settings[job.providerKey]) ?? views.find((v) => v.provider.id === DEFAULT_PROVIDER_ID)!;
 
-function accessOf(provider: ProviderConfig, status: ProviderCredentialStatus | undefined, lookupFailed: boolean): Access {
+function accessOf(provider: ProviderConfig, status: ProviderCredentialStatus | undefined, lookupFailed: boolean, server: Server | undefined): Access {
+  if (isServerKind(provider.kind)) return server ?? { kind: 'checking' };
   if (!isHttpKind(provider.kind)) return { kind: 'local' };
   if (status?.hasStoredKey) return { kind: 'saved', masked: status.maskedKey ?? 'Key saved' };
   if (status?.hasEnvKey && status.envVar) return { kind: 'system', envVar: status.envVar };
   return { kind: (status ? status.error : lookupFailed) ? 'unknown' : 'missing' };
 }
 
-export function providerViews(settings: Settings, statuses: ProviderCredentialStatus[], lookupFailed: boolean): ProviderView[] {
-  const views = settings.providers.map((provider): ProviderView => ({
-    provider,
-    access: accessOf(provider, statuses.find((s) => s.providerId === provider.id), lookupFailed),
-    jobs: [],
-    listed: false,
-  }));
+export function providerViews(settings: Settings, statuses: ProviderCredentialStatus[], lookupFailed: boolean, servers: Record<string, Server>): ProviderView[] {
+  const views = settings.providers.map((provider): ProviderView => {
+    const status = statuses.find((s) => s.providerId === provider.id);
+    return { provider, access: accessOf(provider, status, lookupFailed, servers[provider.id]), saved: !!status?.hasStoredKey, jobs: [], listed: false };
+  });
   for (const job of JOBS) jobProvider(views, settings, job).jobs.push(job);
   for (const v of views) v.listed = isReady(v) || !v.provider.builtin || v.jobs.length > 0;
   return views;
@@ -227,11 +241,15 @@ export function accessText(access: Access): string {
     case 'system': return 'Key from your system';
     case 'missing': return 'Needs a key';
     case 'unknown': return 'Key can’t be read';
+    case 'checking': return 'Checking…';
+    case 'stopped': return 'Can’t be reached';
+    case 'running': return access.models.length === 1 ? '1 model' : access.models.length ? `${access.models.length} models` : 'No models yet';
   }
 }
 
 export function accessProblem({ access, provider }: ProviderView): string | null {
   if (access.kind === 'missing') return `${provider.name} needs a key`;
+  if (access.kind === 'stopped') return `${provider.name} can’t be reached`;
   if (access.kind === 'unknown') return `${provider.name}’s key can’t be read`;
   return null;
 }

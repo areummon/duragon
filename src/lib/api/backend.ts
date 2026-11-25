@@ -43,6 +43,8 @@ export interface Backend {
   getSettings(): Promise<Settings>;
   saveSettings(settings: Settings): Promise<void>;
   listCredentialStatuses(): Promise<ProviderCredentialStatus[]>;
+  /** The models a server the writer runs has now. Rejects when it doesn't answer. */
+  localModels(providerId: string): Promise<string[]>;
   setProviderKey(providerId: string, key: string): Promise<ProviderCredentialStatus>;
   deleteProviderKey(providerId: string): Promise<ProviderCredentialStatus>;
   listRiddlers(): Promise<Riddler[]>;
