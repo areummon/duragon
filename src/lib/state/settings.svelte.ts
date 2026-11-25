@@ -65,6 +65,7 @@ async function refreshCredentials() {
 }
 
 export const servers = $state<Record<string, Server>>({});
+const checks: Record<string, number> = {};
 
 /** Asks the writer's model servers what they have. */
 export async function checkServers(only?: string) {
@@ -73,12 +74,14 @@ export async function checkServers(only?: string) {
   await last;
   const asked = settings.value.providers.filter((p) => isServerKind(p.kind) && (!only || p.id === only));
   await Promise.all(asked.map(async ({ id }) => {
+    const check = (checks[id] = (checks[id] ?? 0) + 1);
     servers[id] ??= { kind: 'checking' };
-    try {
-      servers[id] = { kind: 'running', models: [...new Set(await backend.localModels(id))] };
-    } catch (e) {
-      servers[id] = { kind: 'stopped', reason: reasonOf(e) };
-    }
+    const found = await backend.localModels(id).then(
+      (models): Server => ({ kind: 'running', models: [...new Set(models)] }),
+      (e): Server => ({ kind: 'stopped', reason: reasonOf(e) }),
+    );
+    // An older check can take longer than the one after it.
+    if (check === checks[id]) servers[id] = found;
   }));
 }
 
@@ -91,12 +94,12 @@ function inTurn<T>(act: () => Promise<T>): Promise<T> {
   return run;
 }
 
-let edits = 0;
-
-/** Whether the change was stored. If not, the writer has been told, and what is stored shows again. */
 /** What the core says when the writer answers no to running a new command. */
 const NOT_ALLOWED = 'The command was not allowed';
 
+let edits = 0;
+
+/** Whether the change was stored. If not, the writer has been told, and what is stored shows again. */
 export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
   // In place, so only what reads a changed key re-runs; replacing the object re-ran every reader (~45 ms in WebKitGTK).
   Object.assign(settings.value, patch);
