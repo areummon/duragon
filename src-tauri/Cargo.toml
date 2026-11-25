@@ -17,5 +17,9 @@ tokio = { version = "1", features = ["sync"] }
 anyhow = "1"
 trash = "5.4"
 
+# The version Tauri uses.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }

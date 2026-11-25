@@ -11,9 +11,9 @@ use duragon_core::db::Db;
 use duragon_core::model::Appearance;
 use duragon_core::trash::Trash;
 use std::sync::Arc;
+use tauri::webview::PageLoadEvent;
 use tauri::window::Color;
-use tauri::Url;
-use tauri::{AppHandle, Emitter, Manager, Theme, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, Url, Webview, WebviewWindow, WebviewWindowBuilder};
 use voice_client::VoiceClient;
 
 struct TauriEvents(AppHandle);
@@ -31,7 +31,6 @@ fn paper(dark: bool) -> Color {
     if dark { Color(0x1a, 0x1a, 0x19, 0xff) } else { Color(0xf8, 0xf7, 0xf4, 0xff) }
 }
 
-/// Opens the main window in the note's colours, so nothing white shows while the page loads.
 /// Whether the window may go there. Sources and anything else on the web open in the browser instead.
 fn own_page(url: &Url, dev: Option<&Url>) -> bool {
     match url.scheme() {
@@ -42,20 +41,57 @@ fn own_page(url: &Url, dev: Option<&Url>) -> bool {
     }
 }
 
+/// Whether the page will find the system dark. WebKit asks GTK, which follows the portal when there is one.
+#[cfg(target_os = "linux")]
+fn system_is_dark(_: &WebviewWindow) -> tauri::Result<bool> {
+    use gtk::prelude::GtkSettingsExt;
+    Ok(gtk::Settings::default().is_some_and(|s| {
+        s.is_gtk_application_prefer_dark_theme() || s.gtk_theme_name().is_some_and(|name| name.to_lowercase().ends_with("-dark"))
+    }))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn system_is_dark(window: &WebviewWindow) -> tauri::Result<bool> {
+    Ok(window.theme()? == tauri::Theme::Dark)
+}
+
+/// The window opens in the page's colour and the page is shown once loaded: WebKitGTK's own first frame can be black.
+const PAGE_WAITS: bool = cfg!(target_os = "linux");
+
+fn show_page(page: &Webview) -> tauri::Result<()> {
+    page.show()?;
+    // Hiding took it away.
+    page.set_focus()
+}
+
 fn open_window(app: &tauri::App, appearance: Appearance) -> tauri::Result<()> {
     let config = &app.config().app.windows[0];
-    let mut builder = WebviewWindowBuilder::from_config(app.handle(), config)?;
-    if appearance != Appearance::System {
-        builder = builder.initialization_script(format!("document.documentElement.dataset.theme = '{}';", appearance.as_str()));
-    }
+    // As settings.svelte.ts will choose, but before the first paint.
+    let theme = match appearance {
+        Appearance::System => "matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'".to_string(),
+        chosen => format!("'{}'", chosen.as_str()),
+    };
     let dev = app.config().build.dev_url.clone().filter(|_| tauri::is_dev());
-    let window = builder.on_navigation(move |url| own_page(url, dev.as_ref())).build()?;
+    let window = WebviewWindowBuilder::from_config(app.handle(), config)?
+        .initialization_script(format!("document.documentElement.dataset.theme = {theme};"))
+        .on_navigation(move |url| own_page(url, dev.as_ref()))
+        .on_page_load(|window, page| {
+            if PAGE_WAITS && page.event() == PageLoadEvent::Finished {
+                if let Err(e) = show_page(window.as_ref()) {
+                    eprintln!("duragon: could not show the page: {e}");
+                }
+            }
+        })
+        .build()?;
     let dark = match appearance {
         Appearance::Dark => true,
         Appearance::Light => false,
-        Appearance::System => window.theme()? == Theme::Dark,
+        Appearance::System => system_is_dark(&window)?,
     };
     window.set_background_color(Some(paper(dark)))?;
+    if PAGE_WAITS {
+        AsRef::<Webview>::as_ref(&window).hide()?;
+    }
     Ok(())
 }
 
