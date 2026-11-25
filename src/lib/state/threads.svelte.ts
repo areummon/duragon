@@ -1,7 +1,7 @@
 import { getBackend } from '../api/backend';
 import type { AiTask, Message, Thread, ThreadStatus } from '../api/types';
-import { app, openNote } from './app.svelte';
-import { upsertMeta } from './notes.svelte';
+import { openNote } from './app.svelte';
+import { notes, upsertMeta } from './notes.svelte';
 import { riddlerName } from './riddler';
 
 export interface Thinking {
@@ -143,8 +143,9 @@ export function unloadThreads() {
 }
 
 function refreshOpenFlag() {
-  const open = threads.list.some((t) => t.status === 'open');
-  if (app.note) upsertMeta({ ...$state.snapshot(app.note), hasOpenQuestion: open });
+  const hasOpenQuestion = threads.list.some((t) => t.status === 'open');
+  const meta = notes.list.find((n) => n.id === threads.noteId);
+  if (meta) upsertMeta({ ...meta, hasOpenQuestion });
 }
 
 export const find = (id: string | null) => (id ? threads.list.find((t) => t.id === id) : undefined);

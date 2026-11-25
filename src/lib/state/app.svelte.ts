@@ -11,11 +11,13 @@ import { loadTrash } from './trash.svelte';
 export type CustomizePage = 'customize' | 'minds' | 'about' | 'voice' | 'help';
 /** `pinned` is the user's saved choice; `peek` came from hovering the left edge and is never saved. */
 export type SidebarState = 'closed' | 'pinned' | 'peek';
+/** The open note. Read its current title, folder and date from `notes.list`. */
+export type OpenNote = Omit<Note, 'folderId' | 'updatedAt' | 'hasOpenQuestion'>;
 /** A Mind form. `assign` gives a new Mind to the current note on save. */
 export type MindEditor = { id: string } | { id: null; assign: boolean };
 
 export const app = $state({
-  note: null as Note | null,
+  note: null as OpenNote | null,
   ready: false,
   sidebar: 'closed' as SidebarState,
   get sidebarOpen() {
@@ -142,7 +144,6 @@ export async function updateMeta(patch: NoteMetaPatch) {
 
 export async function moveNote(id: string, folderId: string | null) {
   const note = await (await getBackend()).updateNoteMeta(id, { folderId });
-  if (app.note?.id === id) app.note.folderId = folderId;
   upsertMeta(note);
 }
 
@@ -170,6 +171,8 @@ export const toggleChat = () => (app.chatOpen = !app.chatOpen);
 export const toggleJustMyWords = () =>
   updateSettings({ justMyWords: !settings.value.justMyWords });
 
+export const noteTitle = () => notes.list.find((n) => n.id === app.note?.id)?.title || 'Untitled';
+
 export async function copyNote() {
   if (!app.note) return;
   await flushSave?.();
@@ -185,7 +188,7 @@ export async function exportNote(format: ExportFormat) {
   if (!('__TAURI_INTERNALS__' in window)) return;
   const { save } = await import('@tauri-apps/plugin-dialog');
   const path = await save({
-    defaultPath: `${app.note.title || 'Untitled'}.${EXT[format]}`,
+    defaultPath: `${noteTitle()}.${EXT[format]}`,
     filters: [{ name: format === 'md' ? 'Markdown' : 'Word', extensions: [EXT[format]] }],
   });
   if (path) await (await getBackend()).exportNote(app.note.id, format, path);

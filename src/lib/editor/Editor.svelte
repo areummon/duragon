@@ -16,8 +16,7 @@
 
 <script lang="ts">
   import { untrack } from 'svelte';
-  import type { Note } from '../api/types';
-  import { registerFlush } from '../state/app.svelte';
+  import { registerFlush, type OpenNote } from '../state/app.svelte';
   import { keepWords, storeNote } from '../state/saves';
   import { createEditor } from './create';
   import { changedBlocks, docBlocks, normalizeDoc, withoutLastLine } from './plain';
@@ -25,7 +24,7 @@
   import SlashMenu from './SlashMenu.svelte';
 
   interface Props {
-    note: Note;
+    note: OpenNote;
     onBlocksChanged?: (change: BlockChange) => void;
     onEdit?: () => void;
     changeDelay?: () => number;
@@ -38,7 +37,7 @@
   let editor = $state.raw<TipTapEditor>();
   const noteId = $derived(note.id);
 
-  function mount(n: Note) {
+  function mount(n: OpenNote) {
     const id = n.id;
     const doc = normalizeDoc(n.doc, n.title);
     let timer: number | undefined;

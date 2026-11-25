@@ -4,7 +4,7 @@
   import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
   import { closeOnEscape } from '../escape';
-  import { app } from '../state/app.svelte';
+  import { app, noteTitle } from '../state/app.svelte';
   import { chat, chatAsText, clearChat, loadChat, send, unloadChat } from '../state/chat.svelte';
   import { enlarge } from '../state/layout.svelte';
   import { riddlerName } from '../state/riddler';
@@ -92,7 +92,7 @@
   <header>
     <div class="who">
       <span class="name"><Blot size={13} seed="duragon" />{riddlerName()}</span>
-      <span class="sub">On “{app.note?.title || 'Untitled'}”. Reading this note: {nThreads} {nThreads === 1 ? 'thread' : 'threads'} ({nOpen} open)</span>
+      <span class="sub">On “{noteTitle()}”. Reading this note: {nThreads} {nThreads === 1 ? 'thread' : 'threads'} ({nOpen} open)</span>
     </div>
     <div class="tools">
       {#if messages.length}
