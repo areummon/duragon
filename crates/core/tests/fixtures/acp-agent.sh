@@ -8,6 +8,8 @@ echo "$line" > "$out/session-new"
 pwd > "$out/cwd"
 ls -A > "$out/ls"
 stat -c %a . > "$out/mode"
+[ -f .agents/hooks.json ] && cp .agents/hooks.json "$out/hooks"
+[ -f "$out/linger" ] && sleep 30 > /dev/null &
 echo '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"s1"}}'
 read -r _
 touch "$out/left-behind" left-behind

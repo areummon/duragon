@@ -89,3 +89,16 @@ async fn the_folder_is_removed_when_the_call_times_out() {
     assert_ne!(cwd, std::env::current_dir().unwrap());
     assert!(!cwd.exists(), "{} was left", cwd.display());
 }
+
+/// Codex searches a cached web unless it is told not to.
+#[tokio::test]
+async fn codex_searches_only_when_the_note_allows_the_web() {
+    for (web, mode) in [(false, "web_search=disabled"), (true, "web_search=live")] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut req = request(dir.path());
+        req.web = web;
+        run_ai(req).await.unwrap();
+        let args = recorded(dir.path(), "args");
+        assert_eq!(args.lines().filter(|a| a.starts_with("web_search")).collect::<Vec<_>>(), [mode]);
+    }
+}

@@ -5,6 +5,7 @@ use duragon_core::ai::{run_ai, AiError, AiRequest};
 use duragon_core::model::{ProviderConfig, ProviderKind, ThinkingLevel};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -183,4 +184,56 @@ async fn the_folder_is_removed_when_the_call_times_out() {
     let cwd = PathBuf::from(recorded(&dir, "cwd"));
     assert_ne!(cwd, std::env::current_dir().unwrap());
     assert!(!cwd.exists(), "{} was left", cwd.display());
+}
+
+/// Whether Antigravity's hook denies the tool. Its matchers are regular expressions over the tool's name.
+async fn denied(make: impl Fn(AiRequest) -> AiRequest, tool: &str) -> bool {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("asks"), "").unwrap();
+    let mut req = make(request(dir.path()));
+    req.provider.kind = ProviderKind::AgyAcp;
+    run_ai(req).await.unwrap();
+    let hooks = std::fs::read_to_string(dir.path().join("hooks")).expect("the agent was given no hooks");
+    let hooks: Value = serde_json::from_str(&hooks).unwrap();
+    let hook = &hooks["duragon"]["PreToolUse"][0];
+    let said = Command::new("sh").args(["-c", hook["hooks"][0]["command"].as_str().unwrap()]).output().unwrap().stdout;
+    let said: Value = serde_json::from_slice(&said).unwrap();
+    assert_eq!(said["decision"], "deny");
+    let found = Command::new("grep").args(["-qxE", hook["matcher"].as_str().unwrap()]).stdin(Stdio::piped()).spawn().and_then(|mut grep| {
+        std::io::Write::write_all(&mut grep.stdin.take().unwrap(), tool.as_bytes())?;
+        grep.wait()
+    });
+    found.unwrap().success()
+}
+
+/// Antigravity searches the web without asking first, so only its hooks can keep the note's Web switch.
+#[tokio::test]
+async fn antigravity_gets_only_the_tools_the_note_allows() {
+    let web = ["search_web", "read_url_content"];
+    let notes = ["mcp_duragon_notes_search_notes", "mcp_duragon_notes_read_note"];
+    let never = ["run_command", "view_file", "s", "search", "search_we", "search_web2", "read_url", "mcp_duragon_notes_", "mcp_other_search_notes", "x"];
+    for tool in web {
+        assert!(denied(|r| r, tool).await, "{tool}");
+        assert!(denied(with_notes, tool).await, "{tool}");
+        assert!(!denied(with_web, tool).await, "{tool}");
+        assert!(!denied(|r| with_notes(with_web(r)), tool).await, "{tool}");
+    }
+    for tool in notes {
+        assert!(denied(with_web, tool).await, "{tool}");
+        assert!(!denied(with_notes, tool).await, "{tool}");
+    }
+    for tool in never {
+        assert!(denied(|r| r, tool).await, "{tool}");
+        assert!(denied(|r| with_notes(with_web(r)), tool).await, "{tool}");
+    }
+}
+
+#[tokio::test]
+async fn an_agent_that_leaves_a_child_behind_still_answers() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("asks"), "").unwrap();
+    std::fs::write(dir.path().join("linger"), "").unwrap();
+    let mut req = request(dir.path());
+    req.timeout = Duration::from_secs(5);
+    assert_eq!(run_ai(req).await.unwrap(), json!({"said": true}));
 }
