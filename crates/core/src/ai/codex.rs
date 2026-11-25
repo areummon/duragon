@@ -10,6 +10,10 @@ use super::schema_util::{extract_json, strict_schema};
 use crate::model::ThinkingLevel;
 use crate::private::{self, WorkDir};
 
+/// What lets Codex read any file the writer can. One it doesn't know stops it, so a renamed one is never let through.
+const FILE_READERS: [&str; 3] = ["shell_tool", "unified_exec", "view_image"];
+const OTHER_TOOLS: [&str; 7] = ["multi_agent", "goals", "apps", "plugins", "browser_use", "computer_use", "image_generation"];
+
 fn tail(s: &str, n: usize) -> String {
     let t = s.trim();
     let start = t.char_indices().rev().nth(n).map(|(i, _)| i).unwrap_or(0);
@@ -41,9 +45,13 @@ pub async fn run_codex(req: &AiRequest) -> Result<Value, AiError> {
         "read-only".into(),
         "--ephemeral".into(),
         "--skip-git-repo-check".into(),
+        // Their own servers and settings, as Claude is run without its own.
+        "--ignore-user-config".into(),
         "--output-schema".into(),
         schema_path.to_string_lossy().into_owned(),
     ];
+    args.extend(FILE_READERS.iter().flat_map(|tool| ["--disable".into(), tool.to_string()]));
+    args.extend(OTHER_TOOLS.iter().flat_map(|tool| ["-c".into(), format!("features.{tool}=false")]));
     let model = req.model.trim();
     if !model.is_empty() && !model.eq_ignore_ascii_case("default") {
         args.push("-m".into());
