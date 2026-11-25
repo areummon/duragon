@@ -280,3 +280,40 @@ impl VoiceClient {
         Ok(())
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::Duration;
+
+    /// Its first run answers once and exits, but leaves its output open for a while. Later runs stay.
+    const HELPER: &str = r#"#!/bin/sh
+echo started >> "$1/starts"
+first=$(wc -l < "$1/starts")
+while read -r line; do
+  id=$(echo "$line" | sed 's/.*"id":\([0-9]*\).*/\1/')
+  echo "{\"id\":$id,\"ok\":\"run $first\"}"
+  if [ "$first" -eq 1 ]; then sleep 1 & exit 0; fi
+done
+"#;
+
+    #[tokio::test]
+    async fn an_old_helper_ending_late_leaves_the_new_one_running() {
+        let dir = std::env::temp_dir().join(format!("duragon-voice-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("helper");
+        std::fs::write(&bin, HELPER).unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::env::set_var("DURAGON_VOICE_BIN", &bin);
+        let voice = VoiceClient::new(dir.clone(), Arc::new(|_, _| {}));
+
+        voice.listen_start(false).await.unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(voice.call(json!({ "cmd": "listen_stop" })).await.unwrap(), "run 2");
+        std::thread::sleep(Duration::from_millis(1500));
+        assert_eq!(voice.listen_stop().await.unwrap(), "run 2");
+        assert_eq!(std::fs::read_to_string(dir.join("starts")).unwrap().lines().count(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

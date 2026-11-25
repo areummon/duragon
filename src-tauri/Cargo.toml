@@ -16,3 +16,6 @@ serde_json = { version = "1", features = ["raw_value"] }
 tokio = { version = "1", features = ["sync"] }
 anyhow = "1"
 trash = "5.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
