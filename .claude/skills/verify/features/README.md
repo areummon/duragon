@@ -16,6 +16,7 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 - Mock replies ink in word by word. Wait for a known phrase, then `agent-browser wait 3000` before a screenshot.
 - Read side effects from the mock store with the `getBackend()` eval in `../SKILL.md`, and front-end state from `window.__duragon`. Drive the change itself through the UI.
 - Escape closes only the newest open layer, from anywhere, the editor included. `keys.md` lists the layers.
+- The first time a dialog opens after a page load, wait for it. `../SKILL.md`, "Loaded on first use", says what for. The recipes assume it.
 
 ## Proof and skip reporting
 
@@ -27,12 +28,12 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 
 | File | Feature | Last proven |
 | --- | --- | --- |
-| [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear, pin | 2026-11-24, 4806311, all |
-| [margin-threads.md](margin-threads.md) | Margin questions, replies, pin and the thread options | 2026-11-24, e9b2a76, all |
-| [customize.md](customize.md) | Customize dialog, its switches, models, providers and the mind editor | 2026-11-24, 4806311, all (delete and its setting at 62d32b8, models and providers at e0474cd, local servers at 57583b4) |
-| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, move, delete, folders | 2026-11-24, 4806311, all (delete and its setting at 62d32b8) |
-| [editor.md](editor.md) | Selection toolbar, Visualize, inline answers, last line, slash commands, code, math | 2026-11-24, e9b2a76, all |
-| [keys.md](keys.md) | Command palette, shortcuts, Escape layers, Tab | 2026-11-24, 4806311, all but Markdown export (needs Tauri), Trash layers at 62d32b8 |
-| [note-header.md](note-header.md) | Mind, mode, Voice and Web switches, brief, PDF, page width | 2026-11-24, 4806311, all but Markdown and Word export (need Tauri) |
-| [voice.md](voice.md) | Voice models, hold to speak, hands-free | 2026-11-24, e9b2a76, all, against the mock (no real audio) |
-| [trash.md](trash.md) | Trash, restore, where deleted notes go | 2026-11-24, 62d32b8, all, against the mock, plus the real system trash on Linux in a throwaway folder |
+| [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear, pin | 2026-11-25, 6c2d6b0, all |
+| [margin-threads.md](margin-threads.md) | Margin questions, replies, pin and the thread options | 2026-11-25, 6c2d6b0, all |
+| [customize.md](customize.md) | Customize dialog, its switches, models, providers and the mind editor | 2026-11-25, 6c2d6b0, all, against the mock (the native consent window needs Tauri) |
+| [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, move, delete, folders | 2026-11-25, 6c2d6b0, all |
+| [editor.md](editor.md) | Selection toolbar, formatting, Visualize, inline answers, last line, slash commands, code, math | 2026-11-25, 6c2d6b0, all |
+| [keys.md](keys.md) | Command palette, shortcuts, Escape layers, Tab | 2026-11-25, 6c2d6b0, all but Markdown export (needs Tauri) |
+| [note-header.md](note-header.md) | Mind, mode, Voice and Web switches, brief, PDF, page width | 2026-11-25, 6c2d6b0, all but Markdown and Word export (need Tauri) |
+| [voice.md](voice.md) | Voice models, hold to speak, hands-free, reading aloud | 2026-11-25, 6c2d6b0, all, against the mock (no real audio) |
+| [trash.md](trash.md) | Trash, restore, where deleted notes go | 2026-11-25, 6c2d6b0, all, against the mock (the real system trash on Linux last at 62d32b8) |

@@ -12,11 +12,13 @@ The note is a rich-text editor. Selected words get a toolbar for formatting and 
 - `editor-last-line` keeps an empty line at the end of the note, whatever is deleted.
 - `editor-slash` turns a `/` command into a heading, list, quote, code block or divider.
 - `editor-code` makes a code block from ```, closes it with ``` on its last line, and indents with Tab.
+- `editor-format` sets headings, marks and colours from the toolbar, and marks with `Control+b`, `Control+i`, `Control+u` and `Control+e`.
+- `editor-caret` draws the caret itself, and blinks it about once a second.
 
 ## How to get to it (user POV)
 
 - Select words in the body (never the title) with the mouse or `Control+Shift+Arrow`. The toolbar shows in the margin beside them, or under them when the window is too narrow for margins.
-- `Control+Enter` with words selected asks about them. With nothing selected it inserts a line break.
+- `Control+Enter` with words selected asks about them. With nothing selected it inserts a line break, and in a code block it goes on in a new paragraph below.
 - Escape closes the toolbar, or the "Ask Duragon" field, and keeps the words selected.
 - Type `/` at the start of a line or after a space. Escape closes the list, and it stays closed while the caret stays after that slash.
 - Type ``` and a space, or ```js and a space, to start a code block. Enter on a last line of ``` ends the block. Three Enters in a row also end it.
@@ -31,17 +33,20 @@ Preconditions:
 - **Ask with the keyboard.** Press `Control+Enter`. The toolbar closes and the words stay in the paragraph. Within 3 s, `listThreads` gains a `question` thread whose quote is "see what comes back.".
 - **Ask your own question.** Reselect, run `agent-browser find text "Ask Duragon" click`, then `agent-browser fill '[aria-label="Your question"]' "Is this the right order?"` and `agent-browser press Enter`. Run `agent-browser wait --text "against a case where it fails"`.
 - **Escape.** Reselect and open "Ask Duragon". Press Escape. The field and the toolbar close, the words stay selected, and focus is back on `Note`.
-- **Visualize.** On a fresh load, reselect and run `agent-browser find text "Visualize" click`. Don't type. After `wait 2800`, `listThreads` gains a `question` thread on the words with the text "Here is that drawn out, one step at a time." and drawing `pending`. After `wait 3000` more, it is `done` with an `svg`. After `wait 5000` more, the player reads "Sugar and oxygen come out 3/3" with `Previous step`, `Next step` and `Replay`. Choose `See it larger`. The dialog `The drawing, larger` takes focus and keeps Tab. Escape gives focus back to `See it larger`.
+- **Format.** Reselect, then choose `Bold`. `.ProseMirror strong` holds the words. `red` adds `[data-color="red"]`, `Default` takes it away, and `Heading 2` makes the block an `h2`. On a fresh load, `Control+b` does what `Bold` does.
+- **Visualize.** On a fresh load, reselect and run `agent-browser find text "Visualize" click`. Don't type. After `wait 2800`, `listThreads` gains a `question` thread on the words with the text "Here is that drawn out, one step at a time." and drawing `pending`. After `wait 3000` more, it is `done` with an `svg`. After `wait 5000` more, the player reads "Sugar and oxygen come out 3/3" with `Previous step`, `Next step` and `Replay`. Choose `See it larger` and wait for `[aria-label="The drawing, larger"]`. It takes focus and keeps Tab. Escape gives focus back to `See it larger`.
 - **Addressed line.** On a fresh load, run `agent-browser press Control+End`, `agent-browser keyboard type "Duragon, what is a cell?"`, `agent-browser press Enter`. Run `agent-browser wait --text "what is a cell comes down to"`. One `[data-inline-answer]` shows under the line, and `listThreads` gains a `reply` thread quoting the line.
 - **Request line.** Then run `agent-browser keyboard type "Why do leaves change colour?"` without Enter. Run `agent-browser wait --text "Why do leaves change colour comes down to"`.
 - **Caret after an answer mid-note.** On a fresh load, put the caret at the end of the first body paragraph with `document.querySelector('.ProseMirror').editor.commands.setTextSelection(doc.child(0).nodeSize + doc.child(1).nodeSize - 1)`, with `doc` as that editor's `state.doc`. Press Enter, type "Duragon, what is a cell?", and don't press Enter. Once the answer shows, the caret is in a new empty paragraph after the question, and a typed `x` lands there. With Enter pressed instead, the caret is in the same place. If the caret moved elsewhere before the answer came, nothing is inserted.
 - **Typing on past a request.** Set up as above, but type "Duragon, what is a cell" with no `?`. Run `agent-browser wait 1100` so the request goes out. Then type " and what is inside it" one word at a time, with `agent-browser wait 250` between words. The whole sentence stays in one block while the answer arrives. Once you stop, the answer to the full line comes and the caret moves below it.
 - **Last line.** On a fresh load, `doc.childCount` is 5 and the caret is in the empty last block. Press Backspace. The caret is at the end of "see what comes back." and `childCount` is still 5. Press Delete. Nothing changes. Press ArrowDown and type `x`. It lands in the last line, and a new empty one follows. Two presses of Enter add two lines, and Backspace takes them away again. Repeat `Control+z` until the typing is gone, because undo groups edits by time. The stored doc has one block fewer than the live one, so extra empty lines are stored and the last one isn't. Opening a note leaves its `updatedAt` alone.
 - **Click below.** At 1280×860, put the caret in the title and press the mouse at 640,700. Put it back in the title and press at 640,845. Each time the caret goes to the empty last block and the page doesn't scroll. A press at 150,700, left of the page, leaves the caret where it was.
+- **Inline conversation.** On a fresh load, type "Duragon, draw a cell" and press Enter. After `wait --text "4/4"`, choose `[data-inline-answer] .text`. The dialog `Conversation with Duragon` opens, with focus on `Reply to Duragon` and the button `Close this thread`. It has no `Resolve`. Escape folds it.
+- **Caret.** Sample the computed visibility of `.caret` for 2.5 s. It changes about every 530 ms.
 - **Slash.** On a new line, run `agent-browser keyboard type "/"`. The listbox `Commands` offers Text, Heading 1–4, Bulleted list, Numbered list, Quote, Code block and Divider. Type `head`, and four headings stay. Press `ArrowDown` and `Enter`. The line is an `h2`.
 - **Slash Escape.** On a new line, type `/`, press Escape, and type `x`. The list stays closed and the line reads `/x`.
-- **Code fence.** On a new line, type ```js and a space, then `let a = 1`. Press Enter, Tab, and type `b`. Press Enter, type ```, press Enter, and type `after`. The block's code reads `let a = 1\n    b`, its `Code language` select reads `js`, and the next block is the paragraph `after`.
-- **Math.** On a new line, type `Area $A=r^2$` and press Enter. One `.ProseMirror .math-render` shows. Press ArrowUp and End, and it goes back to its source. `It costs $5 and $6 now.` renders no math.
+- **Code fence.** On a new line, type ```js and a space, then `let a = 1`. Press Enter, Tab, and type `b`. Before it has focus, `Code language` offers only `Auto` and `js`. Focused, it offers 39 options. Press Enter, type ```, press Enter, and type `after`. The block's code reads `let a = 1\n    b`, its `Code language` select reads `js`, and the next block is the paragraph `after`.
+- **Math.** Use a fresh load, since the mock may ask about a math line in the margin. On a new line, type `Area $A=r^2$` and press Enter. Run `agent-browser wait '.ProseMirror .math-render .katex'`, and one `.math-render` shows (it shows raw TeX until KaTeX loads). Press ArrowUp and End, and it goes back to its source. `It costs $5 and $6 now.` renders no math.
 - **Proof.** Take a screenshot with the toolbar open, one after each answer, and one of the code block.
 
 ## Gotchas
@@ -53,4 +58,4 @@ Preconditions:
 - A note's whole text selected with `Control+a` shows no toolbar, because the selection starts in the title.
 - Just my words turns off inline answers and reads.
 - Answers in the chat and in threads contain their own code blocks with `Copy code`. Scope code-block selectors to `.ProseMirror div.code-block`.
-- A block's language picker and copy button are invisible until hover or focus, which headless Chromium doesn't give. Read `select.value` instead of looking.
+- A block's language picker and copy button are invisible until hover or focus. Headless Chromium can't hover, but `agent-browser focus '[aria-label="Code language"]'` shows them.

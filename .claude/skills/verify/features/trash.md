@@ -21,12 +21,13 @@ Preconditions:
 
 - Baseline state from `README.md`, with the sidebar open. Open a row's menu by focusing its `Note options` and pressing Enter.
 
-- **Undo.** Delete "Welcome to Duragon". "Scratch" opens, and the toast reads `Moved to Trash`. Choose `Undo`. "Welcome to Duragon" opens with its one thread. Delete it again, open another note, and choose `Undo`. It comes back to the list and the open note stays.
+- **Undo.** Delete "Welcome to Duragon". "Scratch" opens, and the toast reads `Moved to Trash`. Choose `Undo`. "Welcome to Duragon" opens with its one thread. Choose `New note`, delete "Welcome to Duragon" again, open "Scratch", and choose `Undo` while the toast still shows (6 s). With only two notes, there is no other note to open. It comes back to the list and the open note stays.
 - **Dialog.** Delete both notes and choose `Trash`. The dialog lists both, newest first, and keeps Tab. Choose a row's `Restore`. The note is back, the dialog stays and the open note stays.
-- **Delete for good.** Choose it on a row. The row asks, with `Delete` and `Keep it`. Escape drops the question and the dialog stays. `Empty trash` asks the same way and deletes only what it named.
+- **Delete for good.** Choose it on a row. The row asks, with `Delete` and `Keep it`. Escape drops the question and the dialog stays. `Empty trash` asks the same way, with `Delete 2 notes for good?`, `Delete` and `Keep them` when there are several, and deletes only what it named.
 - **Modes.** Pick `System trash` and delete "Scratch". The toast reads `Moved to the system trash`, with no `Undo`. Pick `Delete for good` and delete "Welcome to Duragon". The menu asks "Delete this note for good?" with `Delete` and `Keep it`.
 - **Last words.** Type in a note and delete it at once. After `Undo`, the words are there.
-- **Failing save.** Replace `saveNote` on the mock with one that throws, and type. The toast reads "Your last words couldn’t be saved. Trying again." Opening another note and deleting this one are refused. Put `saveNote` back and run `agent-browser wait 3800`. The words are stored.
+- **Refused system trash.** Set `b.failSystemTrash = true` on the mock, pick `System trash` and delete a note. The toast reads `The system trash wouldn’t take it. It’s in Duragon’s Trash.`, with `Undo`, and `listTrash().notes` has it.
+- **Failing save.** Replace `saveNote` on the mock with one that throws, and type. The toast reads "Your last words couldn’t be saved. Trying again." Opening another note, `New note` and deleting this one are refused, the last with the toast "That note couldn’t be deleted." Put `saveNote` back and run `agent-browser wait 3800`. The words are stored.
 - **Search.** A trashed note isn't in the palette's results.
 - **Proof.** Read `listNotes()` and `listTrash()` before and after each step, with a screenshot of the dialog.
 

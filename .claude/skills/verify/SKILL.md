@@ -5,14 +5,15 @@ description: Drive Duragon (Tauri 2 + Svelte 5 notes app with AI "minds") to pro
 
 # Verify Duragon
 
-Duragon has three surfaces. Pick by what the change touched.
+Pick the surface by what the change touched.
 
 | Change touched | Surface | How |
 | --- | --- | --- |
 | `src/**` (Svelte, CSS, TS) | Frontend on the mock backend | Vite on :5199 + `agent-browser` (this file) |
 | `crates/core/**` (DB, prompts, AI tasks) | Rust core against a fake `claude` | `nix develop -c cargo test -p duragon-core` |
 | Prompts or anything whose result depends on the model | Rust core against the real `claude` CLI | `#[ignore]` tests in `crates/core/tests/real_cli.rs` |
-| `src-tauri/**` (commands, startup) | The built binary | `nix develop -c cargo build -p duragon`, plus the frontend run for the calling UI |
+| `src-tauri/**` (commands, startup, the voice helper’s client) | The binary | `nix develop -c cargo test -p duragon`, plus the frontend run for the calling UI |
+| `crates/voice/**` (the helper that listens and speaks) | The voice crate | `nix develop -c cargo test -p duragon-voice`, plus the frontend run for the calling UI |
 
 The full desktop app (Tauri window on WebKitGTK) is not driven here. See Gotchas.
 
@@ -32,6 +33,7 @@ The page is usable when `.ProseMirror` exists:
 
 ```sh
 export AGENT_BROWSER_SESSION=duragon-verify
+export VERIFY_DIR="${VERIFY_DIR:-${TMPDIR:-/tmp}/duragon-verify}"   # what the scripts use; the recipes write to it
 agent-browser open http://localhost:5199/
 agent-browser set viewport 1280 860
 agent-browser wait .ProseMirror
@@ -58,7 +60,20 @@ Use `agent-browser` with `AGENT_BROWSER_SESSION=duragon-verify`, so this run's b
 - **Command palette.** Press `Control+k`. It is the dialog `Find a note`, with the combobox `Find a note, or name a new one` and the listbox `Notes`.
 - **Editor menus.** Selected words show the toolbar `Selection`. A `/` shows the listbox `Commands`. A code block has the select `Code language` and the button `Copy code`.
 
-`find … --name` matches a case-insensitive substring. Add `--exact` when one name contains another, such as `Copy` and `Copy code`, or `Close` and `Close notes`.
+`find … --name` matches a case-insensitive substring. Add `--exact` when one name contains another, such as `Copy` and `Copy code`, or `Close` and `Close notes`. `find` waits for nothing and has no `focus` action. Use `agent-browser focus <css>`.
+
+**Loaded on first use.** Dialogs, formulas and code colouring are imported the first time they are needed. `__duragon.app` says a dialog is open before the dialog exists, so the first opening after each page load needs a wait before the next step. Later openings don’t.
+
+| What | Wait for |
+| --- | --- |
+| Customize | `[aria-label="Settings sections"]`, then `wait 400`, because a click lands elsewhere while its rows still move |
+| Command palette | `[aria-label="Find a note, or name a new one"]` |
+| Mind editor | `[aria-modal="true"][aria-label="New Mind"]` (`Edit <name>` when changing one) |
+| Trash | `[aria-labelledby="trash-title"]` |
+| Thread, full screen | `[aria-label="Thread"]` |
+| Drawing, larger | `[aria-label="The drawing, larger"]` |
+| A formula in the note | `.ProseMirror .math-render .katex` (`.math-render` alone shows raw TeX first) |
+| A formula in a reply | a symbol’s button, such as `[aria-label="area of the circle"]` |
 
 Useful patterns:
 
@@ -92,7 +107,7 @@ agent-browser eval 'window.__copied'
 
 ## Evidence
 
-Save proofs under `$VERIFY_DIR/evidence/<feature>/` (default `/tmp/duragon-verify/evidence/`). Cleanup never deletes it.
+Save proofs under `$VERIFY_DIR/evidence/<feature>/` (default `/tmp/duragon-verify/evidence/`). Run `mkdir -p` on the folder first, because `screenshot` doesn’t make it. Cleanup never deletes it.
 
 - **Before and after.** Capture the action and the resulting state, not only the final screen. Take a screenshot before and after (`agent-browser screenshot <path>`) and an accessibility snapshot of the end state (`agent-browser snapshot -i > <path>.aria.txt`).
 - **Side effects.** Prove them alongside what's visible, by reading the mock store with the eval above before and after the action. A UI that only looks cleared is not proof that the data is cleared.
@@ -103,12 +118,16 @@ Save proofs under `$VERIFY_DIR/evidence/<feature>/` (default `/tmp/duragon-verif
 
 ```sh
 nix develop -c cargo test -p duragon-core                     # fake `claude` scripts, no network
+nix develop -c cargo test -p duragon-voice                    # the voice library; a real-model test is ignored
+nix develop -c cargo test -p duragon                          # the window rules, and the voice helper's client against a fake helper
 nix develop -c cargo build -p duragon-voice                   # the voice helper, which Tauri's own commands build first
 nix develop -c cargo build -p duragon                         # the Tauri binary, including --notes-mcp
 nix develop -c cargo test -p duragon-core --test real_cli -- --ignored --nocapture <test name>
 ```
 
 The real-CLI tests call the user's `claude` login and spend tokens. Run only the one that matches the change, on haiku. List them with `grep -n "async fn real_" crates/core/tests/real_cli.rs`.
+
+`cargo test -p duragon-voice --test real_models -- --ignored --nocapture` downloads the voice models (615 MB, kept between runs in `DURAGON_VOICE_TEST_DIR`), speaks into a WAV and transcribes it back. It opens no microphone and plays nothing. Nothing covers the helper’s protocol or its idle exit.
 
 ## Cleanup
 
@@ -127,5 +146,6 @@ It closes this run's `agent-browser` session, kills only the process group in `v
 - **Hover.** Headless Chromium reports `hover: none`, so `(hover: hover)` styles and hover tooltips won't fire. To prove a hover path, run a headed `agent-browser` inside a private Xvfb display (`nix shell nixpkgs#xvfb-run`).
 - **IPv6 only.** Vite listens on `localhost` (`::1`). `127.0.0.1:5199` refuses connections.
 - **Fresh mock on reload.** Reloading the page resets all mock data. Persistence across restarts can only be proven in the Rust tests (`tests/db.rs` reopens a database).
+- **`keyboard type` ignores focus.** It puts text at the note’s caret even while a button or switch has focus, and then the note has focus. It proves the note’s text, not where a writer’s keys go. For that, use `agent-browser press`, which goes to the focused control.
 - **Blank page after a restart.** Once, right after `cleanup.sh` and `launch.sh`, the session sat on `about:blank` and evals said `__duragon is not defined`. Run `agent-browser open` again before you read anything. It did not happen in later restarts.
 - **Panels stay mounted.** The closed side chat and sidebar stay in the DOM as `inert`. To check whether one is open, use `snapshot -i` or `__duragon.app`, not `querySelector`.
