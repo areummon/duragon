@@ -1,5 +1,6 @@
 //! AI runners (Claude CLI, ACP, Codex CLI, HTTP APIs), prompts, task orchestration.
 pub mod acp;
+mod all_but;
 pub mod budget;
 pub mod codex;
 pub mod http;

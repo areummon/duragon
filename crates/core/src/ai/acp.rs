@@ -1,14 +1,18 @@
 //! Agent Client Protocol (ACP) client over JSON-RPC 2.0 stdio (`agy acp` and any generic ACP agent).
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::io::Write;
+use std::path::Path;
 use std::process::Stdio;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
+use super::all_but::all_but;
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, json_instruction};
-use crate::model::ThinkingLevel;
-use crate::private::WorkDir;
+use crate::model::{ProviderKind, ThinkingLevel};
+use crate::private::{self, WorkDir};
 
 /// The notes server's name here. Agents also load the writer's own servers, and one called "notes" is likely.
 const NOTES_SERVER: &str = "duragon_notes";
@@ -20,6 +24,11 @@ const NOTES_TOOLS: [&str; 4] = [
     "mcp_duragon_notes_search_notes",
     "mcp_duragon_notes_read_note",
 ];
+
+const STDERR_WAIT: Duration = Duration::from_secs(1);
+
+/// Antigravity's own web tools, which it uses without asking.
+const AGY_WEB_TOOLS: [&str; 2] = ["search_web", "read_url_content"];
 
 fn fail<T>(msg: impl Into<String>) -> Result<T, AiError> {
     Err(AiError::Failed(msg.into()))
@@ -42,6 +51,9 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
     let grants = Grants { web: req.web, notes: req.notes.is_some() };
     // Before the child, so it is dropped after it.
     let cwd = WorkDir::new().map_err(|e| AiError::Failed(format!("could not make a folder for {command}: {e}")))?;
+    if req.provider.kind == ProviderKind::AgyAcp {
+        deny_other_tools(cwd.path(), grants).map_err(|e| AiError::Failed(format!("could not limit {command}'s tools: {e}")))?;
+    }
 
     let mut child = Command::new(command)
         .args(&args)
@@ -218,7 +230,8 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
     let mut text = String::new();
     let prompt_res = wait_for_response(&mut reader, &mut stdin, prompt_id, grants, Some(&mut text)).await;
     let _ = child.kill().await;
-    let stderr = stderr_task.await.unwrap_or_default();
+    // A child of the agent's can hold its stderr open after it.
+    let stderr = tokio::time::timeout(STDERR_WAIT, stderr_task).await.ok().and_then(Result::ok).unwrap_or_default();
 
     let res = match prompt_res {
         Ok(v) => v,
@@ -334,6 +347,21 @@ fn collect_update_text(params: &Value, out: &mut String) {
 struct Grants {
     web: bool,
     notes: bool,
+}
+
+/// Antigravity reads hooks from the folder it works in, and asks them before every tool.
+fn deny_other_tools(cwd: &Path, grants: Grants) -> std::io::Result<()> {
+    let web = AGY_WEB_TOOLS.iter().filter(|_| grants.web);
+    let notes = NOTES_TOOLS.iter().filter(|_| grants.notes);
+    let allowed: Vec<&str> = web.chain(notes).copied().collect();
+    let deny = r#"echo '{"decision":"deny","reason":"The writer has not allowed this tool. Answer without it."}'"#;
+    let hooks = json!({ "duragon": { "PreToolUse": [{
+        "matcher": all_but(&allowed),
+        "hooks": [{ "type": "command", "command": deny, "timeout": 10 }],
+    }] } });
+    let dir = cwd.join(".agents");
+    private::dir(&dir)?;
+    private::options().create_new(true).open(dir.join("hooks.json"))?.write_all(hooks.to_string().as_bytes())
 }
 
 #[derive(Debug, Deserialize)]

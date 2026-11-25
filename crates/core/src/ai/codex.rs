@@ -54,6 +54,8 @@ pub async fn run_codex(req: &AiRequest) -> Result<Value, AiError> {
         args.push(format!("model_reasoning_effort={}", req.thinking.as_str()));
     }
     args.extend(req.provider.args.iter().cloned());
+    // Last, so the note's Web switch outranks the writer's own arguments.
+    args.extend(["-c".into(), format!("web_search={}", if req.web { "live" } else { "disabled" })]);
     args.push("-".into());
 
     let mut child = Command::new(command)
