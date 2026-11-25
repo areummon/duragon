@@ -4,7 +4,7 @@
   interface Props {
     size?: number;
     seed?: string;
-    /** Lands with splat, dries, sheen and one drip. Only for freshly arrived ink. */
+    /** Lands with a splat and a sheen, and dries. Only for freshly arrived ink. */
     landing?: boolean;
     /** Pulsing while Riddled is thinking. */
     waiting?: boolean;
@@ -17,7 +17,6 @@
   <path class="body" fill="currentColor" d={d} />
   {#if landing}
     <path class="sheen" d={d} fill="var(--paper)" transform="translate(-1.6 -1.6) scale(0.45)" />
-    <circle class="drip" cx="0" cy="8" r="2" fill="currentColor" />
   {/if}
 </svg>
 
@@ -25,10 +24,8 @@
   .blot { flex: none; color: var(--riddle); overflow: visible; }
   .waiting { animation: ink-wait var(--dur-ink-wait) ease-in-out infinite; }
   .landing { animation: blot-splat var(--dur-blot-splat) var(--ease-splat) both; }
-  .body, .sheen, .drip { transform-box: fill-box; transform-origin: center; }
+  .body, .sheen { transform-box: fill-box; transform-origin: center; }
   .landing .body { animation: ink-dry var(--dur-ink-dry) ease-in forwards; }
   .sheen { opacity: 0; }
   .landing .sheen { animation: ink-sheen var(--dur-ink-sheen) ease-out var(--delay-ink-sheen) both; }
-  .drip { opacity: 0; }
-  .landing .drip { animation: ink-drip var(--dur-ink-drip) var(--ease-drip) var(--delay-ink-drip) both; }
 </style>

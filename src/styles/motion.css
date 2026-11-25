@@ -4,7 +4,6 @@
   --ease-reply: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ease-ink: cubic-bezier(0.25, 0.6, 0.3, 1);
   --ease-splat: cubic-bezier(0.2, 0.9, 0.25, 1.12);
-  --ease-drip: cubic-bezier(0.5, 0, 0.8, 0.6);
   --ease-step: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-ui: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-drawer: cubic-bezier(0.16, 1, 0.3, 1);
@@ -25,8 +24,6 @@
   --dur-ink-dry: 3400ms;
   --dur-ink-sheen: 2600ms;
   --delay-ink-sheen: 200ms;
-  --dur-ink-drip: 1500ms;
-  --delay-ink-drip: 650ms;
   --dur-step: 450ms;
   --dur-ui: 150ms;
   --dur-ink-in: 240ms;
@@ -81,12 +78,6 @@
 @keyframes ink-sheen {
   from { opacity: 0.55; }
   to { opacity: 0; }
-}
-@keyframes ink-drip {
-  0% { transform: translateY(0) scale(0.3); opacity: 1; }
-  30% { transform: translateY(0) scale(1); opacity: 1; }
-  60% { transform: translateY(2px) scale(0.85, 1.9); opacity: 1; }
-  100% { transform: translateY(16px) scale(0.85, 1.9); opacity: 0; }
 }
 @keyframes drawing-step {
   from { opacity: 0; }
@@ -174,6 +165,5 @@
     15%, 70% { opacity: 1; }
     100% { opacity: 0; }
   }
-  @keyframes ink-drip { from, to { opacity: 0; } }
   @keyframes voice-bar { from, to { transform: scaleY(0.6); } }
 }
