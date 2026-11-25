@@ -127,7 +127,7 @@ nix develop -c cargo test -p duragon-core --test real_cli -- --ignored --nocaptu
 
 The real-CLI tests call the user's `claude` login and spend tokens. Run only the one that matches the change, on haiku. List them with `grep -n "async fn real_" crates/core/tests/real_cli.rs`.
 
-`cargo test -p duragon-voice --test real_models -- --ignored --nocapture` downloads the voice models (615 MB, kept between runs in `DURAGON_VOICE_TEST_DIR`), speaks into a WAV and transcribes it back. It opens no microphone and plays nothing. Nothing covers the helper’s protocol or its idle exit.
+`cargo test -p duragon-voice --test real_models -- --ignored --nocapture` downloads the voice models (615 MB, kept between runs in `DURAGON_VOICE_TEST_DIR`), speaks into a WAV and transcribes it back. It opens no microphone and plays nothing. Nothing covers the helper’s protocol or its exit, only that it counts as idle once a voice has ended.
 
 ## Cleanup
 
