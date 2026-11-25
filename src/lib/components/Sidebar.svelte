@@ -190,7 +190,7 @@
 
 <svelte:window onpointermove={(e) => { track(e); nearEdge(e); }} onpointerdown={pressEdge} onpointerout={(e) => { if (!e.relatedTarget) leaveEdge(); }} onpointerup={drop} onkeydowncapture={cancel} />
 
-<div class="edge" aria-hidden="true" onmouseenter={peekSidebar}></div>
+<div class="edge" aria-hidden="true" onmouseenter={(e) => !e.buttons && peekSidebar()}></div>
 {#if app.sidebarOpen}
   <div class="scrim" role="presentation" onclick={() => setSidebar(false)} onmouseenter={leave}></div>
 {/if}

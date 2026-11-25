@@ -16,7 +16,7 @@ The sidebar lists notes and folders. From it the writer opens a note, starts a n
 ## How to get to it (user POV)
 
 - Choose `Open notes` in the top bar. It reads `Close notes` while the sidebar is open.
-- Move the pointer to the left edge to peek the sidebar (window at least 768 px wide). Up to 32 px from it, rest on the empty page for a moment. In that zone (not the 8 px strip at the very edge), over a thread, the words or a button, with a button of the mouse down, or passing through, nothing opens. Moving away closes it, unless the pointer is within 40 px of the edge or a menu, dialog, folder field or drag is active.
+- Move the pointer to the left edge to peek the sidebar (window at least 768 px wide). Up to 32 px from it, rest on the empty page for a moment. In that zone, over a thread, the words or a button, with a button of the mouse down, or passing through, nothing opens. The 8 px strip at the very edge opens at once, but not with a button of the mouse down. Moving away closes it, unless the pointer is within 40 px of the edge or a menu, dialog, folder field or drag is active.
 - Press the page beside the sidebar to close it.
 - Open a row's menu from the keyboard, and focus goes to its first item. Escape gives focus back to the button. Tab closes the menu and goes on to the next control.
 - Escape closes the newest layer first. With a note menu open, the first Escape closes the menu and the second closes the sidebar. Escape in `Folder name` cancels the new folder and leaves the sidebar open.
@@ -29,7 +29,7 @@ Preconditions:
 
 - **Open.** Run `agent-browser find role button click --name "Open notes"`. The navigation `Notes` appears with `Find or start a note Ctrl K`, `New note`, `All notes 2` (pressed, it shows every note), a button per note, `New folder`, `Trash` and `Settings`. `__duragon.app.sidebar` is `pinned`.
 - **Escape.** Click a row's `Note options` by ref, then press Escape twice. The menu closes first, then the sidebar, and `__duragon.app.sidebar` is `closed`.
-- **Peek.** On a fresh load, run `agent-browser mouse move 2 400`. `__duragon.app.sidebar` is `peek`. `agent-browser mouse move 900 400` closes it again. `agent-browser mouse move 20 400` and a wait of 300 ms opens it too, and after Escape it stays closed until the pointer has left and come back.
+- **Peek.** On a fresh load, run `agent-browser mouse move 2 400`. `__duragon.app.sidebar` is `peek`. `agent-browser mouse move 900 400` closes it again. `agent-browser mouse move 20 400` and a wait of 300 ms opens it too, and after Escape it stays closed until the pointer has left and come back. Select words with the mouse from 600,248 to 3,280, and the sidebar stays closed.
 - **Click beside.** Open the sidebar and press the mouse at 900,600. `__duragon.app.sidebar` is `closed`.
 - **Switch.** Run `agent-browser find role button click --name "Scratch" --exact`. The editor's level-1 heading reads `Scratch`.
 - **New.** Run `agent-browser find role button click --name "New note" --exact`. `All notes 3` shows, a row `Untitled` comes first, and the stored title is `""`.
