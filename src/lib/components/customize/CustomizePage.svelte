@@ -130,7 +130,7 @@
       <div class="group"><SwitchRow title="Web search in new notes" desc="Lets Duragon look things up, and shows where it looked." on={s.webInNewNotes} onchange={(v) => set({ webInNewNotes: v })} /></div>
     {/if}
     {#if on('reading', 'notes')}
-      <div class="group"><SwitchRow title="Search my other notes in chat" desc="In the side chat, Duragon can look through your other notes when it helps, and says which one it used. The notes it opens are sent to Claude, like the note you’re in." on={s.searchMyNotes} onchange={(v) => set({ searchMyNotes: v })} /></div>
+      <div class="group"><SwitchRow title="Search my other notes in chat" desc="In the side chat, Duragon can look through your other notes when it helps, and says which one it used. The notes it opens go to the model you picked for Chat, like the note you’re in." on={s.searchMyNotes} onchange={(v) => set({ searchMyNotes: v })} /></div>
     {/if}
     {#if on('reading', 'symbols')}
       <div class="group"><SwitchRow title="Explain symbols in formulas" desc="Point at a symbol in a formula Duragon writes to see what it stands for. Click it to ask for more." on={s.explainSymbols} onchange={(v) => set({ explainSymbols: v })} /></div>

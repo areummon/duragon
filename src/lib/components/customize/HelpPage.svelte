@@ -28,7 +28,7 @@
 </dl>
 
 <h4>Your notes</h4>
-<p class="intro">Everything stays on this computer, in <code>~/.local/share/dev.duragon.app/duragon.db</code>. Duragon’s trash is the folder <code>.trash</code> beside it. Duragon talks to Claude through your installed <code>claude</code> command, using your own subscription. Voice runs fully offline once its models are installed.</p>
+<p class="intro">Your notes are kept on this computer, in <code>~/.local/share/dev.duragon.app/duragon.db</code>. Duragon’s trash is the folder <code>.trash</code> beside it. What Duragon reads goes to the model you picked for the job. That is Claude, through your installed <code>claude</code> command, unless you chose another in Customize. Voice runs fully offline once its models are installed.</p>
 
 <style>
   .intro { max-width: 480px; font-size: 14px; line-height: 1.55; color: var(--graphite); }
