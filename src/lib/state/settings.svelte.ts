@@ -26,10 +26,29 @@ export const settings = $state<{ value: Settings; loaded: boolean }>({ value: { 
 /** `error` is why the saved keys can't be read. */
 export const credentialStatuses = $state<{ value: ProviderCredentialStatus[]; error: string | null }>({ value: [], error: null });
 
+/** Fades the whole window from one theme to the other, in one picture. Colours that each fade restyle every frame. */
+function showTheme(theme: 'light' | 'dark') {
+  const root = document.documentElement;
+  const shown = root.dataset.theme;
+  if (shown === theme) return;
+  const show = () => {
+    // Or every button fades its own colours beneath the one fade.
+    root.dataset.switching = '';
+    root.dataset.theme = theme;
+    void root.offsetHeight;
+    delete root.dataset.switching;
+  };
+  if (!shown || !document.startViewTransition) return show();
+  const { ready, finished } = document.startViewTransition(show);
+  // A newer change, or a window out of sight, ends it early.
+  ready.catch(() => {});
+  finished.catch(() => {});
+}
+
 function apply() {
   const s = settings.value;
   const root = document.documentElement;
-  root.dataset.theme = s.appearance === 'system' ? (dark.matches ? 'dark' : 'light') : s.appearance;
+  showTheme(s.appearance === 'system' ? (dark.matches ? 'dark' : 'light') : s.appearance);
   if (s.inkColour === 'ink') delete root.dataset.ink;
   else root.dataset.ink = s.inkColour;
   root.dataset.lettering = s.lettering;

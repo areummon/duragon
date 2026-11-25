@@ -5,6 +5,7 @@
   --ease-ink: cubic-bezier(0.25, 0.6, 0.3, 1);
   --ease-splat: cubic-bezier(0.2, 0.9, 0.25, 1.12);
   --ease-step: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-theme: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-ui: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-drawer: cubic-bezier(0.16, 1, 0.3, 1);
 
@@ -26,6 +27,7 @@
   --delay-ink-sheen: 200ms;
   --dur-step: 450ms;
   --dur-ui: 150ms;
+  --dur-theme: 250ms;
   --dur-ink-in: 240ms;
   --dur-unfold: 340ms;
   --dur-pencil: 900ms;
@@ -83,6 +85,13 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+/* The new theme fades in over the old one. Without the blending it comes with, which an AMD GPU shows as magenta blocks. */
+[data-switching], [data-switching] *, [data-switching] *::before, [data-switching] *::after { transition: none !important; }
+::view-transition { pointer-events: none; }
+::view-transition-image-pair(root) { isolation: auto; }
+::view-transition-old(root), ::view-transition-new(root) { mix-blend-mode: normal; animation: none; }
+::view-transition-new(root) { animation: ui-fade var(--dur-theme) var(--ease-theme) both; }
+
 @keyframes ui-fade {
   from { opacity: 0; }
   to { opacity: 1; }

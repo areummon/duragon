@@ -28,6 +28,7 @@ Preconditions:
 - **Open.** Run `agent-browser press Control+,`. The navigation `Settings sections`, the button `Close` and the searchbox `Search settings` appear.
 - **Toggle.** Run `agent-browser find role switch click --name "Explain symbols in formulas"`. The switch reports `checked=true` in `agent-browser snapshot -i`.
 - **Stored.** Read `(await b.getSettings()).explainSymbols` with the store eval from `../SKILL.md`. It goes from `false` to `true`.
+- **Appearance.** Choose `Dark`, then `Light`. The whole window fades in 250 ms, with one animation, `ui-fade` on `::view-transition-new(root)`. Choosing what already shows starts none.
 - **Search.** Run `agent-browser fill '[aria-label="Search settings"]' "symbols"`. Only that switch row stays, under its `Reading` heading. Rows that don't match are removed from the DOM, not hidden. "zzz" shows `Nothing matches “zzz”.`
 - **Pages.** Choose each button in `Settings sections`. `Minds` shows `New Mind`. `About you` shows the switch `Duragon learns about you`. `Voice models` shows `Install voice models (615 MB download)`.
 - **Mind editor.** On `Minds`, choose `New Mind`. A dialog named `New Mind` opens over Customize with the textboxes `Name`, `Description …` and `How it thinks …`, and `Cancel`. The last two names carry their hint, so leave out `--exact`. Press Escape. `__duragon.app.mindEditor` is `null` and `__duragon.app.customizeOpen` is still `true`. Press Escape again, and Customize closes.
