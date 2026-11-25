@@ -9,7 +9,7 @@
 
   $effect(() => {
     area?.focus();
-    area?.setSelectionRange(draft.length, draft.length);
+    area?.setSelectionRange(area.value.length, area.value.length);
   });
 
   function cancel() {
