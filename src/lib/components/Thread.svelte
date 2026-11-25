@@ -27,11 +27,14 @@
   let { thread, side = 'right', variant = 'margin' }: Props = $props();
 
   const inline = $derived(variant === 'inline');
-  const isOpen = $derived(variant === 'dialog' || inline || threads.openId === thread.id);
+  const unfolded = $derived(threads.openId === thread.id);
+  const isOpen = $derived(variant === 'dialog' || inline || unfolded);
   const first = $derived(thread.messages[0]);
   const replies = $derived(thread.messages.length - 1);
   const drawn = $derived(thread.messages.find((m) => m.drawing !== 'none'));
   const waiting = $derived(!!threads.replying[thread.id]);
+  const count = $derived(thread.messages.length);
+  const drawings = $derived(thread.messages.filter((m) => m.drawing === 'done').length);
   const fresh = $derived(thread.messages.some((m) => threads.freshText[m.id]));
   const actions = $derived<ThreadAction[]>(
     inline ? ['copy', 'speak', 'note', 'margin', 'dismiss']
@@ -76,10 +79,12 @@
     onscroll();
   }
 
+  // Margin wraps its threads anew whenever one moves, so the effects below follow values, not the wrapper.
+
   /** Opening lands on the latest message; each new one scrolls into view. */
   let seen = 0;
   $effect(() => {
-    const n = thread.messages.length + (waiting ? 1 : 0);
+    const n = count + drawings + (waiting ? 1 : 0);
     if (!isOpen || !scroller) {
       seen = 0;
       return;
@@ -116,7 +121,7 @@
   });
 
   $effect(() => {
-    if (variant !== 'dialog' && threads.openId === thread.id) return closeOnEscape(() => openThread(null), () => article?.querySelector<HTMLElement>('.first'));
+    if (variant !== 'dialog' && unfolded) return closeOnEscape(() => openThread(null), () => article?.querySelector<HTMLElement>('.first'));
   });
 
   /** Opened from the keyboard, the reply box takes the focus the button had. A click leaves focus where it was. */
