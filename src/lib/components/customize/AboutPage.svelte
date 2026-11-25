@@ -1,34 +1,24 @@
 <script lang="ts">
-  import { getBackend } from '../../api/backend';
   import { settings, updateSettings } from '../../state/settings.svelte';
   import Switch from './Switch.svelte';
 
   const LIMIT = 700;
-  let draft = $state(settings.value.aboutYou);
-  let focused = $state(false);
+  /** The writer's own words, until they are stored. */
+  let edit = $state<string | null>(null);
+  const text = $derived(edit ?? settings.value.aboutYou);
   let timer = 0;
 
   function input(e: Event) {
-    draft = (e.currentTarget as HTMLTextAreaElement).value.slice(0, LIMIT);
+    edit = (e.currentTarget as HTMLTextAreaElement).value.slice(0, LIMIT);
     window.clearTimeout(timer);
-    timer = window.setTimeout(() => void updateSettings({ aboutYou: draft }), 300);
+    timer = window.setTimeout(() => void save(), 300);
   }
-  const commit = () => {
-    focused = false;
+  async function save() {
     window.clearTimeout(timer);
-    if (draft !== settings.value.aboutYou) void updateSettings({ aboutYou: draft });
-  };
-
-  $effect(() => {
-    let off: (() => void) | undefined;
-    void getBackend().then((be) => {
-      off = be.on('about:updated', (text) => {
-        settings.value = { ...settings.value, aboutYou: text };
-        if (!focused) draft = text;
-      });
-    });
-    return () => off?.();
-  });
+    const mine = edit;
+    if (mine === null) return;
+    if ((await updateSettings({ aboutYou: mine })) && edit === mine) edit = null;
+  }
 </script>
 
 <p class="intro">A short paragraph Duragon keeps about you, so every note starts out knowing it. It adds to it when you tell it something about yourself. Only you can see it.</p>
@@ -42,16 +32,15 @@
 </div>
 
 <textarea
-  value={draft}
+  value={text}
   oninput={input}
-  onfocus={() => (focused = true)}
-  onblur={commit}
+  onblur={save}
   maxlength={LIMIT}
   rows="5"
   aria-label="About you"
   placeholder="Nothing yet. Write what Duragon should know: what you do, what you’re working toward, how you like feedback."
 ></textarea>
-<div class="count">{draft.length} of {LIMIT}</div>
+<div class="count">{text.length} of {LIMIT}</div>
 
 <style>
   .intro { max-width: 460px; font-size: 14px; line-height: 1.5; color: var(--graphite); }

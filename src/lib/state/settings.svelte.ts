@@ -64,6 +64,10 @@ async function storedSettings(): Promise<Settings> {
 }
 
 export async function loadSettings() {
+  // Every save sends all the settings, so one made after the core learns something has to have it too.
+  (await getBackend()).on('about:updated', (text) => {
+    if (!ownWords) settings.value.aboutYou = text;
+  });
   settings.value = await storedSettings();
   settings.loaded = true;
   apply();
@@ -117,6 +121,8 @@ function inTurn<T>(act: () => Promise<T>): Promise<T> {
 const NOT_ALLOWED = 'The change was not allowed';
 
 let edits = 0;
+/** Saves of the writer's own paragraph on their way. They replace what the core learned before they get there. */
+let ownWords = 0;
 
 /** Whether the change was stored. If not, the writer has been told, and what is stored shows again. */
 export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
@@ -124,7 +130,7 @@ export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
   Object.assign(settings.value, patch);
   apply();
   const edit = ++edits;
-  return inTurn(async () => {
+  const saved = inTurn(async () => {
     try {
       await (await getBackend()).saveSettings($state.snapshot(settings.value));
     } catch (e) {
@@ -142,6 +148,11 @@ export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
     }
     return true;
   });
+  if ('aboutYou' in patch) {
+    ownWords++;
+    void saved.finally(() => ownWords--);
+  }
+  return saved;
 }
 
 /** Stored before it shows. The core keeps everything as it was when the provider's key can't be forgotten with it. */
