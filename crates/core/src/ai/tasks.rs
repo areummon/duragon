@@ -565,19 +565,23 @@ impl Ai {
     /// Updates the About-you paragraph when the writer said something lasting about themselves.
     /// Failures are silent: this runs in the background and is never worth interrupting for.
     pub async fn learn(&self, latest: &str) -> Result<()> {
-        let mut settings = self.db.get_settings()?;
-        if !settings.learn_about_you {
+        let before = self.db.get_settings()?;
+        if !before.learn_about_you {
             return Ok(());
         }
-        let payload = prompts::learn_payload(&settings.about_you, latest);
-        let Some(out) = self.background::<LearnOut>(AiTask::Learn, &settings, payload).await else {
+        let payload = prompts::learn_payload(&before.about_you, latest);
+        let Some(out) = self.background::<LearnOut>(AiTask::Learn, &before, payload).await else {
             return Ok(());
         };
         let Some(about) = out.about_you.filter(|a| out.changed && !a.trim().is_empty()) else {
             return Ok(());
         };
         let about: String = about.trim().chars().take(ABOUT_YOU_MAX).collect();
-        settings = self.db.get_settings()?;
+        let mut settings = self.db.get_settings()?;
+        // It was composed from a paragraph that has changed since.
+        if settings.about_you != before.about_you {
+            return Ok(());
+        }
         settings.about_you = about.clone();
         self.db.save_settings(&settings)?;
         self.emit("about:updated", &about);
