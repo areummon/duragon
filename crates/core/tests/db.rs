@@ -402,3 +402,24 @@ fn only_the_owner_can_read_the_database() {
     }
     assert_eq!(again.search_notes("private").unwrap().len(), 2);
 }
+
+#[test]
+fn a_provider_that_cannot_be_read_costs_only_itself() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("duragon.db");
+    let db = Db::open(&path).unwrap();
+    let mut raw = serde_json::to_value(Settings { about_you: "I teach biology".into(), ..Settings::default() }).unwrap();
+    let providers = raw["providers"].as_array_mut().unwrap();
+    providers.push(json!({"id": "mine", "name": "Mine", "kind": "openai"}));
+    providers.push(json!({"id": "later", "name": "Later", "kind": "from-a-later-version"}));
+    providers.push(json!("garbled"));
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute("INSERT INTO kv(key,value) VALUES('settings',?1)", [raw.to_string()])
+        .unwrap();
+    db.save_settings(&db.get_settings().unwrap()).unwrap();
+    let settings = db.get_settings().unwrap();
+    assert_eq!(settings.about_you, "I teach biology");
+    assert!(settings.providers.iter().any(|p| p.id == "mine"));
+    assert!(settings.providers.iter().all(|p| p.id != "later"));
+}

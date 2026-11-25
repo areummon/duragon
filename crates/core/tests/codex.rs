@@ -3,6 +3,7 @@ use common::fixture;
 use duragon_core::ai::{run_ai, AiError, AiRequest};
 use duragon_core::model::{ProviderConfig, ProviderKind, ThinkingLevel};
 use serde_json::{json, Value};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -61,6 +62,10 @@ async fn each_call_works_in_its_own_empty_private_folder() {
         assert_eq!(recorded(dir.path(), "ls"), "");
         assert_eq!(recorded(dir.path(), "mode"), "700");
         assert!(!cwd.exists(), "{} was left", cwd.display());
+        for above in cwd.ancestors().skip(1) {
+            let mode = std::fs::metadata(above).unwrap().permissions().mode();
+            assert_eq!(mode & 0o002, 0, "other accounts can plant files in {}", above.display());
+        }
         seen.push(cwd);
     }
     assert_ne!(seen[0], seen[1]);
@@ -100,5 +105,18 @@ async fn codex_searches_only_when_the_note_allows_the_web() {
         run_ai(req).await.unwrap();
         let args = recorded(dir.path(), "args");
         assert_eq!(args.lines().filter(|a| a.starts_with("web_search")).collect::<Vec<_>>(), [mode]);
+    }
+}
+
+/// Its sandbox stops writing, and a note can talk it into reading.
+#[tokio::test]
+async fn codex_is_given_nothing_that_reads_files_and_no_servers_of_the_writers() {
+    let dir = tempfile::tempdir().unwrap();
+    run_ai(request(dir.path())).await.unwrap();
+    let args = recorded(dir.path(), "args");
+    let args: Vec<&str> = args.lines().collect();
+    assert!(args.contains(&"--ignore-user-config"), "{args:?}");
+    for tool in ["shell_tool", "unified_exec", "view_image"] {
+        assert!(args.windows(2).any(|w| w == ["--disable", tool]), "{tool}: {args:?}");
     }
 }
