@@ -14,6 +14,7 @@
   import type { DeleteMode, Folder, NoteMeta } from '../api/types';
   import { app, deleteNote, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
   import { createFolder, deleteFolder, folderWithin, moveFolder, notes, renameFolder } from '../state/notes.svelte';
+  import { layout } from '../state/layout.svelte';
   import { settings } from '../state/settings.svelte';
   import { closeOnEscape } from '../escape';
   import { focusLost } from '../focus';
@@ -140,9 +141,41 @@
     drag !== null || noteMenu !== null || folderMenu !== null || settingsOpen || editing !== null ||
     app.paletteOpen || app.customizeOpen || app.trashOpen || app.mindEditor !== null;
 
+  // Beside the edge, resting on the empty page opens a peek too. Nothing lies over the page there, so its threads and
+  // words keep the pointer. Once it has opened or been closed, the pointer has to leave and come back.
+  const NEAR = 32;
+  const REST_MS = 120;
+  let rest: number | undefined;
+  let armed = true;
+
+  function leaveEdge() {
+    clearTimeout(rest);
+    rest = undefined;
+  }
+
+  /** A press there is meant for the page. */
+  function pressEdge(e: PointerEvent) {
+    leaveEdge();
+    if (e.clientX < NEAR) armed = false;
+  }
+
+  function nearEdge(e: PointerEvent) {
+    if (e.clientX >= NEAR) armed = true;
+    else if (app.sidebar !== 'closed') armed = false;
+    const empty = e.target instanceof Element && e.target.matches('.stage, body, html');
+    if (!armed || e.clientX >= NEAR || !empty || e.buttons || e.pointerType === 'touch' || layout.vw < 768) return leaveEdge();
+    rest ??= window.setTimeout(() => {
+      leaveEdge();
+      armed = false;
+      peekSidebar();
+    }, REST_MS);
+  }
+
   // Leaving towards the window's left edge keeps a peek open, as does any menu or dialog in use.
   function leave(e: MouseEvent) {
-    if (e.clientX > 40 && !busy()) unpeekSidebar();
+    if (e.clientX <= 40 || busy()) return;
+    armed = true;
+    unpeekSidebar();
   }
 
   const focusInput = (node: HTMLInputElement) => {
@@ -151,7 +184,7 @@
   };
 </script>
 
-<svelte:window onpointermove={track} onpointerup={drop} onkeydowncapture={cancel} />
+<svelte:window onpointermove={(e) => { track(e); nearEdge(e); }} onpointerdown={pressEdge} onpointerout={(e) => { if (!e.relatedTarget) leaveEdge(); }} onpointerup={drop} onkeydowncapture={cancel} />
 
 <div class="edge" aria-hidden="true" onmouseenter={peekSidebar}></div>
 {#if app.sidebarOpen}
