@@ -1185,12 +1185,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "duragon-core",
- "duragon-voice",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
+ "tokio",
  "trash",
 ]
 

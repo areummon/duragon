@@ -17,22 +17,26 @@ fn s<T>(r: anyhow::Result<T>) -> Res<T> {
 
 #[tauri::command]
 pub async fn list_notes(state: State<'_, AppState>) -> Res<Vec<NoteMeta>> {
-    s(state.db.list_notes())
+    let db = state.db.clone();
+    blocking(move || db.list_notes()).await
 }
 
 #[tauri::command]
 pub async fn search_notes(state: State<'_, AppState>, query: String) -> Res<Vec<NoteMeta>> {
-    s(state.db.search_notes(&query))
+    let db = state.db.clone();
+    blocking(move || db.search_notes(&query)).await
 }
 
 #[tauri::command]
 pub async fn get_note(state: State<'_, AppState>, id: String) -> Res<Note> {
-    s(state.db.get_note(&id))
+    let db = state.db.clone();
+    blocking(move || db.get_note(&id)).await
 }
 
 #[tauri::command]
 pub async fn create_note(state: State<'_, AppState>, title: Option<String>) -> Res<Note> {
-    s(state.db.create_note(title.as_deref()))
+    let db = state.db.clone();
+    blocking(move || db.create_note(title.as_deref())).await
 }
 
 #[tauri::command]
@@ -40,10 +44,11 @@ pub async fn save_note(
     state: State<'_, AppState>,
     id: String,
     title: String,
-    doc: serde_json::Value,
+    doc: Box<serde_json::value::RawValue>,
     plain: String,
 ) -> Res<NoteMeta> {
-    s(state.db.save_note(&id, &title, &doc, &plain))
+    let db = state.db.clone();
+    blocking(move || db.save_note_raw(&id, &title, doc.get(), &plain)).await
 }
 
 #[tauri::command]
@@ -278,15 +283,20 @@ pub fn ai_cancel_read(note_id: String) {
 
 #[tauri::command]
 pub async fn export_note(state: State<'_, AppState>, id: String, format: ExportFormat, path: String) -> Res<()> {
-    let note = s(state.db.get_note(&id))?;
-    match format {
-        ExportFormat::Md => std::fs::write(&path, to_markdown(&note.doc)).map_err(|e| e.to_string()),
-        ExportFormat::Docx => s(to_docx(&note.doc, std::path::Path::new(&path))),
-    }
+    let db = state.db.clone();
+    blocking(move || {
+        let note = db.get_note(&id)?;
+        match format {
+            ExportFormat::Md => std::fs::write(&path, to_markdown(&note.doc))?,
+            ExportFormat::Docx => to_docx(&note.doc, std::path::Path::new(&path))?,
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn voice_status(state: State<'_, AppState>) -> Res<duragon_voice::VoiceStatus> {
+pub async fn voice_status(state: State<'_, AppState>) -> Res<crate::voice_client::VoiceStatus> {
     Ok(state.voice.status())
 }
 
@@ -296,42 +306,34 @@ pub async fn voice_install(state: State<'_, AppState>) -> Res<()> {
 }
 
 #[tauri::command]
-pub async fn list_voices(state: State<'_, AppState>) -> Res<Vec<duragon_voice::VoiceOption>> {
+pub async fn list_voices(state: State<'_, AppState>) -> Res<Vec<crate::voice_client::VoiceOption>> {
     Ok(state.voice.voices())
 }
 
-/// Model loading, transcription and the trash's files block, so they run off the async runtime.
+/// Blocking SQLite, export, and trash I/O runs off the async runtime.
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> anyhow::Result<T> + Send + 'static) -> Res<T> {
     s(tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?)
 }
 
 #[tauri::command]
 pub async fn listen_start(state: State<'_, AppState>, hands_free: bool) -> Res<()> {
-    let voice = state.voice.clone();
-    blocking(move || voice.listen_start(hands_free)).await
+    s(state.voice.listen_start(hands_free).await)
 }
 
 #[tauri::command]
 pub async fn listen_stop(state: State<'_, AppState>) -> Res<String> {
-    let voice = state.voice.clone();
-    blocking(move || voice.listen_stop()).await
+    s(state.voice.listen_stop().await)
 }
 
 #[tauri::command]
 pub async fn speak(state: State<'_, AppState>, message_id: Option<String>, text: String) -> Res<()> {
     let settings = s(state.db.get_settings())?;
-    let voice = state.voice.clone();
-    blocking(move || voice.speak(message_id, &text, &settings.voice_name, settings.speaking_speed as f32)).await
+    s(state.voice.speak(message_id, &text, &settings.voice_name, settings.speaking_speed as f32).await)
 }
 
 #[tauri::command]
 pub async fn stop_speaking(state: State<'_, AppState>) -> Res<()> {
-    let voice = state.voice.clone();
-    blocking(move || {
-        voice.stop_speaking();
-        Ok(())
-    })
-    .await
+    s(state.voice.stop_speaking().await)
 }
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {

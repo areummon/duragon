@@ -26,6 +26,20 @@ pub use tts::VoiceOption;
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
 
 const MAX_HOLD_SECONDS: usize = 300;
+const IDLE_UNLOAD: Duration = Duration::from_secs(180);
+
+/// Ask glibc to return freed ONNX / model arenas to the OS on Linux.
+pub fn trim_heap() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    {
+        extern "C" {
+            fn malloc_trim(pad: usize) -> std::ffi::c_int;
+        }
+        unsafe {
+            malloc_trim(0);
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -62,13 +76,18 @@ struct Inner {
     speak: Option<Speak>,
 }
 
+struct Cached<T> {
+    model: Arc<T>,
+    last_used: Instant,
+}
+
 #[derive(Clone)]
 pub struct Voice {
     models: PathBuf,
     emit: Emit,
     inner: Arc<Mutex<Inner>>,
-    stt: Arc<Mutex<Option<Arc<Stt>>>>,
-    tts: Arc<Mutex<Option<Arc<Tts>>>>,
+    stt: Arc<Mutex<Option<Cached<Stt>>>>,
+    tts: Arc<Mutex<Option<Cached<Tts>>>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -208,28 +227,71 @@ impl Voice {
 
     fn stt_model(&self) -> Result<Arc<Stt>> {
         let mut cell = lock(&self.stt);
-        if let Some(s) = cell.as_ref() {
-            return Ok(s.clone());
+        if let Some(c) = cell.as_mut() {
+            c.last_used = Instant::now();
+            return Ok(c.model.clone());
         }
         if !models::is_ready(&self.models, Kind::Stt) {
             bail!("The speech recognition model is not installed yet.");
         }
         let s = Arc::new(Stt::load(&self.models)?);
-        *cell = Some(s.clone());
+        *cell = Some(Cached { model: s.clone(), last_used: Instant::now() });
         Ok(s)
     }
 
     fn tts_model(&self) -> Result<Arc<Tts>> {
         let mut cell = lock(&self.tts);
-        if let Some(t) = cell.as_ref() {
-            return Ok(t.clone());
+        if let Some(c) = cell.as_mut() {
+            c.last_used = Instant::now();
+            return Ok(c.model.clone());
         }
         if !models::is_ready(&self.models, Kind::Tts) {
             bail!("The voice model is not installed yet.");
         }
         let t = Arc::new(Tts::load(&self.models)?);
-        *cell = Some(t.clone());
+        *cell = Some(Cached { model: t.clone(), last_used: Instant::now() });
         Ok(t)
+    }
+
+    /// Drops cached ONNX models that have been idle longer than `max_idle`, freeing RAM.
+    pub fn unload_idle(&self, max_idle: Duration) -> bool {
+        let active = {
+            let g = lock(&self.inner);
+            (g.listen.is_some(), g.speak.is_some())
+        };
+        let mut dropped = false;
+        if !active.0 {
+            let mut cell = lock(&self.stt);
+            if cell.as_ref().is_some_and(|c| c.last_used.elapsed() >= max_idle) {
+                *cell = None;
+                dropped = true;
+            }
+        }
+        if !active.1 {
+            let mut cell = lock(&self.tts);
+            if cell.as_ref().is_some_and(|c| c.last_used.elapsed() >= max_idle) {
+                *cell = None;
+                dropped = true;
+            }
+        }
+        if dropped {
+            trim_heap();
+        }
+        dropped
+    }
+
+    /// True while downloading, listening, or speaking.
+    pub fn is_busy(&self) -> bool {
+        let g = lock(&self.inner);
+        g.listen.is_some()
+            || g.speak.is_some()
+            || g.status.stt == ModelState::Downloading
+            || g.status.tts == ModelState::Downloading
+    }
+
+    /// Unloads idle models after the default timeout.
+    pub fn unload_if_idle(&self) -> bool {
+        self.unload_idle(IDLE_UNLOAD)
     }
 
     /// Transcribes 16 kHz mono samples.

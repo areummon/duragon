@@ -6,6 +6,10 @@ edition = "2021"
 [lib]
 name = "duragon_voice"
 
+[[bin]]
+name = "duragon-voice"
+path = "src/bin/duragon-voice.rs"
+
 [dependencies]
 anyhow = "1"
 bzip2 = "0.5"

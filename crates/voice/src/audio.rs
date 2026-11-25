@@ -27,23 +27,28 @@ impl Resampler {
 
     pub fn push(&mut self, input: &[f32], out: &mut Vec<f32>) {
         for &x in input {
-            let mut remaining = 1.0;
-            loop {
-                let need = self.ratio - self.filled;
-                if remaining >= need {
-                    self.acc += x as f64 * need;
-                    out.push((self.acc / self.ratio) as f32);
-                    remaining -= need;
-                    self.acc = 0.0;
-                    self.filled = 0.0;
-                    if remaining <= 1e-9 {
-                        break;
-                    }
-                } else {
-                    self.acc += x as f64 * remaining;
-                    self.filled += remaining;
+            self.push_sample(x, out);
+        }
+    }
+
+    #[inline]
+    pub fn push_sample(&mut self, x: f32, out: &mut Vec<f32>) {
+        let mut remaining = 1.0;
+        loop {
+            let need = self.ratio - self.filled;
+            if remaining >= need {
+                self.acc += x as f64 * need;
+                out.push((self.acc / self.ratio) as f32);
+                remaining -= need;
+                self.acc = 0.0;
+                self.filled = 0.0;
+                if remaining <= 1e-9 {
                     break;
                 }
+            } else {
+                self.acc += x as f64 * remaining;
+                self.filled += remaining;
+                break;
             }
         }
     }
@@ -127,15 +132,16 @@ where
     f32: FromSample<T>,
 {
     let mut resampler = Resampler::new(rate, STT_RATE);
+    let inv_channels = 1.0 / channels as f32;
     let stream = device.build_input_stream(
         config,
         move |data: &[T], _| {
-            let mono: Vec<f32> = data
-                .chunks(channels)
-                .map(|f| f.iter().map(|s| f32::from_sample(*s)).sum::<f32>() / channels as f32)
-                .collect();
-            let mut out = Vec::with_capacity(mono.len() * STT_RATE as usize / rate as usize + 1);
-            resampler.push(&mono, &mut out);
+            let frames = data.len() / channels;
+            let mut out = Vec::with_capacity(frames * STT_RATE as usize / rate as usize + 1);
+            for frame in data.chunks_exact(channels) {
+                let mono = frame.iter().map(|s| f32::from_sample(*s)).sum::<f32>() * inv_channels;
+                resampler.push_sample(mono, &mut out);
+            }
             if !out.is_empty() {
                 let _ = tx.send(out);
             }

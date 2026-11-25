@@ -2,6 +2,7 @@
 
 mod commands;
 mod system_trash;
+mod voice_client;
 
 use duragon_core::ai::notes_mcp::{self, NotesSearch};
 use duragon_core::ai::{Ai, Events};
@@ -9,11 +10,11 @@ use duragon_core::credentials::CredentialsStore;
 use duragon_core::db::Db;
 use duragon_core::model::Appearance;
 use duragon_core::trash::Trash;
-use duragon_voice::Voice;
 use std::sync::Arc;
 use tauri::window::Color;
 use tauri::Url;
 use tauri::{AppHandle, Emitter, Manager, Theme, WebviewWindowBuilder};
+use voice_client::VoiceClient;
 
 struct TauriEvents(AppHandle);
 
@@ -62,7 +63,7 @@ pub struct AppState {
     pub db: Db,
     pub trash: Trash,
     pub ai: Ai,
-    pub voice: Voice,
+    pub voice: VoiceClient,
     pub credentials: CredentialsStore,
 }
 
@@ -100,12 +101,12 @@ fn main() {
                 Err(e) => eprintln!("duragon: notes search unavailable: {e}"),
             }
             let handle = app.handle().clone();
-            let emit: duragon_voice::Emit = Arc::new(move |name, payload| {
+            let emit: voice_client::Emit = Arc::new(move |name, payload| {
                 if let Err(e) = handle.emit(name, payload) {
                     eprintln!("duragon: could not emit {name}: {e}");
                 }
             });
-            let voice = Voice::new(dir.join("models"), emit);
+            let voice = VoiceClient::new(dir.join("models"), emit);
             let trash = Trash::new(db.clone(), dir.join(".trash"), Arc::new(system_trash::OsTrash));
             app.manage(AppState { db, trash, ai, voice, credentials });
             Ok(())
