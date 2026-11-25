@@ -14,8 +14,7 @@
   --bulb: #d99a1e;
   --riddle-line: #1d1c1a52;
   --lift: 0 0 0 1px #1d1c1a12, 0 1px 1px #1d1c1a0a, 0 6px 16px -8px #1d1c1a29;
-  --grain-opacity: 0.16;
-  --texture-blend: multiply;
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 
   --text-gray: #858179;
   --text-brown: #8a5a3b;
@@ -48,8 +47,7 @@
   --bulb: #f2b84b;
   --riddle-line: #e9e7e257;
   --lift: 0 0 0 1px #ffffff12, 0 8px 20px -8px #0009;
-  --grain-opacity: 0.4;
-  --texture-blend: soft-light;
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 
   --text-gray: #9a968e;
   --text-brown: #c4976f;
@@ -90,13 +88,13 @@
 [data-ink='blue'] { --riddle: var(--text-blue); --riddle-ink: var(--text-blue); }
 [data-ink='purple'] { --riddle: var(--text-purple); --riddle-ink: var(--text-purple); }
 
+/* Without a blend mode: WebKitGTK paints a blended page to a surface that some AMD GPUs fill with magenta blocks. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 100;
   pointer-events: none;
-  opacity: var(--grain-opacity);
-  mix-blend-mode: var(--texture-blend);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: 0.042;
+  background-image: var(--grain);
 }
