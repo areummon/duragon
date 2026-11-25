@@ -252,6 +252,26 @@ async fn learn_updates_about_you_and_caps_length() {
 }
 
 #[tokio::test]
+async fn learn_leaves_what_the_writer_wrote_meanwhile() {
+    let mut fx = setup(json!({}), json!({}));
+    let bin = recording_claude(fx._dir.path(), &json!({"changed":true,"aboutYou":"Studies biology."}), "0.5");
+    let called = bin.with_file_name("claude-rec.calls");
+    fx.ai.bin = Some(bin);
+    let writer = async {
+        while !called.exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let mut s = fx.ai.db.get_settings().unwrap();
+        s.about_you = "I teach biology.".into();
+        fx.ai.db.save_settings(&s).unwrap();
+    };
+    let (learned, ()) = tokio::join!(fx.ai.learn("I study biology"), writer);
+    learned.unwrap();
+    assert_eq!(fx.ai.db.get_settings().unwrap().about_you, "I teach biology.");
+    assert!(fx.cap.names().is_empty(), "{:?}", fx.cap.all());
+}
+
+#[tokio::test]
 async fn ask_must_say_something_and_persists_the_question() {
     let fx = setup(json!({"quote":"the mitochondria","message":"What does a mitochondrion do?"}), json!({}));
     let mut s = fx.ai.db.get_settings().unwrap();
