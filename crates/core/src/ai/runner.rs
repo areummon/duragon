@@ -251,6 +251,7 @@ pub async fn run_ai(req: AiRequest) -> Result<Value, AiError> {
         let bin = req
             .bin
             .clone()
+            .or_else(|| std::env::var_os("DURAGON_CLAUDE_BIN").map(PathBuf::from))
             .or_else(|| req.provider.command.as_deref().filter(|s| !s.trim().is_empty()).map(PathBuf::from));
         return run_claude_with_thinking(
             ClaudeRequest {
