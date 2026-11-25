@@ -12,7 +12,7 @@ use super::budget::{fit, Section, Stage};
 use super::local::payload_budget;
 use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
-use super::runner::{cancel, run_ai, AiError, AiRequest, CancelKey};
+use super::runner::{cancel, cancellable, run_ai, AiError, AiRequest, CancelKey};
 use super::spec::TaskSpec;
 use super::svg;
 use crate::credentials::CredentialsStore;
@@ -308,7 +308,7 @@ impl Ai {
         let mut trimmed = false;
         let called = async {
             let mut req = self.request(ctx, task)?;
-            let (payload, cut) = fit(&payload, payload_budget(&req, task.spec().budget).await?);
+            let (payload, cut) = fit(&payload, cancellable(req.cancel.clone(), payload_budget(&req, task.spec().budget)).await?);
             trimmed = cut.contains(&Stage::DistantNote);
             req.payload = payload;
             run_ai(req).await

@@ -2,6 +2,7 @@
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::{Arc, LazyLock, Mutex};
@@ -245,6 +246,21 @@ async fn run_claude_with_thinking(req: ClaudeRequest, thinking: ThinkingLevel) -
     }
 }
 
+/// Runs until it is done, or the note's call for the task is cancelled.
+pub(super) async fn cancellable<T>(key: Option<CancelKey>, call: impl Future<Output = Result<T, AiError>>) -> Result<T, AiError> {
+    let registration = key.map(Registration::new);
+    let cancelled = async {
+        match &registration {
+            Some(r) => r.token.notified().await,
+            None => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        result = call => result,
+        _ = cancelled => Err(AiError::Cancelled),
+    }
+}
+
 /// Runs an AI request against whichever provider is configured, with shared cancellation & timeout handling.
 pub async fn run_ai(req: AiRequest) -> Result<Value, AiError> {
     if req.provider.kind == ProviderKind::ClaudeCli {
@@ -270,13 +286,6 @@ pub async fn run_ai(req: AiRequest) -> Result<Value, AiError> {
         .await;
     }
 
-    let registration = req.cancel.clone().map(Registration::new);
-    let cancelled = async {
-        match &registration {
-            Some(r) => r.token.notified().await,
-            None => std::future::pending().await,
-        }
-    };
     let timeout = req.timeout;
     let provider_name = req.provider.name.clone();
 
@@ -292,11 +301,11 @@ pub async fn run_ai(req: AiRequest) -> Result<Value, AiError> {
         }
     };
 
-    tokio::select! {
-        res = call => res,
-        _ = cancelled => Err(AiError::Cancelled),
-        _ = tokio::time::sleep(timeout) => {
-            fail(format!("{provider_name} timed out after {}s", timeout.as_secs()))
+    let timed = async {
+        match tokio::time::timeout(timeout, call).await {
+            Ok(result) => result,
+            Err(_) => fail(format!("{provider_name} timed out after {}s", timeout.as_secs())),
         }
-    }
+    };
+    cancellable(req.cancel.clone(), timed).await
 }
