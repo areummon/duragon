@@ -453,3 +453,26 @@ fn run_listen(
     drop(seg_tx);
     transcriber.join().unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_voice_that_reached_its_end_is_idle() {
+        let voice = Voice::new(PathBuf::new(), Arc::new(|_, _| {}));
+        let (end, ended) = mpsc::channel::<()>();
+        let join = thread::spawn(move || {
+            let _ = ended.recv();
+        });
+        lock(&voice.inner).speak = Some(Speak { cancel: Arc::default(), join });
+        assert!(voice.is_busy(), "busy while it speaks");
+
+        drop(end);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while voice.is_busy() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!voice.is_busy(), "still busy after it stopped speaking");
+    }
+}
