@@ -1,7 +1,7 @@
 #!/bin/sh
 # A fake ACP agent: `acp-agent.sh <dir>`. Sends each line of <dir>/asks during the prompt, keeps the replies.
 out=$1
-read -r _
+read -r first; echo "$first" > "$1/initialize"
 echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}'
 read -r line
 echo "$line" > "$out/session-new"
