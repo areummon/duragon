@@ -27,7 +27,7 @@ Preconditions:
 
 - Baseline state from `README.md`.
 
-- **Open.** Run `agent-browser press Control+,`, `agent-browser wait '[aria-label="Settings sections"]'` and `agent-browser wait 400`. The navigation `Settings sections`, the button `Close` and the searchbox `Search settings` appear.
+- **Open.** Run `agent-browser press Control+,`, `agent-browser wait '[aria-label="Settings sections"]'` and `agent-browser wait 400`. The navigation `Settings sections`, the button `Close` and the searchbox `Search settings` appear, and `[aria-modal] .scroll` is at its top, the first time too.
 - **Toggle.** Run `agent-browser find role switch click --name "Explain symbols in formulas"`. The switch reports `checked=true` in `agent-browser snapshot -i`.
 - **Stored.** Read `(await b.getSettings()).explainSymbols` with the store eval from `../SKILL.md`. It goes from `false` to `true`.
 - **Appearance.** Choose `Dark`, then `Light`. The whole window fades in 250 ms, with `ui-fade` on `::view-transition-new(root)`. `document.getAnimations()` also lists the browser’s own animation of the group. Choosing what already shows starts no transition.

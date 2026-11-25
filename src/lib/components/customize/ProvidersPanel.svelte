@@ -112,7 +112,7 @@
       </div>
     {/if}
     {#each shown as v (v.provider.id)}
-      <div class="item" transition:unfold={{ duration: 200 }} onintrostart={(e) => follow(e.currentTarget)}>
+      <div class="item" transition:unfold={{ duration: 200 }} onintrostart={(e) => v.provider.id in rows && follow(e.currentTarget)}>
         <div class="inner">
           <ProviderRow view={v} open={!!rows[v.provider.id]} ontoggle={() => (rows[v.provider.id] = !rows[v.provider.id])} onremove={() => remove(v.provider.id)} />
         </div>
