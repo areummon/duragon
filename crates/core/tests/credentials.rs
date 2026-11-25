@@ -51,7 +51,7 @@ fn settings_with(ids: &[&str]) -> Settings {
 
 impl App {
     fn save(&self, settings: &Settings) -> anyhow::Result<()> {
-        save_settings(&self.db, &self.store, settings)
+        save_settings(&self.db, &self.store, settings, |_| true)
     }
 
     fn set(&self, id: &str, key: &str) -> anyhow::Result<String> {

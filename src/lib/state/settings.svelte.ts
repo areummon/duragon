@@ -94,6 +94,9 @@ function inTurn<T>(act: () => Promise<T>): Promise<T> {
 let edits = 0;
 
 /** Whether the change was stored. If not, the writer has been told, and what is stored shows again. */
+/** What the core says when the writer answers no to running a new command. */
+const NOT_ALLOWED = 'The command was not allowed';
+
 export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
   // In place, so only what reads a changed key re-runs; replacing the object re-ran every reader (~45 ms in WebKitGTK).
   Object.assign(settings.value, patch);
@@ -102,13 +105,13 @@ export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
   return inTurn(async () => {
     try {
       await (await getBackend()).saveSettings($state.snapshot(settings.value));
-    } catch {
+    } catch (e) {
       const stored = await storedSettings().catch(() => null);
       // A newer change is saved next, and this one with it.
       if (edit !== edits) return false;
       if (stored) Object.assign(settings.value, stored);
       apply();
-      showToast('That change couldn’t be saved.');
+      showToast(reasonOf(e) === NOT_ALLOWED ? 'That command wasn’t allowed.' : 'That change couldn’t be saved.');
       return false;
     }
     if (patch.providers) {

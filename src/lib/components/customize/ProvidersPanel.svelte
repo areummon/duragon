@@ -55,10 +55,13 @@
     addButton?.focus({ preventScroll: true });
   }
 
-  function added(provider: ProviderConfig) {
+  async function added(provider: ProviderConfig) {
     creating = false;
-    void updateSettings({ providers: [...settings.value.providers, provider] });
+    const saved = updateSettings({ providers: [...settings.value.providers, provider] });
     void openRow(provider.id);
+    if (await saved) return;
+    delete rows[provider.id];
+    addButton?.focus({ preventScroll: true });
   }
 
   async function remove(id: string) {

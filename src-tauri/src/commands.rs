@@ -3,7 +3,8 @@ use duragon_core::ai::local;
 use duragon_core::credentials;
 use duragon_core::export::{to_docx, to_markdown};
 use duragon_core::model::*;
-use tauri::State;
+use tauri::{State, WebviewWindow};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::AppState;
 
@@ -149,8 +150,25 @@ pub async fn get_settings(state: State<'_, AppState>) -> Res<Settings> {
 }
 
 #[tauri::command]
-pub async fn save_settings(state: State<'_, AppState>, settings: Settings) -> Res<()> {
-    s(credentials::save_settings(&state.db, &state.credentials, &settings))
+pub async fn save_settings(window: WebviewWindow, state: State<'_, AppState>, settings: Settings) -> Res<()> {
+    let (db, credentials) = (state.db.clone(), state.credentials.clone());
+    blocking(move || credentials::save_settings(&db, &credentials, &settings, |programs| may_run(&window, programs))).await
+}
+
+/// Asks in a window the page can't reach.
+fn may_run(window: &WebviewWindow, programs: &[String]) -> bool {
+    let message = format!(
+        "Duragon will run this on your computer when a job uses it:\n\n{}\n\nAllow it only if you just set it up yourself.",
+        programs.join("\n")
+    );
+    window
+        .dialog()
+        .message(message)
+        .title("Run this command?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom("Allow".into(), "Don’t allow".into()))
+        .parent(window)
+        .blocking_show()
 }
 
 #[tauri::command]
