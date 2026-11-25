@@ -29,7 +29,7 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 | --- | --- | --- |
 | [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear, pin | 2026-11-24, 4806311, all |
 | [margin-threads.md](margin-threads.md) | Margin questions, replies, pin and the thread options | 2026-11-24, e9b2a76, all |
-| [customize.md](customize.md) | Customize dialog, its switches, models, providers and the mind editor | 2026-11-24, 4806311, all (delete and its setting at 62d32b8, models and providers at e0474cd) |
+| [customize.md](customize.md) | Customize dialog, its switches, models, providers and the mind editor | 2026-11-24, 4806311, all (delete and its setting at 62d32b8, models and providers at e0474cd, local servers at 57583b4) |
 | [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, move, delete, folders | 2026-11-24, 4806311, all (delete and its setting at 62d32b8) |
 | [editor.md](editor.md) | Selection toolbar, Visualize, inline answers, last line, slash commands, code, math | 2026-11-24, e9b2a76, all |
 | [keys.md](keys.md) | Command palette, shortcuts, Escape layers, Tab | 2026-11-24, 4806311, all but Markdown export (needs Tauri), Trash layers at 62d32b8 |

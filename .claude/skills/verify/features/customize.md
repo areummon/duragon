@@ -41,6 +41,7 @@ Preconditions:
 - **Own provider.** Choose `Add`, then `Something else…`. Fill `Name` and `Address` and press Enter. Give a job one of its models, then choose `Remove provider` in its row. The row goes, the next row has focus, and the job is on `claude-cli` with a Claude model.
 - **Setting that won't save.** Stub `b.saveSettings = async () => { throw "disk full"; }` and toggle a switch. It goes back, and a toast says `That change couldn’t be saved.` A provider that can't be removed says so in its row instead, with no toast.
 - **Keys that can't be read.** Make `b.listCredentialStatuses` return `error` on each API provider, and change a provider's address. The reason stands under `Providers`, and those rows say `Key can’t be read`.
+- **Local servers.** Open Customize. The mock's Ollama answers, so its row reads `Ollama 2 models` and the picker offers `qwen3:8b`. Choose `Add`, then `llama.cpp` under `On this computer`. Its row reads `Can’t be reached`, and an alert under `Address` says `Nothing answers at http://localhost:8080/v1.` Change Ollama's `Address`, and its row reads the same until it is changed back. `Check` asks again.
 - **Search cleared.** Open Customize, type in `Search settings`, close it, and open it again. The searchbox is empty.
 - **Proof.** Take screenshots before and after the toggle, and an `.aria.txt` of the dialog.
 
@@ -51,5 +52,5 @@ Preconditions:
 - `About you` is also the name of a textbox on that page. Use `role button` to reach the page.
 - While the mind editor sits over Customize, two `Close` buttons exist.
 - The dialog has one scroller, `.jobs`' closest `.scroll`. A bare `.scroll` is the side chat's.
-- The model list holds only ready providers and the current one, so save a key first to see an API provider in it. Every command line provider counts as ready, because nothing checks that its command exists.
+- The model list holds only ready providers and the current one, so save a key first to see an API provider in it. Every command line provider counts as ready, because nothing checks that its command exists. A local server counts as ready while it answers.
 - Settings in the mock reset on reload.
