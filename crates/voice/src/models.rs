@@ -2,9 +2,9 @@
 use anyhow::{anyhow, bail, Context, Result};
 use futures_util::StreamExt;
 use std::fs;
+use serde::Deserialize;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-
 
 pub struct Asset {
     pub url: &'static str,
@@ -22,42 +22,46 @@ pub const VAD_FILE: &str = "silero_vad.onnx";
 pub const STT_DIR: &str = "parakeet-tdt-0.6b-v2-int8";
 pub const TTS_DIR: &str = "kokoro-int8-multi-lang-v1_0";
 
-static STT_ASSETS: [Asset; 2] = [
-    Asset {
-        url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
-        bytes: 650_000,
-        target: VAD_FILE,
-        archive_top: None,
-        required: &[],
-    },
-    Asset {
-        url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2",
-        bytes: 482_000_000,
-        target: STT_DIR,
-        archive_top: Some("sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"),
-        required: &["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"],
-    },
-];
+static VAD: Asset = Asset {
+    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+    bytes: 650_000,
+    target: VAD_FILE,
+    archive_top: None,
+    required: &[],
+};
 
-static TTS_ASSETS: [Asset; 1] = [Asset {
+static STT: Asset = Asset {
+    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2",
+    bytes: 482_000_000,
+    target: STT_DIR,
+    archive_top: Some("sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"),
+    required: &["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"],
+};
+
+static TTS: Asset = Asset {
     url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2",
     bytes: 132_000_000,
     target: TTS_DIR,
     archive_top: Some("kokoro-int8-multi-lang-v1_0"),
     required: &["model.int8.onnx", "voices.bin", "tokens.txt", "lexicon-us-en.txt", "lexicon-gb-en.txt", "espeak-ng-data"],
-}];
+};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Kind {
     Stt,
+    Vad,
     Tts,
 }
 
 impl Kind {
-    pub fn assets(self) -> &'static [Asset] {
+    pub const ALL: [Kind; 3] = [Kind::Stt, Kind::Vad, Kind::Tts];
+
+    pub fn asset(self) -> &'static Asset {
         match self {
-            Kind::Stt => &STT_ASSETS,
-            Kind::Tts => &TTS_ASSETS,
+            Kind::Stt => &STT,
+            Kind::Vad => &VAD,
+            Kind::Tts => &TTS,
         }
     }
 }
@@ -77,7 +81,7 @@ impl Asset {
 }
 
 pub fn is_ready(models: &Path, kind: Kind) -> bool {
-    kind.assets().iter().all(|a| a.is_ready(models))
+    kind.asset().is_ready(models)
 }
 
 pub fn stt_dir(models: &Path) -> PathBuf {

@@ -52,9 +52,25 @@ fn status_reports_missing_without_models() {
     let dir = tempfile::tempdir().unwrap();
     let emit: Emit = Arc::new(|_, _| {});
     let s = Voice::new(dir.path().join("models"), emit).status();
-    assert_eq!((s.stt, s.tts, s.listening), (ModelState::Missing, ModelState::Missing, false));
+    assert_eq!((s.stt, s.vad, s.tts, s.listening), (ModelState::Missing, ModelState::Missing, ModelState::Missing, false));
     let json = serde_json::to_value(&s).unwrap();
-    assert_eq!(json["stt"], "missing");
+    assert_eq!(json["vad"], "missing");
+}
+
+#[test]
+fn an_earlier_install_of_parakeet_and_its_vad_reads_as_two_ready_models() {
+    let dir = tempfile::tempdir().unwrap();
+    let m = dir.path();
+    std::fs::write(m.join(models::VAD_FILE), b"onnx").unwrap();
+    let voice = Voice::new(m.to_path_buf(), Arc::new(|_, _| {}));
+    let s = voice.status();
+    assert_eq!((s.stt, s.vad, s.tts), (ModelState::Missing, ModelState::Ready, ModelState::Missing));
+    std::fs::create_dir(m.join(models::STT_DIR)).unwrap();
+    for f in ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"] {
+        std::fs::write(m.join(models::STT_DIR).join(f), b"x").unwrap();
+    }
+    let s = voice.status();
+    assert_eq!((s.stt, s.vad, s.tts), (ModelState::Ready, ModelState::Ready, ModelState::Missing));
 }
 
 /// Serves `body`, honouring `Range: bytes=N-`, then closes. Returns the base URL.
@@ -114,4 +130,16 @@ async fn failed_download_is_an_error_and_leaves_no_final_file() {
         .unwrap_err();
     assert!(err.to_string().contains("404"), "{err}");
     assert!(!A.path(dir.path()).exists());
+}
+
+#[test]
+fn listen_models_read_as_the_app_sends_them() {
+    use duragon_voice::stt::ListenModel;
+    let spec = serde_json::json!({ "engine": "whisper", "bin": "/bin/whisper-cli", "model": "/m/ggml-base.en.bin", "language": "en" });
+    match serde_json::from_value::<ListenModel>(spec).unwrap() {
+        ListenModel::Whisper(w) => assert_eq!((w.bin.to_str(), w.language.as_str()), (Some("/bin/whisper-cli"), "en")),
+        other => panic!("read as {other:?}"),
+    }
+    let parakeet = serde_json::from_value::<ListenModel>(serde_json::json!({ "engine": "parakeet" })).unwrap();
+    assert!(matches!(parakeet, ListenModel::Parakeet));
 }

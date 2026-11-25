@@ -1,13 +1,17 @@
 //! Parakeet TDT 0.6B v2 (int8) and Silero VAD through sherpa-onnx, on CPU.
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Context, Result};
+use serde::Deserialize;
 use sherpa_onnx::{
     OfflineRecognizer, OfflineRecognizerConfig, OfflineTransducerModelConfig, SileroVadModelConfig, VadModelConfig,
     VoiceActivityDetector,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use crate::audio::STT_RATE;
-use crate::models;
+use crate::{models, wav};
 
 pub struct Stt {
     recognizer: OfflineRecognizer,
@@ -68,4 +72,65 @@ pub fn new_vad(models_dir: &Path) -> Result<VoiceActivityDetector> {
         ..Default::default()
     };
     VoiceActivityDetector::create(&config, 60.0).ok_or_else(|| anyhow!("could not load the voice activity model"))
+}
+
+/// A whisper.cpp binary and one of its models, both found on this computer.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Whisper {
+    pub bin: PathBuf,
+    pub model: PathBuf,
+    /// `en` for an English-only model, else `auto`.
+    pub language: String,
+}
+
+/// Which model turns speech into text, as the app asks for it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "engine", rename_all = "lowercase")]
+pub enum ListenModel {
+    Parakeet,
+    Whisper(Whisper),
+}
+
+pub enum Recognizer {
+    Parakeet(Arc<Stt>),
+    Whisper(Whisper),
+}
+
+impl Recognizer {
+    pub fn transcribe(&self, samples: &[f32]) -> Result<String> {
+        match self {
+            Recognizer::Parakeet(stt) => stt.transcribe(samples),
+            Recognizer::Whisper(w) => w.transcribe(samples),
+        }
+    }
+}
+
+impl Whisper {
+    /// Runs the binary once on a temporary 16 kHz WAV of `samples`.
+    pub fn transcribe(&self, samples: &[f32]) -> Result<String> {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        if samples.len() < STT_RATE as usize / 10 {
+            return Ok(String::new());
+        }
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let wav = std::env::temp_dir().join(format!("duragon-listen-{}-{n}.wav", std::process::id()));
+        wav::write(&wav, samples, STT_RATE)?;
+        let out = Command::new(&self.bin)
+            .arg("-m")
+            .arg(&self.model)
+            .arg("-f")
+            .arg(&wav)
+            .args(["-nt", "-np", "-l", &self.language, "-t", &threads().to_string()])
+            .stdin(Stdio::null())
+            .output();
+        let _ = std::fs::remove_file(&wav);
+        let out = out.with_context(|| format!("running {}", self.bin.display()))?;
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr);
+            bail!("whisper.cpp failed: {}", err.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("no output"));
+        }
+        let text = String::from_utf8_lossy(&out.stdout).split_whitespace().collect::<Vec<_>>().join(" ");
+        // Silence comes back as a tag such as [BLANK_AUDIO].
+        Ok(if text.starts_with('[') && text.ends_with(']') { String::new() } else { text })
+    }
 }

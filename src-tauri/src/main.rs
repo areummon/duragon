@@ -1,6 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod listen_models;
+#[cfg(unix)]
+mod speechd;
 mod system_trash;
 mod voice_client;
 

@@ -301,13 +301,20 @@ pub async fn voice_status(state: State<'_, AppState>) -> Res<crate::voice_client
 }
 
 #[tauri::command]
-pub async fn voice_install(state: State<'_, AppState>) -> Res<()> {
-    s(state.voice.install().await)
+pub async fn voice_install(state: State<'_, AppState>, kind: crate::voice_client::ModelKind) -> Res<()> {
+    s(state.voice.install(kind).await)
 }
 
 #[tauri::command]
-pub async fn list_voices(state: State<'_, AppState>) -> Res<Vec<crate::voice_client::VoiceOption>> {
-    Ok(state.voice.voices())
+pub async fn list_voices(state: State<'_, AppState>, refresh: bool) -> Res<Vec<crate::voice_client::VoiceOption>> {
+    let voice = state.voice.clone();
+    blocking(move || Ok(voice.voices(refresh))).await
+}
+
+#[tauri::command]
+pub async fn list_listen_models(state: State<'_, AppState>) -> Res<Vec<crate::voice_client::VoiceOption>> {
+    let voice = state.voice.clone();
+    blocking(move || Ok(voice.listen_models().iter().map(|m| m.option()).collect())).await
 }
 
 /// Blocking SQLite, export, and trash I/O runs off the async runtime.
@@ -317,7 +324,8 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> anyhow::Result<T> + Sen
 
 #[tauri::command]
 pub async fn listen_start(state: State<'_, AppState>, hands_free: bool) -> Res<()> {
-    s(state.voice.listen_start(hands_free).await)
+    let settings = s(state.db.get_settings())?;
+    s(state.voice.listen_start(hands_free, &settings.listen_model).await)
 }
 
 #[tauri::command]
@@ -325,10 +333,12 @@ pub async fn listen_stop(state: State<'_, AppState>) -> Res<String> {
     s(state.voice.listen_stop().await)
 }
 
+/// Speaks with the chosen voice, or with `voice` when one is given, as for a sample.
 #[tauri::command]
-pub async fn speak(state: State<'_, AppState>, message_id: Option<String>, text: String) -> Res<()> {
+pub async fn speak(state: State<'_, AppState>, message_id: Option<String>, text: String, voice: Option<String>) -> Res<()> {
     let settings = s(state.db.get_settings())?;
-    s(state.voice.speak(message_id, &text, &settings.voice_name, settings.speaking_speed as f32).await)
+    let voice = voice.unwrap_or(settings.voice_name);
+    s(state.voice.speak(message_id, &text, &voice, settings.speaking_speed as f32).await)
 }
 
 #[tauri::command]
@@ -346,6 +356,6 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         get_settings, save_settings, list_credential_statuses, set_provider_key, delete_provider_key, local_models,
         list_riddlers, save_riddler, delete_riddler,
         ai_read, ai_answer, ai_reply, ai_chat, ai_ask, ai_visualize, ai_cancel_read, export_note,
-        voice_status, voice_install, list_voices, listen_start, listen_stop, speak, stop_speaking,
+        voice_status, voice_install, list_voices, list_listen_models, listen_start, listen_stop, speak, stop_speaking,
     ]
 }

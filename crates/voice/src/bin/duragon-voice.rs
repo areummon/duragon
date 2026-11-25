@@ -1,6 +1,8 @@
 //! On-demand voice worker process for Duragon.
 //! Isolates sherpa-onnx / ONNX Runtime / cpal out of the main GUI binary and exits after idle
 //! so all model memory is returned to the OS.
+use duragon_voice::models::Kind;
+use duragon_voice::stt::ListenModel;
 use duragon_voice::{Emit, Voice};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -16,10 +18,13 @@ const IDLE_EXIT: Duration = Duration::from_secs(180);
 enum Cmd {
     Status,
     Voices,
-    Install,
+    Install {
+        kind: Kind,
+    },
     ListenStart {
         #[serde(rename = "handsFree")]
         hands_free: bool,
+        model: ListenModel,
     },
     ListenStop,
     Speak {
@@ -116,9 +121,9 @@ fn main() {
             let res: anyhow::Result<Value> = match req.cmd {
                 Cmd::Status => serde_json::to_value(voice.status()).map_err(Into::into),
                 Cmd::Voices => serde_json::to_value(voice.voices()).map_err(Into::into),
-                Cmd::Install => voice.install().await.map(|()| Value::Null),
-                Cmd::ListenStart { hands_free } => {
-                    tokio::task::spawn_blocking(move || voice.listen_start(hands_free))
+                Cmd::Install { kind } => voice.install(kind).await.map(|()| Value::Null),
+                Cmd::ListenStart { hands_free, model } => {
+                    tokio::task::spawn_blocking(move || voice.listen_start(hands_free, model))
                         .await
                         .map_err(|e| anyhow::anyhow!("{e}"))
                         .and_then(|r| r)

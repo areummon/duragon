@@ -2,7 +2,7 @@
 //! transcribes it back. Never opens the microphone or plays audio.
 //! `cargo test -p duragon-voice --test real_models -- --ignored --nocapture`
 //! Set DURAGON_VOICE_TEST_DIR to keep the models between runs.
-use duragon_voice::{audio::Resampler, wav, Emit, ModelState, Voice};
+use duragon_voice::{audio::Resampler, models::Kind, wav, Emit, ModelState, Voice};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -25,10 +25,12 @@ async fn install_speak_and_transcribe() {
     println!("status before: {before:?}");
 
     let t = Instant::now();
-    voice.install().await.unwrap();
+    for kind in Kind::ALL {
+        voice.install(kind).await.unwrap();
+    }
     println!("install: {:.1}s", t.elapsed().as_secs_f32());
     let after = voice.status();
-    assert_eq!((after.stt, after.tts), (ModelState::Ready, ModelState::Ready));
+    assert_eq!((after.stt, after.vad, after.tts), (ModelState::Ready, ModelState::Ready, ModelState::Ready));
     let sizes: Vec<_> = std::fs::read_dir(&models)
         .unwrap()
         .flatten()

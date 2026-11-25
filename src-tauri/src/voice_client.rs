@@ -1,4 +1,4 @@
-//! Client for the on-demand `duragon-voice` helper process.
+//! Client for the on-demand `duragon-voice` helper process, and the voices and models it can use.
 //! Keeps sherpa-onnx / ONNX Runtime / cpal completely out of the main GUI binary.
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
@@ -8,8 +8,10 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tokio::sync::oneshot;
+
+use crate::listen_models::{self, ListenModel};
 
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
 
@@ -26,20 +28,58 @@ pub enum ModelState {
 #[serde(rename_all = "camelCase")]
 pub struct VoiceStatus {
     pub stt: ModelState,
+    pub vad: ModelState,
     pub tts: ModelState,
     pub progress: f32,
     pub error: Option<String>,
     pub listening: bool,
 }
 
+/// A model Duragon can download: Parakeet, Silero VAD or Kokoro.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelKind {
+    Stt,
+    Vad,
+    Tts,
+}
+
+/// A voice to speak with, or a model to listen with.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VoiceOption {
     pub id: String,
     pub name: String,
     pub description: String,
+    pub engine: String,
+    pub source: String,
+    pub language: Option<String>,
 }
 
-const VOICES: [(&str, &str, &str); 4] = [
+/// A voice, as the `voiceName` setting names it: `kokoro/<voice>` or `speechd/<module>/<name>`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum VoiceId {
+    Kokoro(String),
+    Speechd { module: String, name: String },
+}
+
+impl VoiceId {
+    /// A bare name from before Speech Dispatcher, such as `bm_george`, is a Kokoro voice.
+    pub fn parse(id: &str) -> Self {
+        if let Some((module, name)) = id.strip_prefix("speechd/").and_then(|rest| rest.split_once('/')) {
+            return VoiceId::Speechd { module: module.into(), name: name.into() };
+        }
+        VoiceId::Kokoro(id.strip_prefix("kokoro/").unwrap_or(id).into())
+    }
+
+    pub fn id(&self) -> String {
+        match self {
+            VoiceId::Kokoro(v) => format!("kokoro/{v}"),
+            VoiceId::Speechd { module, name } => format!("speechd/{module}/{name}"),
+        }
+    }
+}
+
+const KOKORO_VOICES: [(&str, &str, &str); 4] = [
     ("bm_george", "George", "Warm, British"),
     ("bf_emma", "Emma", "Clear, British"),
     ("am_michael", "Michael", "Deep, steady"),
@@ -60,17 +100,46 @@ const TTS_REQUIRED: &[&str] = &[
 ];
 
 fn disk_status(models: &Path) -> VoiceStatus {
-    let stt_dir = models.join(STT_DIR);
-    let stt_ready = models.join(VAD_FILE).is_file() && STT_REQUIRED.iter().all(|f| stt_dir.join(f).exists());
-    let tts_dir = models.join(TTS_DIR);
-    let tts_ready = TTS_REQUIRED.iter().all(|f| tts_dir.join(f).exists());
+    let ready = |ok: bool| if ok { ModelState::Ready } else { ModelState::Missing };
+    let all = |dir: &str, files: &[&str]| files.iter().all(|f| models.join(dir).join(f).exists());
     VoiceStatus {
-        stt: if stt_ready { ModelState::Ready } else { ModelState::Missing },
-        tts: if tts_ready { ModelState::Ready } else { ModelState::Missing },
+        stt: ready(all(STT_DIR, STT_REQUIRED)),
+        vad: ready(models.join(VAD_FILE).is_file()),
+        tts: ready(all(TTS_DIR, TTS_REQUIRED)),
         progress: 0.0,
         error: None,
         listening: false,
     }
+}
+
+#[cfg(unix)]
+fn speechd_voices() -> Vec<VoiceOption> {
+    let listed = crate::speechd::connect().and_then(|mut c| c.voices());
+    listed
+        .unwrap_or_else(|e| {
+            eprintln!("duragon: no Speech Dispatcher voices: {e:#}");
+            Vec::new()
+        })
+        .into_iter()
+        .map(|v| VoiceOption {
+            id: VoiceId::Speechd { module: v.module.clone(), name: v.name.clone() }.id(),
+            engine: crate::speechd::engine_name(&v.module).into(),
+            // Pico names its voices in lower case.
+            name: v.name.chars().take(1).flat_map(char::to_uppercase).chain(v.name.chars().skip(1)).collect(),
+            description: String::new(),
+            source: "Speech Dispatcher".into(),
+            language: Some(v.language),
+        })
+        .collect()
+}
+
+#[cfg(not(unix))]
+fn speechd_voices() -> Vec<VoiceOption> {
+    Vec::new()
+}
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 fn find_worker_binary() -> Result<PathBuf> {
@@ -111,6 +180,9 @@ struct Shared {
     next_id: AtomicU64,
     worker: Mutex<Option<Worker>>,
     last_status: Mutex<Option<VoiceStatus>>,
+    speechd_voices: Mutex<Option<Vec<VoiceOption>>>,
+    #[cfg(unix)]
+    speech: Mutex<Option<crate::speechd::Speech>>,
 }
 
 #[derive(Clone)]
@@ -127,6 +199,9 @@ impl VoiceClient {
                 next_id: AtomicU64::new(1),
                 worker: Mutex::new(None),
                 last_status: Mutex::new(None),
+                speechd_voices: Mutex::new(None),
+                #[cfg(unix)]
+                speech: Mutex::new(None),
             }),
         }
     }
@@ -140,13 +215,6 @@ impl VoiceClient {
             }
         }
         disk_status(&self.shared.models)
-    }
-
-    pub fn voices(&self) -> Vec<VoiceOption> {
-        VOICES
-            .iter()
-            .map(|(id, name, d)| VoiceOption { id: (*id).into(), name: (*name).into(), description: (*d).into() })
-            .collect()
     }
 
     fn ensure_worker(&self) -> Result<()> {
@@ -246,13 +314,25 @@ impl VoiceClient {
         false
     }
 
-    pub async fn install(&self) -> Result<()> {
-        self.call(json!({ "cmd": "install" })).await?;
+    pub async fn install(&self, kind: ModelKind) -> Result<()> {
+        self.call(json!({ "cmd": "install", "kind": kind })).await?;
         Ok(())
     }
 
-    pub async fn listen_start(&self, hands_free: bool) -> Result<()> {
-        self.call(json!({ "cmd": "listen_start", "handsFree": hands_free })).await?;
+    /// What this computer can listen with, in the order to fall back in.
+    pub fn listen_models(&self) -> Vec<ListenModel> {
+        listen_models::available(&self.shared.models, disk_status(&self.shared.models).stt == ModelState::Ready)
+    }
+
+    /// Listens with the model `chosen` names, or the first one there is.
+    pub async fn listen_start(&self, hands_free: bool, chosen: &str) -> Result<()> {
+        let models = self.listen_models();
+        let model = models
+            .iter()
+            .find(|m| m.id() == chosen)
+            .or(models.first())
+            .ok_or_else(|| anyhow!("Speech to text needs a model. Get one in Customize → Voice models."))?;
+        self.call(json!({ "cmd": "listen_start", "handsFree": hands_free, "model": model.spec() })).await?;
         Ok(())
     }
 
@@ -264,19 +344,75 @@ impl VoiceClient {
         Ok(v.as_str().unwrap_or_default().to_string())
     }
 
+    /// Kokoro's voices when it is installed, then Speech Dispatcher's, listed once and again on `refresh`.
+    pub fn voices(&self, refresh: bool) -> Vec<VoiceOption> {
+        let mut list: Vec<VoiceOption> = Vec::new();
+        if disk_status(&self.shared.models).tts == ModelState::Ready {
+            list.extend(KOKORO_VOICES.iter().map(|(id, name, d)| VoiceOption {
+                id: VoiceId::Kokoro((*id).into()).id(),
+                name: (*name).into(),
+                description: (*d).into(),
+                engine: "Kokoro".into(),
+                source: "Duragon".into(),
+                language: None,
+            }));
+        }
+        let mut cached = lock(&self.shared.speechd_voices);
+        if refresh || cached.is_none() {
+            *cached = Some(speechd_voices());
+        }
+        list.extend(cached.iter().flatten().cloned());
+        list
+    }
+
+    /// Speaks with `voice`, or the first voice there is when that one is gone.
     pub async fn speak(&self, message_id: Option<String>, text: &str, voice: &str, speed: f32) -> Result<()> {
-        self.call(json!({
-            "cmd": "speak",
-            "messageId": message_id,
-            "text": text,
-            "voice": voice,
-            "speed": speed,
-        }))
+        let voices = tokio::task::spawn_blocking({
+            let me = self.clone();
+            move || me.voices(false)
+        })
         .await?;
+        let wanted = VoiceId::parse(voice).id();
+        let chosen = voices
+            .iter()
+            .find(|v| v.id == wanted)
+            .or(voices.first())
+            .ok_or_else(|| anyhow!("Speaking needs a voice. Get one in Customize → Voice models."))?;
+        self.stop_speaking().await?;
+        match VoiceId::parse(&chosen.id) {
+            VoiceId::Kokoro(name) => {
+                self.call(json!({ "cmd": "speak", "messageId": message_id, "text": text, "voice": name, "speed": speed }))
+                    .await?;
+            }
+            #[cfg(unix)]
+            VoiceId::Speechd { module, name } => {
+                let (me, text) = (self.clone(), text.to_string());
+                let language = chosen.language.clone().unwrap_or_default();
+                tokio::task::spawn_blocking(move || -> Result<()> {
+                    let emit = me.shared.emit.clone();
+                    let voice = crate::speechd::SdVoice { module, name, language };
+                    let on_playing = move |playing: bool| emit("voice:speaking", json!({ "messageId": message_id, "playing": playing }));
+                    let speech = crate::speechd::connect()?.speak(&voice, crate::speechd::rate(speed as f64), None, &text, on_playing)?;
+                    *lock(&me.shared.speech) = Some(speech);
+                    Ok(())
+                })
+                .await??;
+            }
+            #[cfg(not(unix))]
+            VoiceId::Speechd { .. } => bail!("Speech Dispatcher is not available here"),
+        }
         Ok(())
     }
 
+    /// Stops whichever voice is speaking.
     pub async fn stop_speaking(&self) -> Result<()> {
+        #[cfg(unix)]
+        {
+            let speech = lock(&self.shared.speech).take();
+            if let Some(speech) = speech {
+                tokio::task::spawn_blocking(move || speech.stop()).await?;
+            }
+        }
         if !self.is_running() {
             return Ok(());
         }
@@ -312,12 +448,36 @@ done
         std::env::set_var("DURAGON_VOICE_BIN", &bin);
         let voice = VoiceClient::new(dir.clone(), Arc::new(|_, _| {}));
 
-        voice.listen_start(false).await.unwrap();
+        voice.call(json!({ "cmd": "listen_start" })).await.unwrap();
         std::thread::sleep(Duration::from_millis(300));
         assert_eq!(voice.call(json!({ "cmd": "listen_stop" })).await.unwrap(), "run 2");
         std::thread::sleep(Duration::from_millis(1500));
         assert_eq!(voice.listen_stop().await.unwrap(), "run 2");
         assert_eq!(std::fs::read_to_string(dir.join("starts")).unwrap().lines().count(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn voice_ids_name_their_engine_and_old_names_are_kokoro() {
+        assert_eq!(VoiceId::parse("bm_george"), VoiceId::Kokoro("bm_george".into()));
+        assert_eq!(VoiceId::parse("kokoro/bf_emma"), VoiceId::Kokoro("bf_emma".into()));
+        let sd = VoiceId::parse("speechd/espeak-ng/English (America)/x");
+        assert_eq!(sd, VoiceId::Speechd { module: "espeak-ng".into(), name: "English (America)/x".into() });
+        assert_eq!(sd.id(), "speechd/espeak-ng/English (America)/x");
+        assert_eq!(VoiceId::parse("bm_george").id(), "kokoro/bm_george");
+    }
+
+    #[test]
+    fn hands_free_listening_is_its_own_model_on_disk() {
+        let dir = std::env::temp_dir().join(format!("duragon-disk-status-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(STT_DIR)).unwrap();
+        std::fs::write(dir.join(VAD_FILE), b"x").unwrap();
+        let s = disk_status(&dir);
+        assert_eq!((s.stt, s.vad, s.tts), (ModelState::Missing, ModelState::Ready, ModelState::Missing));
+        for f in STT_REQUIRED {
+            std::fs::write(dir.join(STT_DIR).join(f), b"x").unwrap();
+        }
+        assert_eq!(disk_status(&dir).stt, ModelState::Ready);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

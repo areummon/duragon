@@ -1,4 +1,4 @@
-//! Local voice for Duragon: Parakeet speech-to-text, Kokoro text-to-speech, Silero VAD.
+//! Local voice for Duragon: Parakeet or whisper.cpp speech-to-text, Kokoro text-to-speech, Silero VAD.
 //! Self-contained so `duragon-core` and its tests never link the native speech libraries.
 pub mod audio;
 pub mod models;
@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use audio::{Capture, Player};
 use models::Kind;
-use stt::Stt;
+use stt::{ListenModel, Recognizer, Stt};
 use tts::Tts;
 pub use tts::VoiceOption;
 
@@ -54,6 +54,7 @@ pub enum ModelState {
 #[serde(rename_all = "camelCase")]
 pub struct VoiceStatus {
     pub stt: ModelState,
+    pub vad: ModelState,
     pub tts: ModelState,
     pub progress: f32,
     pub error: Option<String>,
@@ -74,6 +75,20 @@ struct Inner {
     status: VoiceStatus,
     listen: Option<Listen>,
     speak: Option<Speak>,
+}
+
+impl VoiceStatus {
+    fn state(&mut self, kind: Kind) -> &mut ModelState {
+        match kind {
+            Kind::Stt => &mut self.stt,
+            Kind::Vad => &mut self.vad,
+            Kind::Tts => &mut self.tts,
+        }
+    }
+
+    fn downloading(&self) -> bool {
+        [self.stt, self.vad, self.tts].contains(&ModelState::Downloading)
+    }
 }
 
 impl Inner {
@@ -110,6 +125,7 @@ impl Voice {
             inner: Arc::new(Mutex::new(Inner {
                 status: VoiceStatus {
                     stt: ModelState::Missing,
+                    vad: ModelState::Missing,
                     tts: ModelState::Missing,
                     progress: 0.0,
                     error: None,
@@ -134,12 +150,9 @@ impl Voice {
     /// Current state, with ready/missing re-read from disk.
     pub fn status(&self) -> VoiceStatus {
         let mut g = lock(&self.inner);
-        for kind in [Kind::Stt, Kind::Tts] {
+        for kind in Kind::ALL {
             let ready = models::is_ready(&self.models, kind);
-            let slot = match kind {
-                Kind::Stt => &mut g.status.stt,
-                Kind::Tts => &mut g.status.tts,
-            };
+            let slot = g.status.state(kind);
             if *slot != ModelState::Downloading {
                 *slot = match (ready, *slot) {
                     (true, _) => ModelState::Ready,
@@ -159,10 +172,7 @@ impl Voice {
     fn set_state(&self, kind: Kind, state: ModelState, progress: Option<f32>, error: Option<String>) {
         {
             let mut g = lock(&self.inner);
-            match kind {
-                Kind::Stt => g.status.stt = state,
-                Kind::Tts => g.status.tts = state,
-            }
+            *g.status.state(kind) = state;
             if let Some(p) = progress {
                 g.status.progress = p;
             }
@@ -171,64 +181,36 @@ impl Voice {
         self.emit_status();
     }
 
-    /// Downloads whatever is missing. Resumable (`.part` files) and atomic (rename on completion).
-    pub async fn install(&self) -> Result<()> {
-        let mut todo: Vec<(Kind, &'static models::Asset)> = Vec::new();
-        for kind in [Kind::Stt, Kind::Tts] {
-            for a in kind.assets() {
-                if !a.is_ready(&self.models) {
-                    todo.push((kind, a));
-                }
-            }
-        }
+    /// Downloads one model, one download at a time. Resumable (`.part` files) and atomic (rename on completion).
+    pub async fn install(&self, kind: Kind) -> Result<()> {
+        let asset = kind.asset();
         {
             let mut g = lock(&self.inner);
-            if g.status.stt == ModelState::Downloading || g.status.tts == ModelState::Downloading {
+            if g.status.downloading() {
                 return Ok(());
             }
             g.status.error = None;
             g.status.progress = 0.0;
-            for (kind, _) in &todo {
-                match kind {
-                    Kind::Stt => g.status.stt = ModelState::Downloading,
-                    Kind::Tts => g.status.tts = ModelState::Downloading,
-                }
-            }
+            *g.status.state(kind) = ModelState::Downloading;
         }
         self.emit_status();
-        let total: u64 = todo.iter().map(|(_, a)| a.bytes).sum::<u64>().max(1);
         let client = reqwest::Client::builder().build()?;
-        let mut done_before = 0u64;
-        for (i, (kind, asset)) in todo.iter().enumerate() {
-            let me = self.clone();
-            let mut last = Instant::now() - Duration::from_secs(1);
-            let base = done_before;
-            let bytes = asset.bytes;
-            let mut on_bytes = move |b: u64| {
-                if last.elapsed() < Duration::from_millis(100) {
-                    return;
-                }
-                last = Instant::now();
-                let p = (base + b.min(bytes)) as f32 / total as f32;
-                lock(&me.inner).status.progress = p;
-                me.emit_status();
-            };
-            if let Err(e) = models::install_asset(&client, asset, &self.models, &mut on_bytes).await {
-                let msg = format!("{e:#}");
-                self.set_state(*kind, ModelState::Error, None, Some(msg.clone()));
-                for (k, _) in &todo[i + 1..] {
-                    self.set_state(*k, ModelState::Missing, None, Some(msg.clone()));
-                }
-                return Err(anyhow!(msg));
+        let me = self.clone();
+        let mut last = Instant::now() - Duration::from_secs(1);
+        let mut on_bytes = move |b: u64| {
+            if last.elapsed() < Duration::from_millis(100) {
+                return;
             }
-            done_before += asset.bytes;
-            let last_of_kind = todo[i + 1..].iter().all(|(k, _)| k != kind);
-            if last_of_kind {
-                self.set_state(*kind, ModelState::Ready, Some(done_before as f32 / total as f32), None);
-            }
+            last = Instant::now();
+            lock(&me.inner).status.progress = b.min(asset.bytes) as f32 / asset.bytes as f32;
+            me.emit_status();
+        };
+        if let Err(e) = models::install_asset(&client, asset, &self.models, &mut on_bytes).await {
+            let msg = format!("{e:#}");
+            self.set_state(kind, ModelState::Error, None, Some(msg.clone()));
+            return Err(anyhow!(msg));
         }
-        lock(&self.inner).status.progress = 1.0;
-        self.emit_status();
+        self.set_state(kind, ModelState::Ready, Some(1.0), None);
         Ok(())
     }
 
@@ -290,10 +272,7 @@ impl Voice {
     /// True while downloading, listening, or speaking.
     pub fn is_busy(&self) -> bool {
         let g = lock(&self.inner);
-        g.listen.is_some()
-            || g.speaking()
-            || g.status.stt == ModelState::Downloading
-            || g.status.tts == ModelState::Downloading
+        g.listen.is_some() || g.speaking() || g.status.downloading()
     }
 
     /// Unloads idle models after the default timeout.
@@ -316,19 +295,25 @@ impl Voice {
         Ok((all, t.sample_rate()))
     }
 
-    /// Starts the microphone. Blocking: loads the speech model on first use.
-    pub fn listen_start(&self, hands_free: bool) -> Result<()> {
+    /// Starts the microphone. Blocking: loads Parakeet on first use.
+    pub fn listen_start(&self, hands_free: bool, model: ListenModel) -> Result<()> {
         if lock(&self.inner).listen.is_some() {
             let _ = self.listen_stop();
         }
-        let stt = self.stt_model()?;
+        if hands_free && !models::is_ready(&self.models, Kind::Vad) {
+            bail!("Hands-free listening needs Silero VAD. Install it in Customize → Voice models.");
+        }
+        let recognizer = match model {
+            ListenModel::Parakeet => Recognizer::Parakeet(self.stt_model()?),
+            ListenModel::Whisper(w) => Recognizer::Whisper(w),
+        };
         let vad = if hands_free { Some(stt::new_vad(&self.models)?) } else { None };
         let (tx, rx) = mpsc::channel();
         let capture = Capture::start(tx)?;
         let emit = self.emit.clone();
         let worker = thread::Builder::new()
             .name("duragon-listen".into())
-            .spawn(move || run_listen(rx, stt, vad, emit))?;
+            .spawn(move || run_listen(rx, recognizer, vad, emit))?;
         {
             let mut g = lock(&self.inner);
             g.listen = Some(Listen { capture, worker });
@@ -400,7 +385,7 @@ impl Voice {
 
 fn run_listen(
     rx: mpsc::Receiver<Vec<f32>>,
-    stt: Arc<Stt>,
+    stt: Recognizer,
     vad: Option<sherpa_onnx::VoiceActivityDetector>,
     emit: Emit,
 ) -> String {
