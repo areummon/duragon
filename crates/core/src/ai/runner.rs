@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
@@ -16,7 +16,10 @@ use super::codex::run_codex;
 use super::http::{run_anthropic, run_gemini, run_openai};
 use super::local::run_local;
 use super::notes_mcp::{NotesTool, TOOL_NAMES};
+use super::quiet::quiet;
+use super::veil::Veil;
 use crate::db::Db;
+use crate::private::WorkDir;
 use crate::model::{AiTask, ProviderConfig, ProviderKind, ThinkingLevel};
 
 #[derive(Debug)]
@@ -164,10 +167,11 @@ fn args(req: &ClaudeRequest, thinking: ThinkingLevel) -> Vec<String> {
 }
 
 /// Retries while the binary is briefly busy (it was just written or is being replaced by an update).
-async fn spawn(bin: &PathBuf, req: &ClaudeRequest, thinking: ThinkingLevel) -> Result<tokio::process::Child, AiError> {
+async fn spawn(bin: &Path, cwd: &Path, req: &ClaudeRequest, thinking: ThinkingLevel) -> Result<tokio::process::Child, AiError> {
     let mut attempts = 0;
     loop {
-        let spawned = Command::new(bin)
+        let spawned = quiet(&mut Command::new(bin), ProviderKind::ClaudeCli)
+            .current_dir(cwd)
             .args(args(req, thinking))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -201,9 +205,13 @@ async fn run_claude_with_thinking(req: ClaudeRequest, thinking: ThinkingLevel) -
         .clone()
         .or_else(|| std::env::var_os("DURAGON_CLAUDE_BIN").map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("claude"));
+    // A path is from where Duragon runs, and Claude runs elsewhere.
+    let bin = if bin.components().count() > 1 { std::path::absolute(&bin).unwrap_or(bin) } else { bin };
     let registration = req.cancel.clone().map(Registration::new);
+    // Claude is told the folder it runs in, and the writer's own would name them.
+    let cwd = WorkDir::new().map_err(|e| AiError::Failed(format!("could not make a folder for Claude: {e}")))?;
 
-    let mut child = spawn(&bin, &req, thinking).await?;
+    let mut child = spawn(&bin, cwd.path(), &req, thinking).await?;
 
     if let Some(mut stdin) = child.stdin.take() {
         let payload = req.payload.clone();
@@ -262,7 +270,16 @@ pub(super) async fn cancellable<T>(key: Option<CancelKey>, call: impl Future<Out
 }
 
 /// Runs an AI request against whichever provider is configured, with shared cancellation & timeout handling.
-pub async fn run_ai(req: AiRequest) -> Result<Value, AiError> {
+/// Emails and keys in what is sent are masked, and whole again in the answer.
+pub async fn run_ai(mut req: AiRequest) -> Result<Value, AiError> {
+    let mut veil = Veil::new(req.api_key.as_deref());
+    req.system_prompt = veil.cover(&req.system_prompt);
+    req.payload = veil.cover(&req.payload);
+    req.system_prompt.push_str(veil.note());
+    run_provider(req).await.map(|answer| veil.uncover(answer))
+}
+
+async fn run_provider(req: AiRequest) -> Result<Value, AiError> {
     if req.provider.kind == ProviderKind::ClaudeCli {
         let bin = req
             .bin

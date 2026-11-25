@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
+use super::veil::mask;
 use crate::db::Db;
 
 /// How to start the server: the executable that serves `--notes-mcp`, and the notes database it reads.
@@ -140,7 +141,7 @@ pub(crate) fn search(db: &Db, exclude: &str, query: &str) -> Result<String, Stri
             h.snippet.split_whitespace().collect::<Vec<_>>().join(" ")
         ));
     }
-    Ok(out)
+    Ok(mask(&out))
 }
 
 pub(crate) fn read(db: &Db, exclude: &str, id: &str) -> Result<String, String> {
@@ -150,9 +151,10 @@ pub(crate) fn read(db: &Db, exclude: &str, id: &str) -> Result<String, String> {
     let Some((title, plain)) = db.note_text(id).map_err(|e| format!("read failed: {e}"))? else {
         return Err(format!("No note has the id {id}."));
     };
+    let plain = mask(&plain);
     let mut text: String = plain.chars().take(READ_MAX_CHARS).collect();
     if text.len() < plain.len() {
         text.push_str("\n\n[truncated: the note continues]");
     }
-    Ok(format!("Title: {}\n\n{text}", untitled(&title)))
+    Ok(format!("Title: {}\n\n{text}", mask(untitled(&title))))
 }

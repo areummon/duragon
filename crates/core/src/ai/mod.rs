@@ -7,11 +7,13 @@ pub mod http;
 pub mod local;
 pub mod notes_mcp;
 pub mod prompts;
+mod quiet;
 pub mod runner;
 pub mod schema_util;
 pub mod spec;
 pub mod svg;
 pub mod tasks;
+mod veil;
 
 pub use runner::{cancel, run_ai, run_claude, AiError, AiRequest, CancelKey, ClaudeRequest};
 pub use tasks::{Ai, Events};

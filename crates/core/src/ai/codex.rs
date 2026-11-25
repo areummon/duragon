@@ -5,6 +5,7 @@ use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
+use super::quiet::{quiet, CODEX_OFF};
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, strict_schema};
 use crate::model::ThinkingLevel;
@@ -52,6 +53,7 @@ pub async fn run_codex(req: &AiRequest) -> Result<Value, AiError> {
     ];
     args.extend(FILE_READERS.iter().flat_map(|tool| ["--disable".into(), tool.to_string()]));
     args.extend(OTHER_TOOLS.iter().flat_map(|tool| ["-c".into(), format!("features.{tool}=false")]));
+    args.extend(CODEX_OFF.iter().flat_map(|off| ["-c".into(), off.to_string()]));
     let model = req.model.trim();
     if !model.is_empty() && !model.eq_ignore_ascii_case("default") {
         args.push("-m".into());
@@ -66,7 +68,7 @@ pub async fn run_codex(req: &AiRequest) -> Result<Value, AiError> {
     args.extend(["-c".into(), format!("web_search={}", if req.web { "live" } else { "disabled" })]);
     args.push("-".into());
 
-    let mut child = Command::new(command)
+    let mut child = quiet(&mut Command::new(command), req.provider.kind)
         .args(&args)
         .current_dir(cwd.path())
         .stdin(Stdio::piped())

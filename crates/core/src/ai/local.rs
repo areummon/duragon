@@ -15,7 +15,6 @@ use crate::model::{ProviderConfig, ProviderKind, ThinkingLevel};
 /// Never through a proxy, which can't reach this computer and would see the note.
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
-        .user_agent(concat!("duragon/", env!("CARGO_PKG_VERSION")))
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .connect_timeout(Duration::from_secs(3))

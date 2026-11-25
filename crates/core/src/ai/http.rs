@@ -11,7 +11,6 @@ use crate::model::ThinkingLevel;
 
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
-        .user_agent(concat!("duragon/", env!("CARGO_PKG_VERSION")))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("reqwest client")
@@ -153,16 +152,11 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
             body["tools"] = note_tools();
         }
 
-        let mut builder = CLIENT
+        let builder = CLIENT
             .post(&url)
             .bearer_auth(key)
             .timeout(req.timeout)
             .json(&body);
-        if is_openrouter {
-            builder = builder
-                .header("HTTP-Referer", "https://duragon.app")
-                .header("X-Title", "Duragon");
-        }
 
         let resp = builder
             .send()

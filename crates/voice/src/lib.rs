@@ -171,7 +171,7 @@ impl Voice {
         }
         self.emit_status();
         let total: u64 = todo.iter().map(|(_, a)| a.bytes).sum::<u64>().max(1);
-        let client = reqwest::Client::builder().user_agent("duragon-voice").build()?;
+        let client = reqwest::Client::builder().build()?;
         let mut done_before = 0u64;
         for (i, (kind, asset)) in todo.iter().enumerate() {
             let me = self.clone();

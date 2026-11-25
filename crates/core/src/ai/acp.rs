@@ -9,6 +9,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
 use super::all_but::all_but;
+use super::quiet::{quiet, AGY_OFF};
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, json_instruction};
 use crate::model::{ProviderKind, ThinkingLevel};
@@ -42,12 +43,15 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("agy");
-    let args: Vec<String> = if req.provider.args.is_empty() && command == "agy" {
+    let mut args: Vec<String> = if req.provider.args.is_empty() && command == "agy" {
         vec!["acp".into()]
     } else {
         req.provider.args.clone()
     };
 
+    if req.provider.kind == ProviderKind::AgyAcp && !args.iter().any(|a| a == AGY_OFF) {
+        args.push(AGY_OFF.into());
+    }
     let grants = Grants { web: req.web, notes: req.notes.is_some() };
     // Before the child, so it is dropped after it.
     let cwd = WorkDir::new().map_err(|e| AiError::Failed(format!("could not make a folder for {command}: {e}")))?;
@@ -55,7 +59,7 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
         deny_other_tools(cwd.path(), grants).map_err(|e| AiError::Failed(format!("could not limit {command}'s tools: {e}")))?;
     }
 
-    let mut child = Command::new(command)
+    let mut child = quiet(&mut Command::new(command), req.provider.kind)
         .args(&args)
         .current_dir(cwd.path())
         .stdin(Stdio::piped())
@@ -113,7 +117,7 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
             "params": {
                 "protocolVersion": 1,
                 "clientCapabilities": {},
-                "clientInfo": { "name": "duragon", "version": env!("CARGO_PKG_VERSION") }
+                "clientInfo": { "name": "acp-client", "version": "1" }
             }
         }),
     )

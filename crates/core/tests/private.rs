@@ -99,7 +99,7 @@ async fn emails_and_keys_are_masked_on_the_way_out_and_whole_again_on_the_way_ba
         assert!(!body.contains(private), "{private} in {body}");
     }
     assert!(body.contains("@ana or a@b.") && body.contains("https://x.com/@ana."), "{body}");
-    assert_eq!(body.matches("⟦email 1⟧").count(), 4, "{body}");
+    assert_eq!(body.matches("⟦email 1⟧").count(), 3, "{body}");
     assert!(head.to_lowercase().contains("authorization: bearer plainlookingsecret"), "its own provider needs the key");
 }
 
