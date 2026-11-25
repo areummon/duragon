@@ -75,8 +75,8 @@
 <svelte:window onfocus={() => { if (app.trashOpen) void loadTrash(); }} />
 
 {#if app.trashOpen}
-  <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil>
-    <div class="card" bind:this={card} role="dialog" aria-modal="true" aria-labelledby="trash-title" tabindex="-1" use:takeFocus in:pop out:pop={{ duration: 140 }}>
+  <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil|global>
+    <div class="card" bind:this={card} role="dialog" aria-modal="true" aria-labelledby="trash-title" tabindex="-1" use:takeFocus in:pop|global out:pop={{ duration: 140 }}>
       <button class="x" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
       <h2 id="trash-title">Trash</h2>
       <p class="sub">Deleted notes stay here until you restore them or delete them for good.</p>

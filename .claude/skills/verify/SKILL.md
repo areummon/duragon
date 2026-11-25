@@ -62,11 +62,11 @@ Use `agent-browser` with `AGENT_BROWSER_SESSION=duragon-verify`, so this run's b
 
 `find … --name` matches a case-insensitive substring. Add `--exact` when one name contains another, such as `Copy` and `Copy code`, or `Close` and `Close notes`. `find` waits for nothing and has no `focus` action. Use `agent-browser focus <css>`.
 
-**Loaded on first use.** Dialogs, formulas and code colouring are imported the first time they are needed. `__duragon.app` says a dialog is open before the dialog exists, so the first opening after each page load needs a wait before the next step. Later openings don’t.
+**Loaded on first use.** Dialogs, formulas and code colouring are imported the first time they are needed. `__duragon.app` says a dialog is open before the dialog exists, so the first opening after each page load needs a wait before the next step. Later openings don’t. Until the dialog is there, `.loading` covers the page, holds the keys and closes on Escape.
 
 | What | Wait for |
 | --- | --- |
-| Customize | `[aria-label="Settings sections"]`, then `wait 400`, because a click lands elsewhere while its rows still move |
+| Customize | `[aria-label="Settings sections"]` |
 | Command palette | `[aria-label="Find a note, or name a new one"]` |
 | Mind editor | `[aria-modal="true"][aria-label="New Mind"]` (`Edit <name>` when changing one) |
 | Trash | `[aria-labelledby="trash-title"]` |

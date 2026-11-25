@@ -14,8 +14,8 @@
 </script>
 
 {#if thread}
-  <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:veil>
-    <div class="card" role="dialog" aria-modal="true" aria-label="Thread" tabindex="-1" use:takeFocus in:pop out:pop={{ duration: 140 }}>
+  <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} transition:veil|global>
+    <div class="card" role="dialog" aria-modal="true" aria-label="Thread" tabindex="-1" use:takeFocus in:pop|global out:pop={{ duration: 140 }}>
       <button class="close" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
       <blockquote>{thread.quote}</blockquote>
       <Thread {thread} variant="dialog" />

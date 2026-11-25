@@ -102,8 +102,8 @@
 <svelte:window onkeydowncapture={onkeydown} />
 
 {#if app.mindEditor}
-  <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil>
-    <div class="card" role="dialog" aria-modal="true" aria-label={editing ? `Edit ${editing.name}` : 'New Mind'} in:pop out:pop={{ duration: 140 }}>
+  <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil|global>
+    <div class="card" role="dialog" aria-modal="true" aria-label={editing ? `Edit ${editing.name}` : 'New Mind'} in:pop|global out:pop={{ duration: 140 }}>
       <button class="x" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
       <h2><Blot size={14} seed="duragon" />{editing ? `Edit ${editing.name}` : 'New Mind'}</h2>
       <p class="intro">A Mind reads your notes: what it looks for, and how it asks. Give any note the one it needs.</p>

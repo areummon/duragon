@@ -36,8 +36,8 @@
 </script>
 
 {#if app.customizeOpen}
-  <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil>
-    <div class="card" bind:this={card} tabindex="-1" role="dialog" aria-modal="true" aria-label="Customize Duragon" in:pop out:pop={{ duration: 140 }}>
+  <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil|global>
+    <div class="card" bind:this={card} tabindex="-1" role="dialog" aria-modal="true" aria-label="Customize Duragon" in:pop|global out:pop={{ duration: 140 }}>
       <nav aria-label="Settings sections">
         {#each NAV as n (n.id)}
           <button class:active={app.customizePage === n.id} aria-current={app.customizePage === n.id ? 'page' : undefined} onclick={() => (app.customizePage = n.id)}>{n.label}</button>

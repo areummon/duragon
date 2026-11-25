@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount, type Component } from 'svelte';
+  import { onMount } from 'svelte';
   import ChatPanel from './lib/components/ChatPanel.svelte';
+  import LazyDialog from './lib/components/LazyDialog.svelte';
   import Page from './lib/components/Page.svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
   import TopBar from './lib/components/TopBar.svelte';
@@ -10,37 +11,11 @@
   import { closeTop } from './lib/escape';
   import { cycleTab, topDialog } from './lib/focus';
   import { isMod } from './lib/keys';
-  import { lightbox } from './lib/state/layout.svelte';
+  import { enlarge, lightbox } from './lib/state/layout.svelte';
   import { threads } from './lib/state/threads.svelte';
   import {
     app, copyNote, exportNote, initApp, newNote, toggleChat, toggleJustMyWords,
   } from './lib/state/app.svelte';
-
-  let CustomizeDialog = $state.raw<Component | null>(null);
-  let MindDialog = $state.raw<Component | null>(null);
-  let TrashDialog = $state.raw<Component | null>(null);
-  let CommandPalette = $state.raw<Component | null>(null);
-  let DrawingDialog = $state.raw<Component | null>(null);
-  let ThreadDialog = $state.raw<Component | null>(null);
-
-  $effect(() => {
-    if (app.customizeOpen && !CustomizeDialog) void import('./lib/components/customize/CustomizeDialog.svelte').then((m) => (CustomizeDialog = m.default));
-  });
-  $effect(() => {
-    if (app.mindEditor && !MindDialog) void import('./lib/components/customize/MindDialog.svelte').then((m) => (MindDialog = m.default));
-  });
-  $effect(() => {
-    if (app.trashOpen && !TrashDialog) void import('./lib/components/TrashDialog.svelte').then((m) => (TrashDialog = m.default));
-  });
-  $effect(() => {
-    if (app.paletteOpen && !CommandPalette) void import('./lib/components/CommandPalette.svelte').then((m) => (CommandPalette = m.default));
-  });
-  $effect(() => {
-    if (lightbox.svg && !DrawingDialog) void import('./lib/components/DrawingDialog.svelte').then((m) => (DrawingDialog = m.default));
-  });
-  $effect(() => {
-    if (threads.fullId && !ThreadDialog) void import('./lib/components/ThreadDialog.svelte').then((m) => (ThreadDialog = m.default));
-  });
 
   onMount(() => {
     void initApp().then(initVoice);
@@ -88,11 +63,11 @@
     <ListeningPill />
   {/if}
   <ChatPanel />
-  {#if ThreadDialog}<ThreadDialog />{/if}
-  {#if DrawingDialog}<DrawingDialog />{/if}
-  {#if TrashDialog}<TrashDialog />{/if}
-  {#if app.paletteOpen && CommandPalette}<CommandPalette />{/if}
-  {#if CustomizeDialog}<CustomizeDialog />{/if}
-  {#if MindDialog}<MindDialog />{/if}
+  <LazyDialog open={threads.fullId !== null} close={() => (threads.fullId = null)} load={() => import('./lib/components/ThreadDialog.svelte')} />
+  <LazyDialog open={lightbox.svg !== null} close={() => enlarge(null)} load={() => import('./lib/components/DrawingDialog.svelte')} />
+  <LazyDialog open={app.trashOpen} close={() => (app.trashOpen = false)} load={() => import('./lib/components/TrashDialog.svelte')} />
+  <LazyDialog open={app.paletteOpen} close={() => (app.paletteOpen = false)} load={() => import('./lib/components/CommandPalette.svelte')} remount />
+  <LazyDialog open={app.customizeOpen} close={() => (app.customizeOpen = false)} load={() => import('./lib/components/customize/CustomizeDialog.svelte')} />
+  <LazyDialog open={app.mindEditor !== null} close={() => (app.mindEditor = null)} load={() => import('./lib/components/customize/MindDialog.svelte')} />
   <Toast />
 {/if}
