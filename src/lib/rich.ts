@@ -1,8 +1,80 @@
 import type { ElementContent, Root } from 'hast';
-import katex from 'katex';
-import { common, createLowlight } from 'lowlight';
+import type Katex from 'katex';
+import { createLowlight } from 'lowlight';
 
-export const lowlight = createLowlight(common);
+/** Starts empty so notes without code never parse 37 highlight.js grammars; populated on first code block. */
+export const lowlight = createLowlight();
+
+export const COMMON_LANGUAGES = [
+  'arduino', 'bash', 'c', 'cpp', 'csharp', 'css', 'diff', 'go', 'graphql', 'ini', 'java', 'javascript', 'json',
+  'kotlin', 'less', 'lua', 'makefile', 'markdown', 'objectivec', 'perl', 'php', 'php-template', 'plaintext',
+  'python', 'python-repl', 'r', 'ruby', 'rust', 'scss', 'shell', 'sql', 'swift', 'typescript', 'vbnet', 'wasm',
+  'xml', 'yaml',
+] as const;
+
+let lowlightLoaded = false;
+let lowlightLoading: Promise<void> | null = null;
+const lowlightListeners = new Set<() => void>();
+
+export function isLowlightReady(): boolean {
+  return lowlightLoaded;
+}
+
+export function onLowlightReady(fn: () => void): () => void {
+  lowlightListeners.add(fn);
+  return () => lowlightListeners.delete(fn);
+}
+
+export function ensureLowlight(): Promise<void> {
+  if (lowlightLoaded) return Promise.resolve();
+  lowlightLoading ??= import('lowlight').then(({ common }) => {
+    lowlight.register(common);
+    lowlightLoaded = true;
+    for (const fn of lowlightListeners) fn();
+  });
+  return lowlightLoading;
+}
+
+let katexMod: typeof Katex | null = null;
+let katexLoading: Promise<void> | null = null;
+const katexListeners = new Set<() => void>();
+
+export function isKatexReady(): boolean {
+  return katexMod !== null;
+}
+
+export function onKatexReady(fn: () => void): () => void {
+  katexListeners.add(fn);
+  return () => katexListeners.delete(fn);
+}
+
+export function ensureKatex(): Promise<void> {
+  if (katexMod) return Promise.resolve();
+  katexLoading ??= Promise.all([import('katex'), import('katex/dist/katex.min.css')]).then(([m]) => {
+    katexMod = m.default;
+    for (const fn of katexListeners) fn();
+  });
+  return katexLoading;
+}
+
+const MAX_CACHE = 200;
+
+function cacheGet(map: Map<string, string>, key: string): string | undefined {
+  const val = map.get(key);
+  if (val !== undefined) {
+    map.delete(key);
+    map.set(key, val);
+  }
+  return val;
+}
+
+function cacheSet(map: Map<string, string>, key: string, value: string): void {
+  if (map.size >= MAX_CACHE) {
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
+  }
+  map.set(key, value);
+}
 
 export interface MathRange {
   from: number;
@@ -158,11 +230,15 @@ const texCache = new Map<string, string>();
 
 /** KaTeX HTML for a formula. Bad LaTeX renders as its red source instead of throwing. */
 export function renderTex(tex: string, display: boolean): string {
+  if (!katexMod) {
+    void ensureKatex();
+    return `<span class="katex-loading">${escape(tex)}</span>`;
+  }
   const key = (display ? 'D' : 'I') + tex;
-  let html = texCache.get(key);
+  let html = cacheGet(texCache, key);
   if (html === undefined) {
-    html = katex.renderToString(tex, { displayMode: display, throwOnError: false });
-    texCache.set(key, html);
+    html = katexMod.renderToString(tex, { displayMode: display, throwOnError: false });
+    cacheSet(texCache, key, html);
   }
   return html;
 }
@@ -183,6 +259,10 @@ function hastHtml(nodes: ElementContent[]): string {
 
 /** Code as HTML with `hljs-*` token spans; unknown or missing languages are auto-detected. */
 export function highlight(code: string, lang: string): string {
+  if (!lowlightLoaded) {
+    void ensureLowlight();
+    return escape(code);
+  }
   const tree: Root = lang && lowlight.registered(lang) ? lowlight.highlight(lang, code) : lowlight.highlightAuto(code);
   return hastHtml(tree.children as ElementContent[]);
 }
@@ -285,14 +365,18 @@ const markedCache = new Map<string, string>();
  * assistive tech, since the symbols inside become buttons. Falls back to `renderTex` when the marked source fails.
  */
 export function renderTexWithSymbols(tex: string, display: boolean, symbols: string[]): string {
+  if (!katexMod) {
+    void ensureKatex();
+    return `<span class="katex-loading">${escape(tex)}</span>`;
+  }
   const key = JSON.stringify([display, tex, symbols]);
-  let html = markedCache.get(key);
+  let html = cacheGet(markedCache, key);
   if (html === undefined) {
     const marked = markSymbols(tex, symbols);
     try {
       html = marked === tex
         ? renderTex(tex, display)
-        : katex
+        : katexMod
             .renderToString(marked, {
               displayMode: display,
               throwOnError: true,
@@ -304,7 +388,7 @@ export function renderTexWithSymbols(tex: string, display: boolean, symbols: str
     } catch {
       html = renderTex(tex, display);
     }
-    markedCache.set(key, html);
+    cacheSet(markedCache, key, html);
   }
   return html;
 }

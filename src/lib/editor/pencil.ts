@@ -8,7 +8,7 @@ const SAME_LINE = 6;
 const MIN_RECT = 2;
 
 /** Client rects of the text in `range`, merged per visual line, relative to `page`. Widgets are skipped. */
-export function measureLines(view: EditorView, range: Range, page: HTMLElement): PencilLine[] {
+export function measureLines(view: EditorView, range: Range, page: HTMLElement, pageBox?: DOMRect): PencilLine[] {
   const start = view.domAtPos(range.from);
   const end = view.domAtPos(range.to);
   const whole = document.createRange();
@@ -37,7 +37,7 @@ export function measureLines(view: EditorView, range: Range, page: HTMLElement):
       line.bottom = Math.max(line.bottom, r.bottom);
     } else merged.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom });
   }
-  const box = page.getBoundingClientRect();
+  const box = pageBox ?? page.getBoundingClientRect();
   return merged
     .sort((a, b) => a.bottom - b.bottom)
     .map((m) => ({

@@ -176,7 +176,6 @@
   .canvas :global(text) { paint-order: stroke; stroke: var(--paper) !important; stroke-width: 4px !important; stroke-linejoin: round; }
   /* As in Riddled, a sketch fills the column up to 440 px tall; the width cap keeps a short one from growing past 1.3×. */
   .large .canvas :global(svg) { max-height: 440px; max-width: 416px; margin-inline: auto; }
-  .canvas :global(g[data-step]) { will-change: opacity; }
   .player {
     display: flex;
     align-items: flex-start;

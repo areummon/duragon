@@ -1,9 +1,8 @@
 import type { Editor } from '@tiptap/core';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { COPY_ICON, copyFrom } from '../copy';
-import { lowlight } from '../rich';
-
-const LANGUAGES = lowlight.listLanguages().sort();
+import { COMMON_LANGUAGES, ensureLowlight, isLowlightReady, lowlight } from '../rich';
+import { QUIET } from './create';
 
 /** Enter on a last line of ``` ends the block, as a closing fence does in Markdown, and the caret goes on below it. */
 function closeFence(editor: Editor): boolean {
@@ -36,14 +35,39 @@ export const CodeBlock = CodeBlockLowlight.configure({ lowlight, defaultLanguage
       const select = document.createElement('select');
       select.className = 'code-lang';
       select.setAttribute('aria-label', 'Code language');
-      const options: [string, string][] = [['', 'Auto'], ...LANGUAGES.map((l): [string, string] => [l, l])];
-      for (const [value, label] of options) select.add(new Option(label, value));
+      select.add(new Option('Auto', ''));
+      let populated = false;
+      const populate = () => {
+        if (populated) return;
+        populated = true;
+        const current = select.value;
+        const existing = new Set([...select.options].map((o) => o.value));
+        for (const l of COMMON_LANGUAGES) {
+          if (!existing.has(l)) select.add(new Option(l, l));
+        }
+        select.value = current;
+      };
+      select.addEventListener('pointerdown', populate, { once: true });
+      select.addEventListener('focus', populate, { once: true });
       // A fence can name its language by an alias (```js) that the list spells another way; show it as typed.
       const show = (language: string | null) => {
         if (language && ![...select.options].some((o) => o.value === language)) select.add(new Option(language, language), 1);
         select.value = language ?? '';
       };
       show(node.attrs.language as string | null);
+      if (!isLowlightReady()) {
+        void ensureLowlight().then(() => {
+          if (editor.isDestroyed) return;
+          const pos = getPos();
+          if (pos === undefined) return;
+          const cur = editor.state.doc.nodeAt(pos);
+          if (cur?.type.name === 'codeBlock') {
+            editor.view.dispatch(
+              editor.state.tr.setNodeMarkup(pos, undefined, { ...cur.attrs }).setMeta('addToHistory', false).setMeta(QUIET, true),
+            );
+          }
+        });
+      }
       select.addEventListener('change', () => {
         const pos = getPos();
         if (pos === undefined) return;

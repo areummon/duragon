@@ -2,12 +2,18 @@ import { Extension } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { type EditorState, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
-import { findMath, type MathRange, renderTex } from '../rich';
+import { ensureKatex, findMath, isKatexReady, type MathRange, onKatexReady, renderTex } from '../rich';
 
 /** The title names the note in the sidebar as plain text, and code is code; neither renders math. */
 const PLAIN = new Set(['title', 'codeBlock']);
 const OPAQUE = '\uFFFC';
-const mathKey = new PluginKey<DecorationSet>('duragon-math');
+
+interface MathPluginState {
+  deco: DecorationSet;
+  ranges: { from: number; to: number }[];
+}
+
+const mathKey = new PluginKey<MathPluginState>('duragon-math');
 
 /** Math in one textblock, offsets into its content; inline-code text and inline nodes cannot be part of a formula. */
 function blockMath(block: PMNode): MathRange[] {
@@ -46,10 +52,11 @@ function rendered(tex: string, display: boolean, whole: boolean, openLen: number
   };
 }
 
-function decorations(state: EditorState): DecorationSet {
+function decorations(state: EditorState): MathPluginState {
   const { anchor, head } = state.selection;
   const touches = (from: number, to: number) => (anchor >= from && anchor <= to) || (head >= from && head <= to);
   const decos: Decoration[] = [];
+  const ranges: { from: number; to: number }[] = [];
   state.doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
     if (PLAIN.has(node.type.name)) return false;
@@ -57,6 +64,7 @@ function decorations(state: EditorState): DecorationSet {
     for (const m of mathIn(node)) {
       const from = start + m.from;
       const to = start + m.to;
+      ranges.push({ from, to });
       if (touches(from, to)) continue;
       const whole = m.display && m.from === 0 && m.to === node.content.size;
       const openLen = node.textBetween(m.from, m.from + 2) === '$$' || node.textBetween(m.from, m.from + 1) === '\\' ? 2 : 1;
@@ -64,14 +72,22 @@ function decorations(state: EditorState): DecorationSet {
         Decoration.widget(from, rendered(m.tex, m.display, whole, openLen), {
           side: -1,
           ignoreSelection: true,
-          key: `${m.display ? 'D' : 'I'}${whole ? 'W' : ''}${openLen}${m.tex}`,
+          key: `${isKatexReady() ? 'K' : 'L'}${m.display ? 'D' : 'I'}${whole ? 'W' : ''}${openLen}${m.tex}`,
         }),
         Decoration.inline(from, to, { class: 'math-source' }),
       );
     }
     return false;
   });
-  return DecorationSet.create(state.doc, decos);
+  if (ranges.length && !isKatexReady()) void ensureKatex();
+  return { deco: ranges.length ? DecorationSet.create(state.doc, decos) : DecorationSet.empty, ranges };
+}
+
+function anyTouched(ranges: { from: number; to: number }[], anchor: number, head: number): boolean {
+  for (const r of ranges) {
+    if ((anchor >= r.from && anchor <= r.to) || (head >= r.from && head <= r.to)) return true;
+  }
+  return false;
 }
 
 /**
@@ -82,13 +98,28 @@ export const MathPreview = Extension.create({
   name: 'mathPreview',
   addProseMirrorPlugins() {
     return [
-      new Plugin<DecorationSet>({
+      new Plugin<MathPluginState>({
         key: mathKey,
         state: {
           init: (_, state) => decorations(state),
-          apply: (tr, old, _prev, next) => (tr.docChanged || tr.selectionSet ? decorations(next) : old),
+          apply(tr, old, prev, next) {
+            if (tr.getMeta(mathKey)) return decorations(next);
+            if (tr.docChanged) return decorations(next);
+            if (!tr.selectionSet || old.ranges.length === 0) return old;
+            const prevTouched = anyTouched(old.ranges, prev.selection.anchor, prev.selection.head);
+            const nextTouched = anyTouched(old.ranges, next.selection.anchor, next.selection.head);
+            return prevTouched || nextTouched ? decorations(next) : old;
+          },
         },
-        props: { decorations: (state) => mathKey.getState(state) },
+        view(editorView) {
+          const off = onKatexReady(() => {
+            if (!editorView.isDestroyed && mathKey.getState(editorView.state)?.ranges.length) {
+              editorView.dispatch(editorView.state.tr.setMeta(mathKey, true));
+            }
+          });
+          return { destroy: off };
+        },
+        props: { decorations: (state) => mathKey.getState(state)?.deco ?? DecorationSet.empty },
       }),
     ];
   },

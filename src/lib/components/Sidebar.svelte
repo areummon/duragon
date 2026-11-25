@@ -160,10 +160,14 @@
   }
 
   function nearEdge(e: PointerEvent) {
-    if (e.clientX >= NEAR) armed = true;
-    else if (app.sidebar !== 'closed') armed = false;
+    if (e.clientX >= NEAR) {
+      armed = true;
+      return leaveEdge();
+    }
+    if (app.sidebar !== 'closed') armed = false;
+    if (!armed || e.buttons || e.pointerType === 'touch' || layout.vw < 768) return leaveEdge();
     const empty = e.target instanceof Element && e.target.matches('.stage, body, html');
-    if (!armed || e.clientX >= NEAR || !empty || e.buttons || e.pointerType === 'touch' || layout.vw < 768) return leaveEdge();
+    if (!empty) return leaveEdge();
     rest ??= window.setTimeout(() => {
       leaveEdge();
       armed = false;

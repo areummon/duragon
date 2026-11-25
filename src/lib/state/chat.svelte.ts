@@ -16,6 +16,25 @@ export const chat = $state({
 let off: (() => void)[] = [];
 let seq = 0;
 
+const INK_DRY_MS = 3400;
+const INK_WORD_MS = 19;
+const DRAW_MS = 8000;
+
+function markFresh(key: string, ms: number) {
+  chat.fresh[key] = true;
+  window.setTimeout(() => delete chat.fresh[key], ms);
+}
+
+export function unloadChat() {
+  off.forEach((u) => u());
+  off = [];
+  chat.noteId = null;
+  chat.messages = [];
+  chat.summary = '';
+  chat.fresh = {};
+  chat.waiting = false;
+}
+
 export async function loadChat(noteId: string) {
   off.forEach((u) => u());
   off = [];
@@ -36,12 +55,12 @@ export async function loadChat(noteId: string) {
       if (m.noteId !== noteId || m.threadId !== null) return;
       const i = chat.messages.findIndex((x) => x.id === m.id || (x.id.startsWith('local-') && x.author === m.author && x.text === m.text));
       if (i >= 0) {
-        if (m.author === 'riddled' && m.drawing === 'done' && chat.messages[i].drawing !== 'done') chat.fresh[`d${m.id}`] = true;
+        if (m.author === 'riddled' && m.drawing === 'done' && chat.messages[i].drawing !== 'done') markFresh(`d${m.id}`, DRAW_MS);
         chat.messages[i] = m;
       } else {
         chat.messages.push(m);
-        if (m.author === 'riddled') chat.fresh[m.id] = true;
-        if (m.drawing === 'done') chat.fresh[`d${m.id}`] = true;
+        if (m.author === 'riddled') markFresh(m.id, Math.max(INK_DRY_MS, m.text.split(/\s+/).length * INK_WORD_MS + 640) + 200);
+        if (m.drawing === 'done') markFresh(`d${m.id}`, DRAW_MS);
       }
       if (m.author === 'riddled') chat.waiting = false;
     }),
@@ -58,7 +77,7 @@ export async function send(text: string) {
   chat.messages.push({
     id, noteId: chat.noteId, threadId: null, author: 'you', text: t, drawing: 'none', svg: null, sources: [], symbols: [], trimmed: false, createdAt: Date.now(),
   });
-  chat.fresh[id] = true;
+  markFresh(id, 1000);
   chat.waiting = true;
   await (await getBackend()).aiChat(chat.noteId, t, caretParagraph());
 }

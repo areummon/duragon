@@ -42,6 +42,7 @@ export async function initVoice() {
 
   const autoSpeak = (noteId: string, id: string, author: string, text: string) => {
     if (author !== 'riddled' || spoken.has(id)) return;
+    if (spoken.size >= 200) spoken.clear();
     spoken.add(id);
     if (app.note?.id === noteId && app.note.voiceOn) void readAloud(id, text);
   };

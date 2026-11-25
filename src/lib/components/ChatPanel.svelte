@@ -5,7 +5,7 @@
   import { tick } from 'svelte';
   import { closeOnEscape } from '../escape';
   import { app } from '../state/app.svelte';
-  import { chat, chatAsText, clearChat, loadChat, send } from '../state/chat.svelte';
+  import { chat, chatAsText, clearChat, loadChat, send, unloadChat } from '../state/chat.svelte';
   import { enlarge } from '../state/layout.svelte';
   import { riddlerName } from '../state/riddler';
   import { threads } from '../state/threads.svelte';
@@ -46,7 +46,15 @@
 
   $effect(() => {
     const id = app.note?.id;
-    if (id) void loadChat(id);
+    if (!id) {
+      unloadChat();
+      return;
+    }
+    if (open) {
+      if (chat.noteId !== id) void loadChat(id);
+    } else if (chat.noteId !== id) {
+      unloadChat();
+    }
   });
 
   $effect(() => {

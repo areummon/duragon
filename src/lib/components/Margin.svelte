@@ -15,6 +15,12 @@
   let heights = $state<Record<string, number>>({});
   const lastTop = new Map<string, number>();
 
+  $effect(() => {
+    void threads.noteId;
+    heights = {};
+    lastTop.clear();
+  });
+
   interface Placed {
     thread: ThreadModel;
     side: 'left' | 'right';

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tauri from './src-tauri/tauri.conf.json' with { type: 'json' };
 
@@ -9,8 +9,23 @@ const csp = Object.entries(policy)
   .map(([name, sources]) => `${name} ${sources}${name === 'connect-src' ? " 'self' ws://localhost:*" : ''}`)
   .join('; ');
 
+/** WebKitGTK / modern WebViews always support woff2; drop legacy woff/ttf fallbacks from KaTeX CSS (~876 KB saved). */
+function katexWoff2Only(): Plugin {
+  return {
+    name: 'katex-woff2-only',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!id.includes('katex.min.css')) return null;
+      return {
+        code: code.replace(/,url\(fonts\/[^)]+\.woff\) format\("woff"\),url\(fonts\/[^)]+\.ttf\) format\("truetype"\)/g, ''),
+        map: null,
+      };
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [katexWoff2Only(), svelte()],
   clearScreen: false,
   server: {
     port: 1420,

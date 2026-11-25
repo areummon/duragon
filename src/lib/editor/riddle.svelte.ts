@@ -54,9 +54,31 @@ const copiesOf = (lines: string[], line: string) => Math.max(1, lines.filter((l)
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+let cachedAddrKey = '';
+let cachedAddrRe = /^$/;
+
 export function isAddressed(line: string): boolean {
-  const names = addressNames().map(escape).join('|');
-  return new RegExp(`^\\s*(?:hey\\s+)?(?:${names})\\s*[,:]`, 'i').test(line);
+  const names = addressNames();
+  const key = names.join('\0');
+  if (key !== cachedAddrKey) {
+    cachedAddrKey = key;
+    cachedAddrRe = new RegExp(`^\\s*(?:hey\\s+)?(?:${names.map(escape).join('|')})\\s*[,:]`, 'i');
+  }
+  return cachedAddrRe.test(line);
+}
+
+function sameGeometry(a: Record<string, Geometry | null>, b: Record<string, Geometry | null>): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const k of keys) {
+    const x = a[k];
+    const y = b[k];
+    if (x === y) continue;
+    if (!x || !y || x.top !== y.top || x.startX !== y.startX || x.startY !== y.startY || x.endX !== y.endX || x.endY !== y.endY) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export interface Riddle {
@@ -100,33 +122,40 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
       if (view.isDestroyed) return;
+      const visible = visibleThreads();
+      const box = page.getBoundingClientRect();
+      geometry.pageWidth = box.width;
+      if (!visible.length) {
+        if (Object.keys(geometry.byId).length) geometry.byId = {};
+        return;
+      }
       const st = anchorKey.getState(view.state);
       if (!st) return;
-      const box = page.getBoundingClientRect();
       const next: Record<string, Geometry | null> = {};
-      for (const t of visibleThreads()) {
+      for (const t of visible) {
         const r = st.ranges.get(t.id);
         if (!r) {
           next[t.id] = null;
           continue;
         }
-        const lines = measureLines(view, r, page);
+        const lines = measureLines(view, r, page, box);
         if (!lines.length) {
           next[t.id] = null;
           continue;
         }
         const first = lines[0];
         const last = lines[lines.length - 1];
+        let endX = first.x2;
+        for (let i = 1; i < lines.length; i++) if (lines[i].x2 > endX) endX = lines[i].x2;
         next[t.id] = {
           top: view.coordsAtPos(r.from, 1).top - box.top,
           startX: first.x1,
           startY: first.mid,
-          endX: Math.max(...lines.map((l) => l.x2)),
+          endX,
           endY: last.mid,
         };
       }
-      if (JSON.stringify(next) !== JSON.stringify(geometry.byId)) geometry.byId = next;
-      geometry.pageWidth = box.width;
+      if (!sameGeometry(next, geometry.byId)) geometry.byId = next;
     });
   }
 
@@ -172,6 +201,7 @@ export function attachRiddle(editor: Editor, page: HTMLElement, noteId: string):
         for (const t of input.threads) {
           const age = performance.now() - (threads.arrivedAt[t.id] ?? -Infinity);
           if (t.kind !== 'reply' || placed.has(t.id) || age > JUST_ARRIVED_MS) continue;
+          if (placed.size >= 200) placed.clear();
           placed.add(t.id);
           const r = anchorKey.getState(view.state)?.ranges.get(t.id);
           if (r) lineAfter(r.to, t.quote);

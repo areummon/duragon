@@ -1,5 +1,5 @@
 import { getBackend } from '../api/backend';
-import { docTitle, plainText } from '../editor/plain';
+import { blockTexts } from '../editor/plain';
 import { upsertMeta } from './notes.svelte';
 import { showToast } from './toast.svelte';
 
@@ -33,7 +33,10 @@ async function store(id: string) {
     while (waiting.has(id)) {
       const doc = waiting.get(id);
       try {
-        upsertMeta(await be.saveNote(id, docTitle(doc), doc, plainText(doc)));
+        const blocks = blockTexts(doc);
+        const title = blocks[0] ?? '';
+        const plain = blocks.length ? blocks.join('\n') : '';
+        upsertMeta(await be.saveNote(id, title, doc, plain));
       } catch (e) {
         if (waiting.get(id) === doc) throw e;
       }

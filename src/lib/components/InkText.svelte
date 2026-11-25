@@ -1,7 +1,7 @@
 <script lang="ts">
   import { COPY_ICON, copyFrom } from '../copy';
   import type { MathSymbol } from '../api/types';
-  import { highlight, parseReply, renderTex, renderTexWithSymbols } from '../rich';
+  import { highlight, onKatexReady, onLowlightReady, parseReply, renderTex, renderTexWithSymbols } from '../rich';
   import { symbolButtons, symbolTips } from '../symbolTip';
 
   /**
@@ -10,6 +10,16 @@
    */
   interface Props { text: string; animate?: boolean; copyable?: boolean; symbols?: MathSymbol[]; onask?: (s: MathSymbol) => void }
   let { text, animate = false, copyable = true, symbols = [], onask }: Props = $props();
+
+  let richRev = $state(0);
+  $effect(() => {
+    const offK = onKatexReady(() => richRev++);
+    const offL = onLowlightReady(() => richRev++);
+    return () => {
+      offK();
+      offL();
+    };
+  });
 
   const tips = $derived(onask && symbols.length ? { symbols, onask } : null);
   const tex = (source: string, display: boolean) =>
@@ -23,6 +33,7 @@
 
   // Words ink in one by one; inline code, a formula and a whole block each ink in as one token.
   const pieces = $derived.by(() => {
+    void richRev;
     let order = 0;
     return parseReply(text).map((b): Piece => {
       if (b.kind === 'code') return { kind: 'code', html: highlight(b.code, b.lang), code: b.code, order: order++ };

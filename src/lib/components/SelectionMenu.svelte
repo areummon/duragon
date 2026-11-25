@@ -76,7 +76,7 @@
 
   $effect(() => {
     const onTx = () => {
-      version++;
+      if (sel) version++;
     };
     const onSel = () => sync();
     const ed = editor;
