@@ -13,7 +13,9 @@
   import { cycleTab, topDialog } from './lib/focus';
   import { matchesAction } from './lib/state/keymap.svelte';
   import { enlarge, lightbox } from './lib/state/layout.svelte';
+  import { settings } from './lib/state/settings.svelte';
   import { threads } from './lib/state/threads.svelte';
+  import { vim } from './lib/editor/vim.svelte';
   import {
     app, copyNote, exportNote, initApp, newNote, toggleChat, toggleJustMyWords,
   } from './lib/state/app.svelte';
@@ -60,6 +62,20 @@
   <TopBar />
   <Sidebar />
   <Page />
+  {#if settings.value.vimMode}
+    <div
+      class="vim-pill"
+      class:insert={vim.mode === 'insert'}
+      role="status"
+      aria-live="polite"
+      data-testid="vim-mode-pill"
+    >
+      <span>{vim.mode.toUpperCase()}</span>
+      {#if vim.pending}
+        <span class="vim-pending">{vim.pending}</span>
+      {/if}
+    </div>
+  {/if}
   {#if voice.mode === 'off'}
     <div class="hint">Hold Alt to speak · tap twice for hands-free</div>
   {:else}
@@ -74,3 +90,40 @@
   <LazyDialog open={app.mindEditor !== null} close={() => (app.mindEditor = null)} load={() => import('./lib/components/customize/MindDialog.svelte')} />
   <Toast />
 {/if}
+
+<style>
+  .vim-pill {
+    position: fixed;
+    left: 24px;
+    bottom: 20px;
+    z-index: 25;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--shelf);
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+    text-box: trim-both cap alphabetic;
+    pointer-events: none;
+    user-select: none;
+  }
+  .vim-pill.insert {
+    color: var(--graphite);
+  }
+  .vim-pending {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    letter-spacing: 0;
+    color: var(--faint);
+  }
+  @media print {
+    .vim-pill {
+      display: none;
+    }
+  }
+</style>

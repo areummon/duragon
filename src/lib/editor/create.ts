@@ -10,6 +10,7 @@ import { MathPreview } from './math';
 import { TextColor } from './textcolor';
 import { SlashCommands } from './slash.svelte';
 import { NoteDocument, Title } from './title';
+import { VimMode } from './vim.svelte';
 
 /** Transaction meta for edits the app makes on the writer's behalf; they save but do not count as typing. */
 export const QUIET = 'duragon-quiet';
@@ -124,6 +125,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       CodeBlock,
       MathPreview,
       Caret,
+      VimMode,
       SlashCommands,
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),
       SkipEmpty,

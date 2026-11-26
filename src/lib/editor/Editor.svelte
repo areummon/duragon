@@ -18,10 +18,12 @@
   import { untrack } from 'svelte';
   import { registerFlush, type OpenNote } from '../state/app.svelte';
   import { keepWords, storeNote } from '../state/saves';
+  import { settings } from '../state/settings.svelte';
   import { createEditor } from './create';
   import { changedBlocks, docBlocks, normalizeDoc, withoutLastLine } from './plain';
   import { findQuote } from './quote';
   import SlashMenu from './SlashMenu.svelte';
+  import { resetVimMode, vim } from './vim.svelte';
 
   interface Props {
     note: OpenNote;
@@ -38,6 +40,7 @@
   const noteId = $derived(note.id);
 
   function mount(n: OpenNote) {
+    resetVimMode('normal');
     const id = n.id;
     const doc = normalizeDoc(n.doc, n.title);
     let timer: number | undefined;
@@ -94,9 +97,13 @@
     void noteId;
     return untrack(() => mount(note));
   });
+
+  $effect(() => {
+    if (settings.value.vimMode) resetVimMode('normal');
+  });
 </script>
 
-<div class="editor" bind:this={element}></div>
+<div class="editor" class:vim-normal={settings.value.vimMode && vim.mode === 'normal'} bind:this={element}></div>
 {#if editor}
   <SlashMenu {editor} />
 {/if}
@@ -106,5 +113,13 @@
     position: relative;
     min-height: 60vh;
     padding-bottom: 40vh;
+  }
+  .editor.vim-normal :global(.ProseMirror:not(.drawn-caret)) {
+    caret-color: var(--ink);
+  }
+  .editor.vim-normal :global(.caret) {
+    width: 7px;
+    border-radius: 1.5px;
+    opacity: 0.28;
   }
 </style>
