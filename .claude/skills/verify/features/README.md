@@ -30,10 +30,10 @@ The maintained source for verifying Duragon's user-facing behaviour. Read this i
 | --- | --- | --- |
 | [side-chat.md](side-chat.md) | Side chat: ask, symbols, summary, copy, clear, pin | 2026-11-25, 6c2d6b0, all (the note’s title at 8c6b34f) |
 | [margin-threads.md](margin-threads.md) | Margin questions, replies, pin and the thread options | 2026-11-25, 6c2d6b0, all (Escape order, reading back and drawings at 8c6b34f) |
-| [customize.md](customize.md) | Customize dialog, its switches, models, providers and the mind editor | 2026-11-25, 6c2d6b0, all, against the mock (first opening, About you and added providers at 8c6b34f; the native consent window needs Tauri) |
+| [customize.md](customize.md) | Customize dialog, its switches, models, providers and the mind editor | 2026-11-25, 6c2d6b0, all, against the mock (first opening, About you and added providers at 8c6b34f; the voice pickers at 6b934e7; the native consent window needs Tauri) |
 | [notes-sidebar.md](notes-sidebar.md) | Notes sidebar: open, peek, create, rename, move, delete, folders | 2026-11-25, 6c2d6b0, all (rows after a thread changes, and the edge while selecting, at 8c6b34f) |
 | [editor.md](editor.md) | Selection toolbar, formatting, Visualize, inline answers, last line, slash commands, code, math | 2026-11-25, 6c2d6b0, all |
 | [keys.md](keys.md) | Command palette, shortcuts, Escape layers, Tab | 2026-11-25, 8c6b34f, all but Markdown export (needs Tauri) |
 | [note-header.md](note-header.md) | Mind, mode, Voice and Web switches, brief, PDF, page width | 2026-11-25, 6c2d6b0, all but Markdown and Word export (need Tauri), brief and page width at 8c6b34f |
-| [voice.md](voice.md) | Voice models, hold to speak, hands-free, reading aloud | 2026-11-25, 6c2d6b0, all, against the mock (no real audio) |
+| [voice.md](voice.md) | Voice models, voice and speech-to-text pickers, hold to speak, hands-free, reading aloud | 2026-11-25, 6b934e7, all, against the mock (Speech Dispatcher and whisper.cpp proven by their own tests) |
 | [trash.md](trash.md) | Trash, restore, where deleted notes go | 2026-11-25, 6c2d6b0, all, against the mock (the real system trash on Linux last at 62d32b8) |
