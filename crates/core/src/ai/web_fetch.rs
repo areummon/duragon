@@ -17,6 +17,7 @@ static FETCH_CLIENT: LazyLock<Client> = LazyLock::new(|| {
 
 fn fetch_client_builder() -> reqwest::ClientBuilder {
     Client::builder()
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(20))
         .user_agent(concat!("Duragon/", env!("CARGO_PKG_VERSION")))
@@ -46,17 +47,13 @@ pub fn is_public_ip(ip: IpAddr) -> bool {
             if let Some(v4) = v6.to_ipv4_mapped() {
                 return is_public_ip(IpAddr::V4(v4));
             }
-            if v6.is_unspecified() || v6.is_loopback() || v6.is_multicast() {
+            let s = v6.segments();
+            if (s[0] & 0xe000) != 0x2000 {
                 return false;
             }
-            let s = v6.segments();
-            !((s[0] & 0xfe00) == 0xfc00 // fc00::/7 (ULA)
-                || (s[0] & 0xffc0) == 0xfe80 // fe80::/10 (link-local)
-                || (s[0] == 0x0064 && s[1] == 0xff9b && s[2] == 0 && s[3] == 0 && s[4] == 0 && s[5] == 0) // 64:ff9b::/96
-                || (s[0] == 0x0064 && s[1] == 0xff9b && s[2] == 0x0001) // 64:ff9b:1::/48
-                || (s[0] == 0x0100 && s[1] == 0 && s[2] == 0 && s[3] == 0) // 100::/64
-                || (s[0] == 0x2001 && s[1] == 0x0db8) // 2001:db8::/32
-                || s[0] == 0x2002) // 2002::/16
+            !((s[0] == 0x2001 && (s[1] & 0xfe00) == 0x0000) // 2001::/23 (Teredo, ORCHID, benchmarking, IETF)
+                || (s[0] == 0x2001 && s[1] == 0x0db8) // 2001:db8::/32 (documentation)
+                || s[0] == 0x2002) // 2002::/16 (6to4)
         }
     }
 }

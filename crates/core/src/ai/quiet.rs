@@ -1,13 +1,16 @@
 //! Runs the CLIs without the telemetry of their own, and without keys that aren't theirs.
 use tokio::process::Command;
 
-use crate::model::{default_providers, ProviderKind};
+use crate::model::{default_providers, ProviderKind, SearchEngine};
 
 pub(super) const AGY_OFF: &str = "--disable-telemetry";
 pub(super) const CODEX_OFF: [&str; 3] = ["analytics.enabled=false", "feedback.enabled=false", "check_for_update_on_startup=false"];
 
 pub(super) fn quiet(command: &mut Command, kind: ProviderKind) -> &mut Command {
     command.env("DO_NOT_TRACK", "1");
+    for var in SearchEngine::ALL.into_iter().map(SearchEngine::env_var) {
+        command.env_remove(var);
+    }
     let own = match kind {
         ProviderKind::ClaudeCli => {
             for off in ["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING"] {

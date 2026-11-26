@@ -65,7 +65,7 @@ pub async fn run_codex(req: &AiRequest) -> Result<Value, AiError> {
     }
     args.extend(req.provider.args.iter().cloned());
     // Last, so the note's Web switch outranks the writer's own arguments.
-    args.extend(["-c".into(), format!("web_search={}", if req.web.is_on() { "live" } else { "disabled" })]);
+    args.extend(["-c".into(), format!("web_search={}", if req.web.is_builtin() { "live" } else { "disabled" })]);
     args.push("-".into());
 
     let mut child = quiet(&mut Command::new(command), req.provider.kind)

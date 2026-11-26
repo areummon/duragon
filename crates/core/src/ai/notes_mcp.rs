@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use super::search::{run_web_fetch_tool, run_web_search_tool, SearchClient};
 use super::tools::mcp_tools;
 use super::veil::mask;
+use crate::credentials::{env_key, CredentialsStore};
 use crate::db::Db;
 
 /// Unified MCP server name across Claude CLI, ACP, and MCP `serverInfo`.
@@ -83,22 +84,48 @@ impl McpLaunch {
         tools
     }
 
+    fn web_env(&self) -> Option<(&'static str, String)> {
+        if !self.web {
+            return None;
+        }
+        let pinned = Db::open_read_only(&self.server.db)
+            .ok()
+            .and_then(|db| db.get_settings().ok())
+            .and_then(|s| s.web_search_engine);
+        let creds = self
+            .server
+            .db
+            .parent()
+            .map(|dir| CredentialsStore::new(dir.join("credentials.json")));
+        let client = SearchClient::resolve(pinned, creds.as_ref())?;
+        let var = client.engine().env_var();
+        env_key(var).map(|val| (var, val))
+    }
+
     /// Inline `--mcp-config` JSON for Claude CLI.
     pub fn claude_mcp_config(&self) -> String {
-        json!({ "mcpServers": { SERVER_NAME: {
+        let mut server = json!({
             "command": self.server.exe,
             "args": self.args(),
-        }}})
-        .to_string()
+        });
+        if let Some((var, val)) = self.web_env() {
+            server["env"] = json!({ var: val });
+        }
+        json!({ "mcpServers": { SERVER_NAME: server } }).to_string()
     }
 
     /// Server descriptor entry for ACP `session/new` `mcpServers`.
     pub fn acp_server_entry(&self) -> Value {
+        let env: Vec<Value> = self
+            .web_env()
+            .into_iter()
+            .map(|(name, value)| json!({ "name": name, "value": value }))
+            .collect();
         json!({
             "name": SERVER_NAME,
             "command": self.server.exe.to_string_lossy(),
             "args": self.args(),
-            "env": []
+            "env": env
         })
     }
 }

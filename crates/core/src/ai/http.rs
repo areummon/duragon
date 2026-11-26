@@ -10,7 +10,7 @@ use super::schema_util::{extract_json, gemini_schema, has_required, json_instruc
 use super::search::{run_web_fetch_tool, run_web_search_tool};
 use super::tools::{anthropic_tools, gemini_declarations, openai_tools};
 use crate::credentials::validate_base_url;
-use crate::model::ThinkingLevel;
+use crate::model::{is_openrouter_url, ThinkingLevel};
 
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
@@ -93,7 +93,7 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
     let key = require_key(req)?;
     let base = base_url(req, "https://api.openai.com/v1")?;
     let url = format!("{base}/chat/completions");
-    let is_openrouter = base.contains("openrouter.ai");
+    let is_openrouter = is_openrouter_url(&base);
 
     let mut model = req.model.trim().to_string();
     if is_openrouter && req.web.is_builtin() && !model.ends_with(":online") {

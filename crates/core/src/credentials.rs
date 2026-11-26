@@ -195,7 +195,7 @@ pub fn validate_base_url(raw: &str) -> Result<String, String> {
     if parsed.fragment().is_some() {
         return Err("Address must not contain a fragment".into());
     }
-    Ok(trimmed.trim_end_matches('/').to_string())
+    Ok(parsed.as_str().trim_end_matches('/').to_string())
 }
 
 pub fn validate_search_key(engine: SearchEngine, raw: &str) -> Result<String> {

@@ -260,7 +260,7 @@ impl Ai {
         let web = if ctx.note.web_on && spec.web {
             if let Some(client) = SearchClient::resolve(ctx.settings.web_search_engine, self.credentials.as_ref()) {
                 WebAccess::Custom(client)
-            } else if provider.searches_web() {
+            } else if ctx.settings.web_search_engine.is_none() && provider.searches_web() {
                 WebAccess::Builtin
             } else {
                 WebAccess::Off
@@ -274,9 +274,10 @@ impl Ai {
             | ProviderKind::Gemini
             | ProviderKind::Ollama
             | ProviderKind::Local => true,
-            ProviderKind::ClaudeCli | ProviderKind::AgyAcp | ProviderKind::Acp | ProviderKind::CodexCli => {
+            ProviderKind::ClaudeCli | ProviderKind::AgyAcp | ProviderKind::Acp => {
                 self.notes_search.is_some()
             }
+            ProviderKind::CodexCli => false,
         };
         let notes_exclude = (notes_capable && spec.notes && ctx.settings.search_my_notes)
             .then(|| ctx.note.meta.id.clone());

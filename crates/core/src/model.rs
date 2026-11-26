@@ -186,11 +186,18 @@ pub struct ProviderConfig {
     pub builtin: bool,
 }
 
+pub fn is_openrouter_url(raw: &str) -> bool {
+    reqwest::Url::parse(raw.trim())
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h == "openrouter.ai" || h.ends_with(".openrouter.ai")))
+        .unwrap_or(false)
+}
+
 impl ProviderConfig {
     /// Whether it can look things up, when the note allows the web.
     pub fn searches_web(&self) -> bool {
         match self.kind {
-            ProviderKind::OpenAi => self.base_url.as_deref().is_some_and(|u| u.contains("openrouter.ai")),
+            ProviderKind::OpenAi => self.base_url.as_deref().is_some_and(is_openrouter_url),
             ProviderKind::Ollama | ProviderKind::Local => false,
             _ => true,
         }

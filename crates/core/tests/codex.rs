@@ -104,7 +104,7 @@ async fn codex_searches_only_when_the_note_allows_the_web() {
     for (web, mode) in [
         (WebAccess::Off, "web_search=disabled"),
         (WebAccess::Builtin, "web_search=live"),
-        (WebAccess::Custom(SearchClient::new(SearchEngine::Tavily, "tvly-12345678901234567890".into())), "web_search=live"),
+        (WebAccess::Custom(SearchClient::new(SearchEngine::Tavily, "tvly-12345678901234567890".into())), "web_search=disabled"),
     ] {
         let dir = tempfile::tempdir().unwrap();
         let mut req = request(dir.path());

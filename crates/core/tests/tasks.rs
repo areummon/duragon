@@ -515,3 +515,69 @@ async fn a_huge_note_is_cut_to_budget_around_the_target_and_the_message_says_so(
     small.ai.answer(&small.note, TARGET, 0).await.unwrap();
     assert_eq!(small.cap.all()[1].1["messages"][0]["trimmed"], false);
 }
+
+#[tokio::test]
+async fn pinned_search_engine_with_missing_key_does_not_fall_back_to_builtin_web() {
+    use duragon_core::credentials::CredentialsStore;
+    let mut fx = setup(json!({}), json!({}));
+    disable_learn(&fx);
+    enable_web(&fx);
+    let args_file = record_args(&mut fx);
+    fx.ai.credentials = Some(CredentialsStore::new(fx._dir.path().join("credentials.json")));
+
+    let mut s = fx.ai.db.get_settings().unwrap();
+    s.web_search_engine = Some(SearchEngine::Tavily);
+    fx.ai.db.save_settings(&s).unwrap();
+
+    fx.ai.answer(&fx.note, TARGET, 0).await.unwrap();
+    let a = last_args(&args_file);
+    assert!(
+        !a.iter().any(|x| x.contains("WebSearch")),
+        "pinned engine with missing key must not fall back to built-in web: {a:?}"
+    );
+    assert!(!a.iter().any(|x| x == "--allowedTools"), "no web tools allowed when key is missing: {a:?}");
+    assert!(!a.iter().any(|x| x == "--mcp-config"), "no MCP web server when key is missing: {a:?}");
+}
+
+#[tokio::test]
+async fn codex_does_not_receive_linked_notes_hint_or_notes_prompt() {
+    use duragon_core::ai::notes_mcp::NotesSearch;
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut fx = setup(json!({}), json!({}));
+    disable_learn(&fx);
+
+    let secret_note = fx.ai.db.create_note(Some("Secret Diary Title")).unwrap();
+    let doc = json!({"type":"doc","content":[
+        {"type":"title","content":[{"type":"text","text":"Plants"}]},
+        {"type":"paragraph","content":[
+            {"type":"text","text":"See "},
+            {"type":"noteLink","attrs":{"noteId": secret_note.meta.id, "title": "Secret Diary Title"}}
+        ]}
+    ]});
+    fx.ai.db.save_note(&fx.note, "Plants", &doc, "Plants\nSee Secret Diary Title").unwrap();
+
+    let stdin_file = fx._dir.path().join("codex.stdin");
+    let fake_codex = fx._dir.path().join("fake-codex");
+    std::fs::write(
+        &fake_codex,
+        format!("#!/bin/sh\ncat > '{}'\necho '{{\"message\":\"ok\"}}'\n", stdin_file.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_codex, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let mut s = fx.ai.db.get_settings().unwrap();
+    s.search_my_notes = true;
+    s.chat_provider = "codex-cli".into();
+    s.chat_model = "default".into();
+    if let Some(p) = s.providers.iter_mut().find(|p| p.id == "codex-cli") {
+        p.command = Some(fake_codex.to_string_lossy().into_owned());
+    }
+    fx.ai.db.save_settings(&s).unwrap();
+    fx.ai.notes_search = Some(NotesSearch { exe: "/opt/duragon".into(), db: "/data/duragon.db".into() });
+
+    fx.ai.chat(&fx.note, "what did I link?", "").await.unwrap();
+    let prompt = std::fs::read_to_string(&stdin_file).unwrap();
+    assert!(!prompt.contains(&secret_note.meta.id), "Codex must not receive linked note UUID: {prompt}");
+    assert!(!prompt.contains("read_note"), "Codex must not receive notes search prompt: {prompt}");
+}

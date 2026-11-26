@@ -234,3 +234,129 @@ async fn malformed_provider_base_urls_are_rejected_at_save_and_call() {
         }
     }
 }
+
+#[tokio::test]
+async fn search_keys_are_stripped_from_cli_env_and_only_active_key_forwarded_to_mcp() {
+    use duragon_core::ai::notes_mcp::McpLaunch;
+
+    struct RestoreEnv(&'static str, Option<String>);
+    impl Drop for RestoreEnv {
+        fn drop(&mut self) {
+            match &self.1 {
+                Some(v) => std::env::set_var(self.0, v),
+                None => std::env::remove_var(self.0),
+            }
+        }
+    }
+
+    let _g1 = RestoreEnv("TAVILY_API_KEY", std::env::var("TAVILY_API_KEY").ok());
+    let _g2 = RestoreEnv("BRAVE_API_KEY", std::env::var("BRAVE_API_KEY").ok());
+    std::env::set_var("TAVILY_API_KEY", "tvly-secret-env-key-1234567890");
+    std::env::set_var("BRAVE_API_KEY", "brave-secret-env-key-1234567890");
+
+    // 1. CLI subprocesses (Claude & Codex) do not inherit search API keys.
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().to_string_lossy().into_owned();
+    let mut claude_req = request(ProviderKind::ClaudeCli);
+    claude_req.bin = Some(
+        script(
+            dir.path(),
+            &format!("env > {out}/claude.env; cat > /dev/null; echo '{{\"structured_output\":{{\"quote\":\"x\"}}}}'"),
+        )
+        .into(),
+    );
+    run_ai(claude_req).await.unwrap();
+    let claude_env = std::fs::read_to_string(dir.path().join("claude.env")).unwrap();
+    assert!(!claude_env.contains("tvly-secret-env-key"), "TAVILY_API_KEY leaked to Claude CLI");
+    assert!(!claude_env.contains("brave-secret-env-key"), "BRAVE_API_KEY leaked to Claude CLI");
+
+    let mut codex_req = request(ProviderKind::CodexCli);
+    codex_req.provider.command = Some(script(
+        dir.path(),
+        &format!("env > {out}/codex.env; cat > /dev/null; echo '{{\"quote\":\"x\"}}'"),
+    ));
+    run_ai(codex_req).await.unwrap();
+    let codex_env = std::fs::read_to_string(dir.path().join("codex.env")).unwrap();
+    assert!(!codex_env.contains("tvly-secret-env-key"), "TAVILY_API_KEY leaked to Codex CLI");
+    assert!(!codex_env.contains("brave-secret-env-key"), "BRAVE_API_KEY leaked to Codex CLI");
+
+    // 2. McpLaunch forwards only the active search engine's env var when web == true.
+    let db_path = dir.path().join("duragon.db");
+    let db = Db::open(&db_path).unwrap();
+    let mut s = db.get_settings().unwrap();
+    s.web_search_engine = Some(SearchEngine::Brave);
+    db.save_settings(&s).unwrap();
+
+    let launch_web = McpLaunch {
+        server: NotesSearch { exe: "/opt/duragon".into(), db: db_path.clone() },
+        notes_exclude: None,
+        web: true,
+    };
+    let claude_cfg: Value = serde_json::from_str(&launch_web.claude_mcp_config()).unwrap();
+    assert_eq!(
+        claude_cfg["mcpServers"]["duragon_notes"]["env"],
+        json!({ "BRAVE_API_KEY": "brave-secret-env-key-1234567890" })
+    );
+    let acp_entry = launch_web.acp_server_entry();
+    assert_eq!(
+        acp_entry["env"],
+        json!([{ "name": "BRAVE_API_KEY", "value": "brave-secret-env-key-1234567890" }])
+    );
+
+    // 3. McpLaunch forwards no search env vars when web == false.
+    let launch_no_web = McpLaunch {
+        server: NotesSearch { exe: "/opt/duragon".into(), db: db_path },
+        notes_exclude: Some("open".into()),
+        web: false,
+    };
+    let claude_cfg_off: Value = serde_json::from_str(&launch_no_web.claude_mcp_config()).unwrap();
+    assert!(claude_cfg_off["mcpServers"]["duragon_notes"].get("env").is_none());
+    assert_eq!(launch_no_web.acp_server_entry()["env"], json!([]));
+}
+
+#[tokio::test]
+async fn validate_base_url_normalizes_and_is_openrouter_checks_host() {
+    assert_eq!(
+        credentials::validate_base_url("  HTTPS://API.Example.COM:443/v1/../v2/  ").unwrap(),
+        "https://api.example.com/v2"
+    );
+    assert_eq!(
+        credentials::validate_base_url("http://LOCALHOST:80/api/").unwrap(),
+        "http://localhost/api"
+    );
+
+    assert!(is_openrouter_url("https://openrouter.ai/api/v1"));
+    assert!(is_openrouter_url("https://api.openrouter.ai/v1"));
+    assert!(is_openrouter_url("https://OPENROUTER.AI/api/v1"));
+    assert!(!is_openrouter_url("https://evil.com/openrouter.ai/v1"));
+    assert!(!is_openrouter_url("https://notopenrouter.ai/v1"));
+    assert!(!is_openrouter_url("https://openrouter.ai.evil.com/v1"));
+
+    let mut p = ProviderConfig {
+        id: "custom".into(),
+        name: "Custom".into(),
+        kind: ProviderKind::OpenAi,
+        base_url: Some("https://evil.com/openrouter.ai/v1".into()),
+        command: None,
+        args: vec![],
+        env_var: None,
+        models: vec![],
+        builtin: false,
+    };
+    assert!(!p.searches_web());
+    p.base_url = Some("https://openrouter.ai/api/v1".into());
+    assert!(p.searches_web());
+
+    // HTTP OpenAI runner must not append `:online` when `openrouter.ai` only appears in the path.
+    let (base, kept) = echo();
+    assert!(base.contains("/openrouter.ai"));
+    let mut req = request(ProviderKind::OpenAi);
+    req.provider.base_url = Some(base);
+    req.model = "gpt-4.1".into();
+    req.web = WebAccess::Builtin;
+    run_ai(req).await.unwrap();
+    let sent = kept.lock().unwrap()[0].clone();
+    let (_, body) = sent.split_once("\r\n\r\n").unwrap();
+    let parsed: Value = serde_json::from_str(body).unwrap();
+    assert_eq!(parsed["model"], "gpt-4.1", "must not append :online for non-OpenRouter host");
+}
