@@ -129,10 +129,11 @@ Line one  \nLine two
 
     let inline = doc::children(&blocks[5]);
     assert!(inline.iter().any(|n| n["text"] == "strike" && has_mark(n, "strike")));
-    assert!(inline.iter().any(|n| n["text"] == "Duragon"
-        && n["marks"].as_array().is_some_and(|m| m.iter().any(|mk| mk["type"] == "link" && mk["attrs"]["href"] == "https://duragon.dev"))));
-    assert!(inline.iter().any(|n| n["text"] == "Rust"
-        && n["marks"].as_array().is_some_and(|m| m.iter().any(|mk| mk["type"] == "link" && mk["attrs"]["href"] == "https://en.wikipedia.org/wiki/Rust_(programming_language)"))));
+    assert!(inline.iter().all(|n| !has_mark(n, "link")));
+    assert!(inline.iter().any(|n| n["text"].as_str().is_some_and(|t| t.contains("Duragon (https://duragon.dev)"))));
+    assert!(inline.iter().any(|n| n["text"]
+        .as_str()
+        .is_some_and(|t| t.contains("Rust (https://en.wikipedia.org/wiki/Rust_(programming_language))"))));
     assert!(inline.iter().any(|n| n["text"] == "under italic" && has_mark(n, "italic")));
     assert!(inline.iter().any(|n| n["text"] == "under bold" && has_mark(n, "bold")));
     assert!(inline.iter().any(|n| n["text"] == "bold italic" && has_mark(n, "bold") && has_mark(n, "italic")));
@@ -151,7 +152,7 @@ Line one  \nLine two
     assert!(out1.contains("#### Sub-subsection\n"));
     assert!(out1.contains("##### Level Four\n"));
     assert!(out1.contains("~~strike~~"));
-    assert!(out1.contains("[Duragon](https://duragon.dev)"));
+    assert!(out1.contains("Duragon (https://duragon.dev)"));
     assert!(out1.contains("Line one  \nLine two"));
 
     let (_, doc2) = from_markdown(&out1, "fallback");
@@ -181,6 +182,145 @@ fn import_markdown_file_enforces_size_utf8_fallback_title_and_folder() {
     let huge = dir.path().join("huge.md");
     std::fs::write(&huge, vec![b'a'; (MAX_IMPORT_BYTES + 1) as usize]).unwrap();
     assert!(import_markdown_file(&db, &huge, None).is_err());
+
+    // Directory (non-regular file) is rejected
+    assert!(import_markdown_file(&db, dir.path(), None).is_err());
+}
+
+#[test]
+fn from_markdown_handles_utf8_marks_and_escapes_without_panicking() {
+    let md = "Visit **café** and **don’t** stop at **hello — world**, ~~naïve~~, __über__, and \\é.\n";
+    let (_, document) = from_markdown(md, "utf8");
+    let blocks = doc::children(&document);
+    let inline = doc::children(&blocks[1]);
+    assert!(inline.iter().any(|n| n["text"] == "café" && has_mark(n, "bold")));
+    assert!(inline.iter().any(|n| n["text"] == "don’t" && has_mark(n, "bold")));
+    assert!(inline.iter().any(|n| n["text"] == "hello — world" && has_mark(n, "bold")));
+    assert!(inline.iter().any(|n| n["text"] == "naïve" && has_mark(n, "strike")));
+    assert!(inline.iter().any(|n| n["text"] == "über" && has_mark(n, "bold")));
+    assert!(inline.iter().any(|n| n["text"].as_str().is_some_and(|t| t.contains("\\é"))));
+}
+
+#[test]
+fn from_markdown_sanitizes_links_and_emits_zero_link_marks() {
+    let md = "\
+Safe [ex](https://example.com), same [https://same.test](https://same.test), mail [hi](MAILTO:a@b.com), \
+bad [bad](javascript:alert(1)), data [d](data:text/html,hi), file [f](file:///etc/passwd), \
+ws [w](https://exa mple.com).
+";
+    let (_, document) = from_markdown(md, "links");
+    let serialized = document.to_string();
+    assert!(!serialized.contains("\"type\":\"link\""), "unexpected link mark: {serialized}");
+
+    let blocks = doc::children(&document);
+    let text: String = doc::children(&blocks[1])
+        .iter()
+        .filter_map(|n| n["text"].as_str())
+        .collect();
+    assert!(text.contains("ex (https://example.com)"), "{text}");
+    assert!(text.contains("same https://same.test,"), "{text}");
+    assert!(!text.contains("(https://same.test)"), "{text}");
+    assert!(text.contains("hi (MAILTO:a@b.com)"), "{text}");
+    assert!(text.contains("bad bad,"), "{text}");
+    assert!(!text.contains("javascript:"), "{text}");
+    assert!(!text.contains("data:text/html"), "{text}");
+    assert!(!text.contains("file:///etc/passwd"), "{text}");
+    assert!(!text.contains("https://exa mple.com"), "{text}");
+}
+
+#[test]
+fn from_markdown_caps_recursion_and_avoids_quadratic_link_scan() {
+    let deep_quote = format!("{} x\n", ">".repeat(500));
+    let (_, quote_doc) = from_markdown(&deep_quote, "deep");
+    assert!(quote_doc.to_string().contains('x'));
+
+    let start = std::time::Instant::now();
+    let brackets = "[".repeat(50_000);
+    let (_, bracket_doc) = from_markdown(&brackets, "brackets");
+    assert!(start.elapsed() < std::time::Duration::from_secs(2));
+    assert_eq!(doc::children(&bracket_doc)[1]["content"][0]["text"].as_str().unwrap().len(), 50_000);
+}
+
+#[test]
+fn export_notebook_markdown_protects_symlinks_existing_files_reserved_names_and_utf8_len() {
+    let db = Db::open_in_memory().unwrap();
+    let seeded_count = db.list_notes().unwrap().len();
+
+    let con = db
+        .create_note_with_doc("CON", doc::doc(vec![doc::title("CON"), doc::paragraph("reserved con")]))
+        .unwrap();
+    let nul = db
+        .create_note_with_doc(
+            "NUL.draft",
+            doc::doc(vec![doc::title("NUL.draft"), doc::paragraph("reserved nul")]),
+        )
+        .unwrap();
+    let cjk_title = "漢".repeat(100);
+    let _cjk = db
+        .create_note_with_doc(
+            &cjk_title,
+            doc::doc(vec![doc::title(&cjk_title), doc::paragraph("cjk body")]),
+        )
+        .unwrap();
+    let _existing = db
+        .create_note_with_doc(
+            "Existing",
+            doc::doc(vec![doc::title("Existing"), doc::paragraph("new export")]),
+        )
+        .unwrap();
+
+    let _ = (con, nul);
+
+    // Pre-existing file must not be overwritten; export must step to Existing (2).md
+    let out_dir = tempdir().unwrap();
+    let pre = out_dir.path().join("Existing.md");
+    std::fs::write(&pre, "DO NOT OVERWRITE").unwrap();
+
+    let count = export_notebook_markdown(&db, out_dir.path(), None).unwrap();
+    assert_eq!(count, seeded_count + 4);
+    assert_eq!(std::fs::read_to_string(&pre).unwrap(), "DO NOT OVERWRITE");
+    assert!(out_dir.path().join("Existing (2).md").exists());
+    assert!(out_dir.path().join("_CON.md").exists());
+    assert!(out_dir.path().join("_NUL.draft.md").exists());
+
+    for f in collect_files(out_dir.path()) {
+        let name = f.file_name().unwrap().to_str().unwrap();
+        assert!(name.len() <= 255, "filename exceeds 255 UTF-8 bytes: {} ({})", name, name.len());
+    }
+
+    // Pre-existing symlink at target .md path must not be followed or overwrite victim
+    #[cfg(unix)]
+    {
+        let victim_dir = tempdir().unwrap();
+        let victim = victim_dir.path().join("victim.txt");
+        std::fs::write(&victim, "UNTOUCHED").unwrap();
+
+        let sym_file_dir = tempdir().unwrap();
+        std::os::unix::fs::symlink(&victim, sym_file_dir.path().join("Existing.md")).unwrap();
+        export_notebook_markdown(&db, sym_file_dir.path(), None).unwrap();
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "UNTOUCHED");
+        assert!(sym_file_dir.path().join("Existing (2).md").exists());
+
+        // Symlinked folder inside export dir must be rejected
+        let folder = db.create_folder("LinkedFolder").unwrap();
+        let in_folder = db
+            .create_note_with_doc(
+                "Inside",
+                doc::doc(vec![doc::title("Inside"), doc::paragraph("body")]),
+            )
+            .unwrap();
+        db.update_note_meta(
+            &in_folder.meta.id,
+            &NoteMetaPatch { folder_id: Some(Some(folder.id.clone())), ..Default::default() },
+        )
+        .unwrap();
+
+        let sym_dir_root = tempdir().unwrap();
+        std::os::unix::fs::symlink(victim_dir.path(), sym_dir_root.path().join("LinkedFolder")).unwrap();
+        let err = export_notebook_markdown(&db, sym_dir_root.path(), None);
+        assert!(err.is_err(), "expected symlink directory traversal to be rejected");
+        assert!(!victim_dir.path().join("Inside.md").exists());
+    }
 }
 
 #[test]

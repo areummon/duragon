@@ -10,15 +10,20 @@ use crate::doc;
 use crate::model::Note;
 
 pub const MAX_IMPORT_BYTES: u64 = 5 * 1024 * 1024;
+const MAX_DEPTH: usize = 24;
+const MAX_LINK_SCAN_BYTES: usize = 1024;
 
 /// Reads a Markdown file (capped at 5 MB, UTF-8), parses it, and inserts a note atomically into `folder_id`.
 pub fn import_markdown_file(db: &Db, path: &Path, folder_id: Option<&str>) -> Result<Note> {
-    let meta = std::fs::metadata(path)?;
+    let file = std::fs::File::open(path)?;
+    let meta = file.metadata()?;
+    if !meta.is_file() {
+        bail!("Markdown import path is not a regular file");
+    }
     if meta.len() > MAX_IMPORT_BYTES {
         bail!("Markdown file is larger than 5 MB");
     }
-    let file = std::fs::File::open(path)?;
-    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    let mut bytes = Vec::with_capacity(meta.len().min(MAX_IMPORT_BYTES) as usize);
     file.take(MAX_IMPORT_BYTES + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_IMPORT_BYTES {
         bail!("Markdown file is larger than 5 MB");
@@ -55,7 +60,7 @@ pub fn from_markdown(md: &str, fallback_title: &str) -> (String, Value) {
         (fallback_title.trim().to_string(), false)
     };
 
-    let mut body = parse_blocks(&lines[start..], shift_headings);
+    let mut body = parse_blocks(&lines[start..], shift_headings, 0);
     if body.is_empty() {
         body.push(doc::paragraph(""));
     }
@@ -66,7 +71,7 @@ pub fn from_markdown(md: &str, fallback_title: &str) -> (String, Value) {
     (title, doc::doc(content))
 }
 
-fn parse_blocks(lines: &[&str], shift_headings: bool) -> Vec<Value> {
+fn parse_blocks(lines: &[&str], shift_headings: bool, depth: usize) -> Vec<Value> {
     let mut out = Vec::new();
     let mut i = 0;
 
@@ -127,7 +132,16 @@ fn parse_blocks(lines: &[&str], shift_headings: bool) -> Vec<Value> {
                     break;
                 }
             }
-            let mut inner = parse_blocks(&inner_lines, shift_headings);
+            let mut inner = if depth >= MAX_DEPTH {
+                let literal = inner_lines.join("\n");
+                if literal.is_empty() {
+                    vec![doc::paragraph("")]
+                } else {
+                    vec![paragraph_node(vec![doc::text_node(&literal)])]
+                }
+            } else {
+                parse_blocks(&inner_lines, shift_headings, depth + 1)
+            };
             if inner.is_empty() {
                 inner.push(doc::paragraph(""));
             }
@@ -189,7 +203,7 @@ fn parse_blocks(lines: &[&str], shift_headings: bool) -> Vec<Value> {
         for (idx, raw) in para_lines.iter().enumerate() {
             let is_last = idx + 1 == para_lines.len();
             let hard_break = !is_last && raw.ends_with("  ");
-            parse_inline_with_marks(raw.trim(), &[], &mut inline);
+            parse_inline_with_marks(raw.trim(), &[], 0, &mut inline);
             if !is_last {
                 if hard_break {
                     inline.push(json!({ "type": "hardBreak" }));
@@ -338,7 +352,6 @@ enum Mark {
     Italic,
     Strike,
     Code,
-    Link(String),
 }
 
 impl Mark {
@@ -348,14 +361,13 @@ impl Mark {
             Mark::Italic => json!({ "type": "italic" }),
             Mark::Strike => json!({ "type": "strike" }),
             Mark::Code => json!({ "type": "code" }),
-            Mark::Link(href) => json!({ "type": "link", "attrs": { "href": href } }),
         }
     }
 }
 
 fn parse_inline(text: &str) -> Vec<Value> {
     let mut out = Vec::new();
-    parse_inline_with_marks(text, &[], &mut out);
+    parse_inline_with_marks(text, &[], 0, &mut out);
     out
 }
 
@@ -397,7 +409,23 @@ fn is_word_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric()
 }
 
-fn parse_inline_with_marks(text: &str, marks: &[Mark], out: &mut Vec<Value>) {
+fn next_char_index(s: &str, i: usize) -> usize {
+    i + s[i..].chars().next().map_or(1, char::len_utf8)
+}
+
+fn is_safe_href(href: &str) -> bool {
+    if href.is_empty() || href.chars().any(|c| c.is_ascii_control() || c.is_whitespace()) {
+        return false;
+    }
+    let lower = href.to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:")
+}
+
+fn parse_inline_with_marks(text: &str, marks: &[Mark], depth: usize, out: &mut Vec<Value>) {
+    if depth >= MAX_DEPTH {
+        push_text(out, text, marks);
+        return;
+    }
     let bytes = text.as_bytes();
     let mut i = 0;
     let mut plain_start = 0;
@@ -426,8 +454,10 @@ fn parse_inline_with_marks(text: &str, marks: &[Mark], out: &mut Vec<Value>) {
         } else if bytes[i] == b'[' {
             if let Some((label, href, total_len)) = parse_link(&text[i..]) {
                 push_text(out, &text[plain_start..i], marks);
-                let next_marks = with_marks(marks, &[Mark::Link(href.to_string())]);
-                parse_inline_with_marks(label, &next_marks, out);
+                parse_inline_with_marks(label, marks, depth + 1, out);
+                if is_safe_href(href) && label != href {
+                    push_text(out, &format!(" ({href})"), marks);
+                }
                 i += total_len;
                 plain_start = i;
                 continue;
@@ -438,33 +468,33 @@ fn parse_inline_with_marks(text: &str, marks: &[Mark], out: &mut Vec<Value>) {
                     push_text(out, &text[plain_start..i], marks);
                     let inner = &text[i + 2..i + 2 + end_rel];
                     let next_marks = with_marks(marks, &[Mark::Strike]);
-                    parse_inline_with_marks(inner, &next_marks, out);
+                    parse_inline_with_marks(inner, &next_marks, depth + 1, out);
                     i = i + 2 + end_rel + 2;
                     plain_start = i;
                     continue;
                 }
             }
         } else if bytes[i] == b'*' {
-            if text[i..].starts_with("***") {
+            if bytes[i..].starts_with(b"***") {
                 if let Some(end_rel) = find_unescaped(&text[i + 3..], "***") {
                     if end_rel > 0 {
                         push_text(out, &text[plain_start..i], marks);
                         let inner = &text[i + 3..i + 3 + end_rel];
                         let next_marks = with_marks(marks, &[Mark::Bold, Mark::Italic]);
-                        parse_inline_with_marks(inner, &next_marks, out);
+                        parse_inline_with_marks(inner, &next_marks, depth + 1, out);
                         i = i + 3 + end_rel + 3;
                         plain_start = i;
                         continue;
                     }
                 }
             }
-            if text[i..].starts_with("**") {
+            if bytes[i..].starts_with(b"**") {
                 if let Some(end_rel) = find_unescaped(&text[i + 2..], "**") {
                     if end_rel > 0 {
                         push_text(out, &text[plain_start..i], marks);
                         let inner = &text[i + 2..i + 2 + end_rel];
                         let next_marks = with_marks(marks, &[Mark::Bold]);
-                        parse_inline_with_marks(inner, &next_marks, out);
+                        parse_inline_with_marks(inner, &next_marks, depth + 1, out);
                         i = i + 2 + end_rel + 2;
                         plain_start = i;
                         continue;
@@ -475,33 +505,33 @@ fn parse_inline_with_marks(text: &str, marks: &[Mark], out: &mut Vec<Value>) {
                     push_text(out, &text[plain_start..i], marks);
                     let inner = &text[i + 1..i + 1 + end_rel];
                     let next_marks = with_marks(marks, &[Mark::Italic]);
-                    parse_inline_with_marks(inner, &next_marks, out);
+                    parse_inline_with_marks(inner, &next_marks, depth + 1, out);
                     i = i + 1 + end_rel + 1;
                     plain_start = i;
                     continue;
                 }
             }
         } else if bytes[i] == b'_' && (i == 0 || !is_word_byte(bytes[i - 1])) {
-            if text[i..].starts_with("___") {
+            if bytes[i..].starts_with(b"___") {
                 if let Some(end_rel) = find_underscore_delim(&text[i + 3..], "___") {
                     if end_rel > 0 {
                         push_text(out, &text[plain_start..i], marks);
                         let inner = &text[i + 3..i + 3 + end_rel];
                         let next_marks = with_marks(marks, &[Mark::Bold, Mark::Italic]);
-                        parse_inline_with_marks(inner, &next_marks, out);
+                        parse_inline_with_marks(inner, &next_marks, depth + 1, out);
                         i = i + 3 + end_rel + 3;
                         plain_start = i;
                         continue;
                     }
                 }
             }
-            if text[i..].starts_with("__") {
+            if bytes[i..].starts_with(b"__") {
                 if let Some(end_rel) = find_underscore_delim(&text[i + 2..], "__") {
                     if end_rel > 0 {
                         push_text(out, &text[plain_start..i], marks);
                         let inner = &text[i + 2..i + 2 + end_rel];
                         let next_marks = with_marks(marks, &[Mark::Bold]);
-                        parse_inline_with_marks(inner, &next_marks, out);
+                        parse_inline_with_marks(inner, &next_marks, depth + 1, out);
                         i = i + 2 + end_rel + 2;
                         plain_start = i;
                         continue;
@@ -512,7 +542,7 @@ fn parse_inline_with_marks(text: &str, marks: &[Mark], out: &mut Vec<Value>) {
                     push_text(out, &text[plain_start..i], marks);
                     let inner = &text[i + 1..i + 1 + end_rel];
                     let next_marks = with_marks(marks, &[Mark::Italic]);
-                    parse_inline_with_marks(inner, &next_marks, out);
+                    parse_inline_with_marks(inner, &next_marks, depth + 1, out);
                     i = i + 1 + end_rel + 1;
                     plain_start = i;
                     continue;
@@ -520,8 +550,7 @@ fn parse_inline_with_marks(text: &str, marks: &[Mark], out: &mut Vec<Value>) {
             }
         }
 
-        let ch_len = text[i..].chars().next().map_or(1, char::len_utf8);
-        i += ch_len;
+        i = next_char_index(text, i);
     }
 
     push_text(out, &text[plain_start..], marks);
@@ -534,13 +563,19 @@ fn parse_link(s: &str) -> Option<(&str, &str, usize)> {
     }
     let mut i = 1;
     let mut bracket_depth = 1usize;
-    while i < bytes.len() {
+    let label_limit = bytes.len().min(1 + MAX_LINK_SCAN_BYTES);
+    while i < label_limit {
         if bytes[i] == b'\\' && i + 1 < bytes.len() {
-            i += 2;
+            i = next_char_index(s, i + 1);
             continue;
         }
         match bytes[i] {
-            b'[' => bracket_depth += 1,
+            b'[' => {
+                bracket_depth += 1;
+                if bracket_depth > MAX_DEPTH {
+                    return None;
+                }
+            }
             b']' => {
                 bracket_depth -= 1;
                 if bracket_depth == 0 {
@@ -549,7 +584,7 @@ fn parse_link(s: &str) -> Option<(&str, &str, usize)> {
             }
             _ => {}
         }
-        i += 1;
+        i = next_char_index(s, i);
     }
     if bracket_depth != 0 || i <= 1 {
         return None;
@@ -561,13 +596,19 @@ fn parse_link(s: &str) -> Option<(&str, &str, usize)> {
     let href_start = i + 2;
     let mut j = href_start;
     let mut paren_depth = 1usize;
-    while j < bytes.len() {
+    let href_limit = bytes.len().min(href_start + MAX_LINK_SCAN_BYTES);
+    while j < href_limit {
         if bytes[j] == b'\\' && j + 1 < bytes.len() {
-            j += 2;
+            j = next_char_index(s, j + 1);
             continue;
         }
         match bytes[j] {
-            b'(' => paren_depth += 1,
+            b'(' => {
+                paren_depth += 1;
+                if paren_depth > MAX_DEPTH {
+                    return None;
+                }
+            }
             b')' => {
                 paren_depth -= 1;
                 if paren_depth == 0 {
@@ -577,42 +618,44 @@ fn parse_link(s: &str) -> Option<(&str, &str, usize)> {
             }
             _ => {}
         }
-        j += 1;
+        j = next_char_index(s, j);
     }
     None
 }
 
 fn find_unescaped(s: &str, needle: &str) -> Option<usize> {
     let bytes = s.as_bytes();
+    let needle_bytes = needle.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'\\' && i + 1 < bytes.len() {
-            i += 2;
+            i = next_char_index(s, i + 1);
             continue;
         }
-        if s[i..].starts_with(needle) {
+        if bytes[i..].starts_with(needle_bytes) {
             return Some(i);
         }
-        i += 1;
+        i = next_char_index(s, i);
     }
     None
 }
 
 fn find_underscore_delim(s: &str, needle: &str) -> Option<usize> {
     let bytes = s.as_bytes();
+    let needle_bytes = needle.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'\\' && i + 1 < bytes.len() {
-            i += 2;
+            i = next_char_index(s, i + 1);
             continue;
         }
-        if s[i..].starts_with(needle) {
-            let after = i + needle.len();
+        if bytes[i..].starts_with(needle_bytes) {
+            let after = i + needle_bytes.len();
             if after == bytes.len() || !is_word_byte(bytes[after]) {
                 return Some(i);
             }
         }
-        i += 1;
+        i = next_char_index(s, i);
     }
     None
 }
@@ -622,7 +665,7 @@ fn find_single_delim(s: &str, delim: u8, word_boundary: bool) -> Option<usize> {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'\\' && i + 1 < bytes.len() {
-            i += 2;
+            i = next_char_index(s, i + 1);
             continue;
         }
         if bytes[i] == delim {
@@ -633,7 +676,7 @@ fn find_single_delim(s: &str, delim: u8, word_boundary: bool) -> Option<usize> {
                 return Some(i);
             }
         }
-        i += 1;
+        i = next_char_index(s, i);
     }
     None
 }

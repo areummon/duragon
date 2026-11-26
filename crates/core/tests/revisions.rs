@@ -201,3 +201,37 @@ fn trash_and_restore_preserves_revisions() {
     assert_eq!(restored.meta.title, "Rev 1");
     assert_eq!(restored.doc, d1);
 }
+
+#[test]
+fn formatting_only_doc_change_triggers_snapshot_on_restore() {
+    let db = Db::open_in_memory().unwrap();
+    let note = db.create_note(Some("Style")).unwrap();
+    let id = &note.meta.id;
+
+    let plain_doc = doc_with("Style", "Same words");
+    db.save_note(id, "Style", &plain_doc, "Style\nSame words").unwrap();
+    let revs = db.list_revisions(id).unwrap();
+    assert_eq!(revs.len(), 1);
+    let rev1_id = revs[0].id.clone();
+
+    // Formatting-only edit: identical title and plain text, different doc_json (bold mark).
+    let bold_doc = json!({
+        "type": "doc",
+        "content": [
+            {"type": "title", "content": [{"type": "text", "text": "Style"}]},
+            {"type": "paragraph", "content": [{"type": "text", "text": "Same words", "marks": [{"type": "bold"}]}]},
+        ]
+    });
+    db.save_note(id, "Style", &bold_doc, "Style\nSame words").unwrap();
+    assert_eq!(db.list_revisions(id).unwrap().len(), 1);
+
+    // Restoring rev1 must snapshot the bold_doc state first despite identical plain text.
+    let restored = db.restore_revision(id, &rev1_id).unwrap();
+    assert_eq!(restored.doc, plain_doc);
+    let after = db.list_revisions(id).unwrap();
+    assert_eq!(after.len(), 2);
+
+    // Restoring the auto-saved snapshot brings back the bold formatting.
+    let back = db.restore_revision(id, &after[0].id).unwrap();
+    assert_eq!(back.doc, bold_doc);
+}

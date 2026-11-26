@@ -21,6 +21,7 @@ const TITLE_MAX_CHARS: usize = 60;
 /// Leaves room in a 255 byte name for the id, the extension and what the system trash adds.
 const TITLE_MAX_BYTES: usize = 180;
 const UUID_LEN: usize = 36;
+const MAX_REVISIONS_PER_NOTE: usize = 20;
 
 /// The operating system's own trash.
 pub trait SystemTrash: Send + Sync {
@@ -117,6 +118,10 @@ fn cleaned(mut bundle: NoteBundle) -> NoteBundle {
     }
     bundle.threads.iter_mut().flat_map(|t| &mut t.messages).chain(&mut bundle.chat).for_each(clean);
     bundle.summary.text = bundle.summary.text.chars().take(SUMMARY_MAX_CHARS).collect();
+    bundle.revisions.truncate(MAX_REVISIONS_PER_NOTE);
+    for r in &mut bundle.revisions {
+        r.created_at = sane(r.created_at);
+    }
     bundle
 }
 

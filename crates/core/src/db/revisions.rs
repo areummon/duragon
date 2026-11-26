@@ -21,7 +21,7 @@ pub(crate) struct BundledRevision {
 
 fn latest_revision(conn: &Connection, note_id: &str) -> rusqlite::Result<Option<(String, String, i64)>> {
     conn.prepare_cached(
-        "SELECT title, plain, created_at FROM note_revisions
+        "SELECT title, doc_json, created_at FROM note_revisions
          WHERE note_id=?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
     )?
     .query_row([note_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
@@ -64,8 +64,8 @@ pub(super) fn maybe_snapshot_conn(
     plain: &str,
     now: i64,
 ) -> rusqlite::Result<()> {
-    if let Some((last_title, last_plain, last_created_at)) = latest_revision(conn, note_id)? {
-        if last_title == title && last_plain == plain {
+    if let Some((last_title, last_doc_json, last_created_at)) = latest_revision(conn, note_id)? {
+        if last_title == title && last_doc_json == doc_json {
             return Ok(());
         }
         if last_created_at > now - REVISION_INTERVAL_MS {
@@ -81,8 +81,8 @@ pub(super) fn force_snapshot_conn(conn: &Connection, note_id: &str, now: i64) ->
         .query_row([note_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
         .optional()?
         .ok_or_else(|| anyhow!("note not found: {note_id}"))?;
-    if let Some((last_title, last_plain, _)) = latest_revision(conn, note_id)? {
-        if last_title == title && last_plain == plain {
+    if let Some((last_title, last_doc_json, _)) = latest_revision(conn, note_id)? {
+        if last_title == title && last_doc_json == doc_json {
             return Ok(());
         }
     }

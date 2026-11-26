@@ -1,5 +1,7 @@
 //! Bulk Markdown export of a notebook or folder hierarchy.
 use std::collections::{HashMap, HashSet};
+use std::fs::OpenOptions;
+use std::io::{ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{anyhow, bail, Result};
@@ -9,6 +11,7 @@ use crate::export::to_markdown;
 use crate::model::Folder;
 
 const MAX_NAME_CHARS: usize = 100;
+const MAX_NAME_BYTES: usize = 180;
 
 /// Exports all notes (when `folder_id` is `None`) or all notes within `folder_id` and its descendant
 /// subfolders (when `Some(id)`) into `dir` as `.md` files, preserving folder hierarchy safely.
@@ -29,6 +32,7 @@ pub fn export_notebook_markdown(db: &Db, dir: &Path, folder_id: Option<&str>) ->
     }
 
     std::fs::create_dir_all(dir)?;
+    let canon_root = std::fs::canonicalize(dir)?;
 
     let mut used_entries: HashMap<PathBuf, HashSet<String>> = HashMap::new();
     let mut folder_dirs: HashMap<&str, PathBuf> = HashMap::new();
@@ -36,12 +40,12 @@ pub fn export_notebook_markdown(db: &Db, dir: &Path, folder_id: Option<&str>) ->
 
     if let Some(root_id) = folder_id {
         visited.insert(root_id);
-        folder_dirs.insert(root_id, dir.to_path_buf());
+        folder_dirs.insert(root_id, canon_root.clone());
     }
     assign_folder_dirs(
         folder_id,
-        dir,
-        dir,
+        &canon_root,
+        &canon_root,
         &children_map,
         &mut visited,
         &mut used_entries,
@@ -54,30 +58,69 @@ pub fn export_notebook_markdown(db: &Db, dir: &Path, folder_id: Option<&str>) ->
             Some(fid) => match folder_dirs.get(fid) {
                 Some(p) => p.as_path(),
                 None if folder_id.is_some() => continue,
-                None => dir,
+                None => canon_root.as_path(),
             },
             None => {
                 if folder_id.is_some() {
                     continue;
                 }
-                dir
+                canon_root.as_path()
             }
         };
 
-        std::fs::create_dir_all(target_dir)?;
+        let safe_dir = ensure_safe_dir(target_dir, &canon_root)?;
         let stem = sanitize_name(&note.title, "Untitled");
-        let file_name = unique_entry(
-            used_entries.entry(target_dir.to_path_buf()).or_default(),
-            &stem,
-            ".md",
-        );
-        let file_path = safe_join(target_dir, &file_name, dir)?;
-
-        std::fs::write(&file_path, to_markdown(&note.doc))?;
+        let content = to_markdown(&note.doc);
+        let used = used_entries.entry(safe_dir.clone()).or_default();
+        loop {
+            let file_name = unique_entry(used, &stem, ".md");
+            let file_path = safe_join(&safe_dir, &file_name, &canon_root)?;
+            match OpenOptions::new().write(true).create_new(true).open(&file_path) {
+                Ok(mut file) => {
+                    file.write_all(content.as_bytes())?;
+                    break;
+                }
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e.into()),
+            }
+        }
         exported += 1;
     }
 
     Ok(exported)
+}
+
+fn ensure_safe_dir(target_dir: &Path, canon_root: &Path) -> Result<PathBuf> {
+    let rel = target_dir
+        .strip_prefix(canon_root)
+        .map_err(|_| anyhow!("export path escaped root directory"))?;
+    let mut cur = canon_root.to_path_buf();
+    for comp in rel.components() {
+        match comp {
+            Component::Normal(part) => cur.push(part),
+            _ => bail!("unsafe export directory component"),
+        }
+        match std::fs::symlink_metadata(&cur) {
+            Ok(meta) => {
+                if meta.file_type().is_symlink() {
+                    bail!("refusing to export through symlink directory: {}", cur.display());
+                }
+                if !meta.is_dir() {
+                    bail!("export path is not a directory: {}", cur.display());
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                std::fs::create_dir(&cur)?;
+            }
+            Err(e) => return Err(e.into()),
+        }
+        let canon_sub = std::fs::canonicalize(&cur)?;
+        if !canon_sub.starts_with(canon_root) {
+            bail!("export directory escaped root: {}", cur.display());
+        }
+        cur = canon_sub;
+    }
+    Ok(cur)
 }
 
 fn assign_folder_dirs<'a>(
@@ -138,16 +181,66 @@ fn sanitize_name(raw: &str, fallback: &str) -> String {
     }
 
     let trimmed = s.trim_matches(|c: char| c.is_whitespace() || c == '.' || c == '-');
-    let mut bounded: String = trimmed.chars().take(MAX_NAME_CHARS).collect();
-    bounded = bounded
+    let mut bounded = String::new();
+    for c in trimmed.chars().take(MAX_NAME_CHARS) {
+        if bounded.len() + c.len_utf8() > MAX_NAME_BYTES {
+            break;
+        }
+        bounded.push(c);
+    }
+    let bounded = bounded
         .trim_end_matches(|c: char| c.is_whitespace() || c == '.' || c == '-')
         .to_string();
 
-    if bounded.is_empty() || bounded == "." || bounded == ".." {
+    let mut name = if bounded.is_empty() || bounded == "." || bounded == ".." {
         fallback.to_string()
     } else {
         bounded
+    };
+
+    if is_windows_reserved(&name) {
+        name = format!("_{name}");
+        if name.len() > MAX_NAME_BYTES {
+            let mut capped = String::new();
+            for c in name.chars() {
+                if capped.len() + c.len_utf8() > MAX_NAME_BYTES {
+                    break;
+                }
+                capped.push(c);
+            }
+            name = capped;
+        }
     }
+    name
+}
+
+fn is_windows_reserved(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name);
+    matches!(
+        stem.to_ascii_uppercase().as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    )
 }
 
 fn unique_entry(used: &mut HashSet<String>, base: &str, ext: &str) -> String {

@@ -972,3 +972,35 @@ fn only_the_owner_can_read_the_trash() {
         assert_eq!(mode(p), 0o600, "{}", p.display());
     }
 }
+
+#[test]
+fn tampered_revisions_are_clamped_and_truncated_on_restore() {
+    let f = Fixture::new();
+    let id = f.full_note();
+    f.trash.delete(&id, DeleteMode::Duragon).unwrap();
+    let before = now();
+    f.tamper(|v| {
+        let mut revs = Vec::new();
+        for i in 0..35 {
+            revs.push(json!({
+                "id": format!("tampered-rev-{i}"),
+                "title": format!("Rev {i}"),
+                "docJson": "{\"type\":\"doc\",\"content\":[]}",
+                "plain": format!("Rev {i}"),
+                "createdAt": if i % 2 == 0 { i64::MAX } else { i64::MIN }
+            }));
+        }
+        v["revisions"] = Value::Array(revs);
+    });
+
+    f.trash.restore(&id).unwrap();
+    let after = now();
+    let restored_revs = f.db.list_revisions(&id.to_string()).unwrap();
+    assert_eq!(restored_revs.len(), 20);
+    for r in &restored_revs {
+        assert!((0..=after).contains(&r.created_at), "unclamped revision time: {}", r.created_at);
+        if r.created_at != 0 {
+            assert!((before..=after).contains(&r.created_at), "unexpected time: {}", r.created_at);
+        }
+    }
+}
