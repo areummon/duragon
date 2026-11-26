@@ -7,7 +7,6 @@ use sherpa_onnx::{
 };
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use crate::audio::STT_RATE;
@@ -108,23 +107,20 @@ impl Recognizer {
 impl Whisper {
     /// Runs the binary once on a temporary 16 kHz WAV of `samples`.
     pub fn transcribe(&self, samples: &[f32]) -> Result<String> {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
         if samples.len() < STT_RATE as usize / 10 {
             return Ok(String::new());
         }
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let wav = std::env::temp_dir().join(format!("duragon-listen-{}-{n}.wav", std::process::id()));
-        wav::write(&wav, samples, STT_RATE)?;
+        let wav = tempfile::Builder::new().prefix("duragon-listen-").suffix(".wav").tempfile()?;
+        wav::write(wav.path(), samples, STT_RATE)?;
         let out = Command::new(&self.bin)
             .arg("-m")
             .arg(&self.model)
             .arg("-f")
-            .arg(&wav)
+            .arg(wav.path())
             .args(["-nt", "-np", "-l", &self.language, "-t", &threads().to_string()])
             .stdin(Stdio::null())
-            .output();
-        let _ = std::fs::remove_file(&wav);
-        let out = out.with_context(|| format!("running {}", self.bin.display()))?;
+            .output()
+            .with_context(|| format!("running {}", self.bin.display()))?;
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
             bail!("whisper.cpp failed: {}", err.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("no output"));
@@ -132,5 +128,30 @@ impl Whisper {
         let text = String::from_utf8_lossy(&out.stdout).split_whitespace().collect::<Vec<_>>().join(" ");
         // Silence comes back as a tag such as [BLANK_AUDIO].
         Ok(if text.starts_with('[') && text.ends_with(']') { String::new() } else { text })
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_file_planted_where_the_recording_goes_is_left_alone() {
+        let victim = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(victim.path(), b"keep me").unwrap();
+        let planted: Vec<PathBuf> = (0..4)
+            .map(|n| std::env::temp_dir().join(format!("duragon-listen-{}-{n}.wav", std::process::id())))
+            .collect();
+        for p in &planted {
+            let _ = std::fs::remove_file(p);
+            std::os::unix::fs::symlink(victim.path(), p).unwrap();
+        }
+        let whisper = Whisper { bin: "true".into(), model: "none".into(), language: "en".into() };
+        let text = whisper.transcribe(&vec![0.0; STT_RATE as usize]);
+        for p in &planted {
+            let _ = std::fs::remove_file(p);
+        }
+        assert_eq!(text.unwrap(), "");
+        assert!(std::fs::read(victim.path()).unwrap() == b"keep me", "the recording went through the planted link");
     }
 }

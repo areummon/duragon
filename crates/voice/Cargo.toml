@@ -20,7 +20,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sherpa-onnx = "=1.13.8"
 tar = "0.4"
+tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
 
-[dev-dependencies]
-tempfile = "3"
