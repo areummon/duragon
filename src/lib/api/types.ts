@@ -172,6 +172,7 @@ export interface Settings {
   providers: ProviderConfig[];
   sidebarOpen: boolean;
   deletedNotes: DeleteMode;
+  vimMode: boolean;
 }
 
 /** Where a deleted note goes: Duragon's own trash, the system's, or nowhere. */

@@ -150,13 +150,16 @@ fn settings_default_and_partial_json() {
     assert_eq!(s.read_model, "sonnet");
     assert!(s.learn_about_you);
     assert_eq!(s.speaking_speed, 1.0);
+    assert!(!s.vim_mode);
     let partial: Settings = serde_json::from_str(r#"{"appearance":"dark","pageWidth":720}"#).unwrap();
     assert_eq!(partial.appearance, Appearance::Dark);
     assert_eq!(partial.page_width, Some(720.0));
     assert_eq!(partial.reading_pace, ReadingPace::Regular);
+    assert!(!partial.vim_mode);
     let v = serde_json::to_value(&s).unwrap();
     assert_eq!(v["newNoteMode"], "thinks");
     assert!(v["pageWidth"].is_null());
+    assert_eq!(v["vimMode"], false);
 
     let db = Db::open_in_memory().unwrap();
     assert_eq!(db.get_settings().unwrap(), Settings::default());

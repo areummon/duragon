@@ -572,6 +572,7 @@ pub struct Settings {
     pub sidebar_open: bool,
     pub deleted_notes: DeleteMode,
     pub web_search_engine: Option<SearchEngine>,
+    pub vim_mode: bool,
 }
 
 impl Default for Settings {
@@ -608,6 +609,7 @@ impl Default for Settings {
             sidebar_open: false,
             deleted_notes: DeleteMode::Duragon,
             web_search_engine: None,
+            vim_mode: false,
         }
     }
 }

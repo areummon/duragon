@@ -2,7 +2,7 @@
   import Menu from 'lucide-svelte/icons/menu';
   import X from 'lucide-svelte/icons/x';
   import { app, toggleChat, toggleSidebar } from '../state/app.svelte';
-  import { kbd } from '../keys';
+  import { bindingLabel } from '../state/keymap.svelte';
   import { layout } from '../state/layout.svelte';
   import Blot from './Blot.svelte';
 </script>
@@ -16,7 +16,7 @@
   <span class="mark"><Blot size={14} seed="duragon" /></span>
   <span class="wordmark">duragon.</span>
   </div>
-  <button class="chat" class:away={app.chatOpen} tabindex={app.chatOpen ? -1 : 0} aria-pressed={app.chatOpen} title={kbd('J')} onclick={toggleChat}>
+  <button class="chat" class:away={app.chatOpen} tabindex={app.chatOpen ? -1 : 0} aria-pressed={app.chatOpen} title={bindingLabel('toggle-chat')} onclick={toggleChat}>
     <Blot size={13} />
     Chat
   </button>

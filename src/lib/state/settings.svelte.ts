@@ -13,7 +13,7 @@ const DEFAULTS: Settings = {
   ...DEFAULT_MODELS,
   readThinking: 'default', chatThinking: 'default', drawThinking: 'default',
   providers: DEFAULT_PROVIDERS.map((p) => ({ ...p, args: [...p.args], models: [...p.models] })),
-  sidebarOpen: false, deletedNotes: 'duragon',
+  sidebarOpen: false, deletedNotes: 'duragon', vimMode: false,
 };
 
 export const PAGE_WIDTH_DEFAULT = 690;

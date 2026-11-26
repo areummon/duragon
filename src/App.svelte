@@ -11,7 +11,7 @@
   import { initVoice, stopHandsFree, voice, voiceBlur, voiceKeydown, voiceKeyup } from './lib/state/voice.svelte';
   import { closeTop } from './lib/escape';
   import { cycleTab, topDialog } from './lib/focus';
-  import { isMod } from './lib/keys';
+  import { matchesAction } from './lib/state/keymap.svelte';
   import { enlarge, lightbox } from './lib/state/layout.svelte';
   import { threads } from './lib/state/threads.svelte';
   import {
@@ -35,8 +35,6 @@
       if (!e.isComposing) closeTop();
       return;
     }
-    const ctrl = e.ctrlKey && !e.metaKey;
-    const mod = isMod(e);
     const handled = (fn: () => void) => {
       e.preventDefault();
       fn();
@@ -46,13 +44,13 @@
       handled(() => {
         if (onTop || !topDialog()) act();
       });
-    if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') toggle(app.paletteOpen, () => (app.paletteOpen = !app.paletteOpen));
-    else if (mod && !e.shiftKey && e.key.toLowerCase() === 'j') toggle(false, toggleChat);
-    else if (mod && !e.shiftKey && e.key === ',') toggle(app.customizeOpen && !app.mindEditor, () => (app.customizeOpen = !app.customizeOpen));
-    else if (mod && e.shiftKey && e.code === 'KeyC') handled(() => void copyNote());
-    else if (mod && e.shiftKey && e.code === 'KeyE') handled(() => void exportNote('md'));
-    else if (mod && e.shiftKey && e.code === 'Period') handled(() => void toggleJustMyWords());
-    else if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'n') toggle(false, () => void newNote());
+    if (matchesAction(e, 'find-note')) toggle(app.paletteOpen, () => (app.paletteOpen = !app.paletteOpen));
+    else if (matchesAction(e, 'toggle-chat')) toggle(false, toggleChat);
+    else if (matchesAction(e, 'open-customize')) toggle(app.customizeOpen && !app.mindEditor, () => (app.customizeOpen = !app.customizeOpen));
+    else if (matchesAction(e, 'copy-note')) handled(() => void copyNote());
+    else if (matchesAction(e, 'export-note')) handled(() => void exportNote('md'));
+    else if (matchesAction(e, 'just-my-words')) handled(() => void toggleJustMyWords());
+    else if (matchesAction(e, 'new-note')) toggle(false, () => void newNote());
   }
 </script>
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import CircleHelp from 'lucide-svelte/icons/circle-help';
+  import Keyboard from 'lucide-svelte/icons/keyboard';
   import KeyRound from 'lucide-svelte/icons/key-round';
   import Palette from 'lucide-svelte/icons/palette';
   import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
@@ -17,6 +18,7 @@
   import AppearancePage from './AppearancePage.svelte';
   import GeneralPage from './GeneralPage.svelte';
   import HelpPage from './HelpPage.svelte';
+  import KeyboardPage from './KeyboardPage.svelte';
   import MindsPage from './MindsPage.svelte';
   import ProvidersPage from './ProvidersPage.svelte';
   import VoicePage from './VoicePage.svelte';
@@ -27,6 +29,7 @@
     { id: 'general', label: 'General', title: 'General', icon: SlidersHorizontal },
     { id: 'appearance', label: 'Appearance', title: 'Appearance', icon: Palette },
     { id: 'providers', label: 'Providers', title: 'Providers', icon: KeyRound },
+    { id: 'keyboard', label: 'Keyboard', title: 'Keyboard', icon: Keyboard },
     { id: 'minds', label: 'Minds', title: 'Minds', icon: Users },
     { id: 'about', label: 'About you', title: 'About you', icon: User },
     { id: 'voice', label: 'Voice', title: 'Voice', icon: Volume2 },
@@ -83,6 +86,8 @@
                 <AppearancePage />
               {:else if app.customizePage === 'providers'}
                 <ProvidersPage />
+              {:else if app.customizePage === 'keyboard'}
+                <KeyboardPage />
               {:else if app.customizePage === 'minds'}
                 <MindsPage />
               {:else if app.customizePage === 'about'}

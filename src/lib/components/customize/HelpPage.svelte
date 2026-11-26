@@ -1,30 +1,30 @@
 <script lang="ts">
-  import { kbd } from '../../keys';
+  import { bindingLabel } from '../../state/keymap.svelte';
 
-  const KEYS: [string, string][] = [
-    [kbd('K'), 'Find a note, or name a new one'],
-    [kbd('N'), 'New note'],
+  const KEYS = $derived<[string, string][]>([
+    [bindingLabel('find-note'), 'Find a note, or name a new one'],
+    [bindingLabel('new-note'), 'New note'],
     ['/', 'Commands: headings, lists, quote, code block, divider'],
     ['---', 'A divider'],
     ['```', 'A code block. ``` and Enter on its last line closes it'],
     ['Esc', 'Close the menu, panel or dialog on top'],
     ['Tab', 'Move to the next control, or indent in a list or code'],
     ['Shift Tab', 'Move back, or outdent'],
-    [kbd('J'), 'Open the chat'],
-    [kbd(','), 'Customize'],
-    [kbd('C', true), 'Copy this note'],
-    [kbd('E', true), 'Export this note'],
-    [kbd('.', true), 'Just my words'],
+    [bindingLabel('toggle-chat'), 'Open the chat'],
+    [bindingLabel('open-customize'), 'Customize'],
+    [bindingLabel('copy-note'), 'Copy this note'],
+    [bindingLabel('export-note'), 'Export this note'],
+    [bindingLabel('just-my-words'), 'Just my words'],
     ['Alt', 'Hold to talk. Tap twice for hands-free'],
-    [kbd('↵'), 'With words selected: ask Duragon about them'],
-  ];
+    [bindingLabel('riddle-selection'), 'With words selected: ask Duragon about them'],
+  ]);
 </script>
 
 <p class="intro">Write in the note. Duragon reads along and asks in the margin. Start a line with its name and it answers right under it. Select words to ask about them, or open the chat to talk about the whole note.</p>
 
 <h4>Shortcuts</h4>
 <dl>
-  {#each KEYS as [k, what] (k)}<div><dt>{k}</dt><dd>{what}</dd></div>{/each}
+  {#each KEYS as [k, what] (what)}<div><dt>{k}</dt><dd>{what}</dd></div>{/each}
 </dl>
 
 <h4>Your notes</h4>

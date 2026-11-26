@@ -19,9 +19,10 @@
   import { TEXT_COLORS } from '../editor/textcolor';
   import { selectionOccurrence } from '../editor/plain';
   import { closeOnEscape } from '../escape';
-  import { isMod, isTab, kbd } from '../keys';
+  import { isTab, kbd } from '../keys';
   import { rise } from '../motion/transitions';
   import { app } from '../state/app.svelte';
+  import { bindingLabel, matchesAction } from '../state/keymap.svelte';
   import { MARGIN_GAP, marginWidth, selectionUi } from '../state/layout.svelte';
   import { riddlerName } from '../state/riddler';
 
@@ -94,7 +95,7 @@
     };
     // Taken before the editor sees it, whose own Mod-Enter would replace the selected words with a line break.
     const send = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter' || !isMod(e) || !sel || asking || !ed.view.hasFocus()) return;
+      if (!sel || asking || !ed.view.hasFocus() || !matchesAction(e, 'riddle-selection')) return;
       e.preventDefault();
       e.stopPropagation();
       void fire('riddle');
@@ -205,7 +206,7 @@
         <input bind:this={input} bind:value={question} placeholder="Ask {riddlerName()} about this…" aria-label="Your question" />
       </form>
     {:else}
-      <button class="act" onclick={() => fire('riddle')}><span>{riddlerName()} this</span><span class="sub">{kbd('↵')}</span></button>
+      <button class="act" onclick={() => fire('riddle')}><span>{riddlerName()} this</span><span class="sub">{bindingLabel('riddle-selection')}</span></button>
       <button class="act" onclick={startAsk}><span>Ask {riddlerName()}</span><span class="sub">Your own question</span></button>
       <button class="act" onclick={() => fire('visualize')}><span>Visualize</span><span class="sub">See it drawn out</span></button>
     {/if}

@@ -18,7 +18,7 @@
   import { settings } from '../state/settings.svelte';
   import { closeOnEscape } from '../escape';
   import { focusLost } from '../focus';
-  import { kbd } from '../keys';
+  import { bindingLabel } from '../state/keymap.svelte';
   import { unfold, veil } from '../motion/transitions';
   import Blot from './Blot.svelte';
   import { preloadCustomizeDialog } from './customize/preload';
@@ -199,7 +199,7 @@
 <nav class="sidebar" class:open={app.sidebarOpen} class:dragging={drag !== null} inert={!app.sidebarOpen} aria-label="Notes" onmouseleave={leave}>
   <div class="top">
     <button class="row action" onclick={() => (app.paletteOpen = true)}>
-      <Search size={15} strokeWidth={1.5} /><span>Find or start a note</span><span class="kbd">{kbd('K')}</span>
+      <Search size={15} strokeWidth={1.5} /><span>Find or start a note</span><span class="kbd">{bindingLabel('find-note')}</span>
     </button>
     <button class="row action" onclick={() => newNote()}>
       <Plus size={15} strokeWidth={1.5} /><span>New note</span>

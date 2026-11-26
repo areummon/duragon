@@ -59,6 +59,7 @@ const DEFAULT_SETTINGS: Settings = {
   providers: DEFAULT_PROVIDERS.map((p) => ({ ...p, args: [...p.args], models: [...p.models] })),
   sidebarOpen: false,
   deletedNotes: 'duragon',
+  vimMode: false,
 };
 
 const uid = () => crypto.randomUUID();
