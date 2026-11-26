@@ -164,7 +164,7 @@ export const stopHandsFree = () => {
 
 let altDown = false;
 let altUsed = false;
-let lastDown = 0;
+let lastDown = -Infinity;
 let swallow = false;
 let holdSince = 0;
 const MIN_HOLD_MS = 400;
@@ -212,7 +212,7 @@ export function voiceKeydown(e: KeyboardEvent) {
     if (voice.mode === 'hold') end(false);
     begin(true);
     swallow = true;
-    lastDown = 0;
+    lastDown = -Infinity;
     return;
   }
   holdSince = now;
