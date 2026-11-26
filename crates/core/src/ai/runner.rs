@@ -275,7 +275,11 @@ pub(super) async fn cancellable<T>(key: Option<CancelKey>, call: impl Future<Out
 /// Runs an AI request against whichever provider is configured, with shared cancellation & timeout handling.
 /// Emails and keys in what is sent are masked, and whole again in the answer.
 pub async fn run_ai(mut req: AiRequest) -> Result<Value, AiError> {
-    let mut veil = Veil::new(req.api_key.as_deref());
+    let mut veil = Veil::new(
+        [req.api_key.as_deref(), req.web_search.as_ref().map(SearchClient::api_key)]
+            .into_iter()
+            .flatten(),
+    );
     req.system_prompt = veil.cover(&req.system_prompt);
     req.payload = veil.cover(&req.payload);
     req.system_prompt.push_str(veil.note());

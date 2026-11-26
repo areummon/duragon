@@ -86,6 +86,10 @@ impl SearchClient {
         self.engine
     }
 
+    pub(super) fn api_key(&self) -> &str {
+        &self.api_key
+    }
+
     pub fn resolve(pinned: Option<SearchEngine>, store: Option<&CredentialsStore>) -> Option<Self> {
         let keys: Vec<(SearchEngine, Option<String>)> = SearchEngine::ALL
             .into_iter()
@@ -342,8 +346,13 @@ pub async fn run_web_search_tool(client: &SearchClient, args: &Value) -> String 
     if query.is_empty() {
         return "web_search failed: query is empty".into();
     }
+    let masked_query = super::veil::mask_with(query, &[client.api_key()]);
+    let masked_query = masked_query.trim();
+    if masked_query.is_empty() {
+        return "web_search failed: query is empty".into();
+    }
     let count = args.get("count").and_then(Value::as_u64).map(|n| n as usize).unwrap_or(5);
-    match client.search(query, count).await {
+    match client.search(masked_query, count).await {
         Ok(hits) => serde_json::to_string(&hits).unwrap_or_else(|_| "[]".into()),
         Err(err) => format!("web_search failed: {err}"),
     }

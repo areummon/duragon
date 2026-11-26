@@ -153,6 +153,31 @@ impl CredentialsStore {
     }
 }
 
+pub fn validate_base_url(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("Address cannot be empty".into());
+    }
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|_| "Address must be http(s) with no credentials, query, or fragment".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("Address must use http or https".into());
+    }
+    if parsed.host_str().is_none() {
+        return Err("Address must include a host".into());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("Address must not contain embedded credentials".into());
+    }
+    if parsed.query().is_some() {
+        return Err("Address must not contain a query string".into());
+    }
+    if parsed.fragment().is_some() {
+        return Err("Address must not contain a fragment".into());
+    }
+    Ok(trimmed.trim_end_matches('/').to_string())
+}
+
 pub fn validate_search_key(engine: SearchEngine, raw: &str) -> Result<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -251,6 +276,15 @@ pub fn save_settings(
     settings: &Settings,
     allow: impl FnOnce(&Asks) -> bool,
 ) -> Result<()> {
+    for provider in &settings.providers {
+        if provider.kind.needs_key() || provider.kind.is_local_server() {
+            if let Some(url) = provider.base_url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
+                if let Err(reason) = validate_base_url(url) {
+                    bail!("{}: {reason}", provider.name);
+                }
+            }
+        }
+    }
     let asks = asks(db.stored_settings()?.as_ref(), settings);
     if !asks.is_empty() && !allow(&asks) {
         bail!("The change was not allowed");

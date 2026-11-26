@@ -8,6 +8,7 @@ use super::notes_mcp;
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, gemini_schema, has_required, json_instruction, strict_schema, strip_nulls};
 use super::search::run_web_search_tool;
+use crate::credentials::validate_base_url;
 use crate::model::ThinkingLevel;
 
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
@@ -43,11 +44,11 @@ fn require_key(req: &AiRequest) -> Result<&str, AiError> {
 }
 
 /// Only a built-in provider may have no address, because its key belongs to the default host.
-fn base_url<'a>(req: &'a AiRequest, default: &'a str) -> Result<&'a str, AiError> {
+fn base_url(req: &AiRequest, default: &str) -> Result<String, AiError> {
     let set = req.provider.base_url.as_deref().map(str::trim).filter(|u| !u.is_empty());
     match set {
-        Some(url) => Ok(url.trim_end_matches('/')),
-        None if req.provider.builtin => Ok(default),
+        Some(url) => validate_base_url(url).map_err(|reason| AiError::Failed(format!("{}: {reason}", req.provider.name))),
+        None if req.provider.builtin => Ok(default.to_string()),
         None => fail(format!("{} has no address. Add it in Customize → Providers.", req.provider.name)),
     }
 }

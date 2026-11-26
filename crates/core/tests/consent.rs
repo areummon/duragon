@@ -122,7 +122,6 @@ fn a_new_address_is_asked_about_once_and_named_by_its_host() {
     let app = App::new();
     for (settings, shown) in [
         (with(api("mine", "https://api.example.com/v1")), "api.example.com, for Mine\nhttps://api.example.com/v1"),
-        (with(api("mine", "https://api.openai.com@evil.com/v1")), "evil.com, for Mine\nhttps://api.openai.com@evil.com/v1"),
         (with(ProviderConfig { kind: ProviderKind::Local, ..api("mine", "http://10.0.0.9:1234") }), "10.0.0.9, for Mine\nhttp://10.0.0.9:1234"),
         (preset("ollama", |p| p.base_url = Some("http://192.168.1.5:11434".into())), "192.168.1.5, for Ollama\nhttp://192.168.1.5:11434"),
     ] {
@@ -132,6 +131,12 @@ fn a_new_address_is_asked_about_once_and_named_by_its_host() {
         let changed = Settings { just_my_words: !settings.just_my_words, ..settings };
         assert!(app.save(&changed, false).0.is_empty(), "{shown} was asked about again");
     }
+    let spoofed = with(api("mine", "https://api.openai.com@evil.com/v1"));
+    assert_eq!(
+        duragon_core::consent::asks(None, &spoofed).addresses,
+        vec!["evil.com, for Mine\nhttps://api.openai.com@evil.com/v1"]
+    );
+    assert!(app.save(&spoofed, true).1.is_err());
 }
 
 #[test]

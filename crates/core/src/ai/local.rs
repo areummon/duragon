@@ -67,13 +67,15 @@ fn fail<T>(msg: impl Into<String>) -> Result<T, AiError> {
 
 impl Api {
     fn of(provider: &ProviderConfig) -> Result<Self, AiError> {
-        let Some(url) = provider.base_url.as_deref().map(|u| u.trim().trim_end_matches('/')).filter(|u| !u.is_empty()) else {
+        let Some(raw) = provider.base_url.as_deref().map(str::trim).filter(|u| !u.is_empty()) else {
             return fail(format!("{} has no address. Add it in Customize → Providers.", provider.name));
         };
-        let root = url.strip_suffix("/v1").unwrap_or(url);
+        let url = credentials::validate_base_url(raw)
+            .map_err(|reason| AiError::Failed(format!("{}: {reason}", provider.name)))?;
+        let root = url.strip_suffix("/v1").unwrap_or(&url);
         Ok(match provider.kind {
             ProviderKind::Ollama => Api::Ollama(root.into()),
-            _ if root.split("://").nth(1).is_some_and(|rest| rest.contains('/')) => Api::OpenAi(url.into()),
+            _ if root.split("://").nth(1).is_some_and(|rest| rest.contains('/')) => Api::OpenAi(url),
             _ => Api::OpenAi(format!("{root}/v1")),
         })
     }

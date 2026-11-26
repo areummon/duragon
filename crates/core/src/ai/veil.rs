@@ -38,10 +38,13 @@ fn email_around(text: &str, at: usize) -> Option<Range<usize>> {
         .then(|| at - name.len()..at + 1 + host.len())
 }
 
-fn private_parts(text: &str, secret: Option<&str>) -> Vec<(Range<usize>, Kind)> {
+fn private_parts<S: AsRef<str>>(text: &str, secrets: &[S]) -> Vec<(Range<usize>, Kind)> {
     let mut parts: Vec<(Range<usize>, Kind)> = vec![];
-    if let Some(secret) = secret {
-        parts.extend(text.match_indices(secret).map(|(i, s)| (i..i + s.len(), Kind::Key)));
+    for secret in secrets {
+        let secret = secret.as_ref().trim();
+        if secret.len() >= 8 {
+            parts.extend(text.match_indices(secret).map(|(i, s)| (i..i + s.len(), Kind::Key)));
+        }
     }
     let word = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
     let mut from = 0;
@@ -66,10 +69,10 @@ fn private_parts(text: &str, secret: Option<&str>) -> Vec<(Range<usize>, Kind)> 
     parts
 }
 
-fn replaced(text: &str, secret: Option<&str>, mut by: impl FnMut(&str, Kind) -> String) -> String {
+fn replaced<S: AsRef<str>>(text: &str, secrets: &[S], mut by: impl FnMut(&str, Kind) -> String) -> String {
     let mut out = String::with_capacity(text.len());
     let mut from = 0;
-    for (range, kind) in private_parts(text, secret) {
+    for (range, kind) in private_parts(text, secrets) {
         out.push_str(&text[from..range.start]);
         out.push_str(&by(&text[range.clone()], kind));
         from = range.end;
@@ -80,24 +83,35 @@ fn replaced(text: &str, secret: Option<&str>, mut by: impl FnMut(&str, Kind) -> 
 
 /// Masks for good, where the answer can't be mended.
 pub(super) fn mask(text: &str) -> String {
-    replaced(text, None, |_, kind| format!("[{}]", kind.name()))
+    mask_with(text, &[])
+}
+
+/// Masks for good, including any caller-supplied runtime secrets.
+pub(super) fn mask_with(text: &str, secrets: &[&str]) -> String {
+    replaced(text, secrets, |_, kind| format!("[{}]", kind.name()))
 }
 
 /// What one call keeps from a model, and what stands for it.
 pub(super) struct Veil {
-    secret: Option<String>,
+    secrets: Vec<String>,
     hidden: Vec<(String, String)>,
 }
 
 impl Veil {
-    /// `secret` is the key the call itself carries, however it looks.
-    pub(super) fn new(secret: Option<&str>) -> Self {
-        Self { secret: secret.map(str::trim).filter(|s| s.len() >= 8).map(String::from), hidden: vec![] }
+    /// `secrets` are the keys the call itself carries, however they look.
+    pub(super) fn new<'a>(secrets: impl IntoIterator<Item = &'a str>) -> Self {
+        let secrets = secrets
+            .into_iter()
+            .map(str::trim)
+            .filter(|s| s.len() >= 8)
+            .map(String::from)
+            .collect();
+        Self { secrets, hidden: vec![] }
     }
 
     pub(super) fn cover(&mut self, text: &str) -> String {
         let hidden = &mut self.hidden;
-        replaced(text, self.secret.as_deref(), |found, kind| {
+        replaced(text, &self.secrets, |found, kind| {
             if let Some((_, stand_in)) = hidden.iter().find(|(f, _)| f == found) {
                 return stand_in.clone();
             }

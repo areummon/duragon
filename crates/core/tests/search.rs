@@ -543,3 +543,45 @@ async fn end_to_end_tool_loop_openai_and_ollama() {
     assert_eq!(out["message"], "Local found Rust 2026.");
     assert_eq!(out["sources"][0]["url"], "https://rust-lang.org/2026");
 }
+
+#[tokio::test]
+async fn web_search_tool_masks_emails_known_keys_and_active_search_key() {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let seen_tx = seen.clone();
+    let server = StubServer::start(move |req, _| {
+        let body: Value = serde_json::from_str(&req.body).unwrap();
+        seen_tx
+            .lock()
+            .unwrap()
+            .push(body["query"].as_str().unwrap_or_default().to_string());
+        (
+            200,
+            json!({
+                "results": [
+                    { "title": "Safe Hit", "url": "https://example.com/safe", "highlights": ["ok"] }
+                ]
+            })
+            .to_string(),
+        )
+    });
+
+    let active_key = "exa_plain_secret_token_99";
+    let client = SearchClient::with_base_url(SearchEngine::Exa, active_key.into(), server.url);
+    let raw_query = format!(
+        "contact ana.perez@example.com with sk-proj-abc123DEF456ghi789 tvly-1234567890abcdef and {active_key} rust docs"
+    );
+
+    let out = run_web_search_tool(&client, &json!({ "query": raw_query, "count": 2 })).await;
+    let hits: Vec<SearchHit> = serde_json::from_str(&out).unwrap();
+    assert_eq!(hits.len(), 1);
+
+    let queries = seen.lock().unwrap();
+    assert_eq!(queries.len(), 1);
+    let sent = &queries[0];
+    for leaked in ["ana.perez@example.com", "sk-proj-abc123DEF456ghi789", "tvly-1234567890abcdef", active_key] {
+        assert!(!sent.contains(leaked), "leaked {leaked} in outgoing search query: {sent}");
+    }
+    assert!(sent.contains("[email]"), "expected masked email in: {sent}");
+    assert!(sent.contains("[key]"), "expected masked key in: {sent}");
+    assert!(sent.contains("rust docs"), "expected non-secret terms preserved in: {sent}");
+}

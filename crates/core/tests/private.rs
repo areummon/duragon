@@ -2,7 +2,9 @@
 mod common;
 use common::fixture;
 use duragon_core::ai::notes_mcp::{NotesSearch, NotesTool};
+use duragon_core::ai::search::SearchClient;
 use duragon_core::ai::{notes_mcp, run_ai, AiRequest};
+use duragon_core::credentials::{self, CredentialsStore};
 use duragon_core::db::Db;
 use duragon_core::model::*;
 use serde_json::{json, Value};
@@ -170,4 +172,64 @@ async fn codex_and_antigravity_run_without_their_telemetry() {
     assert_eq!(std::fs::read_to_string(dir.path().join("args")).unwrap(), "acp\n--disable-telemetry\n");
     let sent = std::fs::read_to_string(dir.path().join("initialize")).unwrap();
     assert!(!sent.to_lowercase().contains("duragon"), "{sent}");
+}
+
+#[tokio::test]
+async fn prefixless_active_search_key_is_masked_and_restored() {
+    let (base, kept) = echo();
+    let search_key = "exa_plain_secret_token_99";
+    let payload = format!("Search token is {search_key} and LLM key is plainlookingsecret.");
+    let mut req = request(ProviderKind::OpenAi);
+    req.provider.base_url = Some(base);
+    req.payload = payload.clone();
+    req.web_search = Some(SearchClient::new(SearchEngine::Exa, search_key.into()));
+
+    let out = run_ai(req).await.unwrap();
+    assert_eq!(out["quote"], payload);
+
+    let sent = kept.lock().unwrap()[0].clone();
+    let (_, body) = sent.split_once("\r\n\r\n").unwrap();
+    assert!(!body.contains(search_key), "active search key leaked to LLM: {body}");
+    assert!(!body.contains("plainlookingsecret"), "LLM key leaked to LLM: {body}");
+}
+
+#[tokio::test]
+async fn malformed_provider_base_urls_are_rejected_at_save_and_call() {
+    let bad_urls = [
+        "https://user:pass@example.com/v1",
+        "https://example.com/v1?a=1",
+        "https://example.com/v1#frag",
+        "file:///etc/passwd",
+    ];
+
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open_in_memory().unwrap();
+    let store = CredentialsStore::new(dir.path().join("credentials.json"));
+
+    for bad in bad_urls {
+        for kind in [ProviderKind::OpenAi, ProviderKind::Ollama] {
+            let mut settings = Settings::default();
+            settings.providers.push(ProviderConfig {
+                id: "custom-bad".into(),
+                name: "Custom Bad".into(),
+                kind,
+                base_url: Some(bad.into()),
+                command: None,
+                args: vec![],
+                env_var: None,
+                models: vec![],
+                builtin: false,
+            });
+            let err = credentials::save_settings(&db, &store, &settings, |_| true)
+                .expect_err(&format!("save_settings should reject {bad} for {kind:?}"));
+            assert!(err.to_string().contains("Custom Bad"), "{err}");
+
+            let mut req = request(kind);
+            req.provider.base_url = Some(bad.into());
+            let err = run_ai(req)
+                .await
+                .expect_err(&format!("run_ai should reject {bad} for {kind:?}"));
+            assert!(err.to_string().contains("One"), "{err}");
+        }
+    }
 }
