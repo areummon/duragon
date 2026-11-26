@@ -27,21 +27,30 @@ export const chosenVoice = (): VoiceOption | undefined =>
 export const chosenListenModel = (): VoiceOption | undefined =>
   voice.listenModels.find((m) => m.id === settings.value.listenModel) ?? voice.listenModels[0];
 
+const asked = { voices: 0, listenModels: 0 };
+/** Fetches one list, and keeps it unless a newer fetch of that list began meanwhile. */
+async function load(key: keyof typeof asked, list: () => Promise<VoiceOption[]>) {
+  const n = ++asked[key];
+  const got = await list();
+  if (n === asked[key]) voice[key] = got;
+  return got;
+}
+const loadVoices = (system: boolean) => load('voices', async () => (await getBackend()).listVoices(system));
+const loadListenModels = () => load('listenModels', async () => (await getBackend()).listListenModels());
+
 /** `system` lists Speech Dispatcher's voices again. */
 export async function refreshVoices(system: boolean) {
-  const be = await getBackend();
-  [voice.voices, voice.listenModels] = await Promise.all([be.listVoices(system), be.listListenModels()]);
+  await Promise.all([loadVoices(system), loadListenModels()]);
 }
 
 let started = false;
 const spoken = new Set<string>();
 
+/** Speech Dispatcher's voices are listed when first needed: by Customize, or by the first thing spoken. */
 export async function initVoice() {
   if (started) return;
   started = true;
   const be = await getBackend();
-  voice.status = await be.voiceStatus();
-  await refreshVoices(false);
   be.on('voice:status', (s) => {
     const was = voice.status;
     voice.status = s;
@@ -66,10 +75,14 @@ export async function initVoice() {
   };
   be.on('ai:thread', (t) => t.messages.forEach((m) => autoSpeak(t.noteId, m.id, m.author, m.text)));
   be.on('ai:message', (m) => autoSpeak(m.noteId, m.id, m.author, m.text));
+
+  voice.status = await be.voiceStatus();
+  await loadListenModels();
 }
 
 export async function readAloud(messageId: string | null, text: string, voiceId?: string) {
-  if (!voice.voices.length) return needModel('Speaking needs a voice. Get one in Customize → Voice models.');
+  const voices = voice.voices.length ? voice.voices : await loadVoices(false);
+  if (!voices.length) return needModel('Speaking needs a voice. Get one in Customize → Voice models.');
   try {
     await (await getBackend()).speak(messageId, text, voiceId);
   } catch (e) {
