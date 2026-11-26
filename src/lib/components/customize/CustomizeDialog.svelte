@@ -25,15 +25,15 @@
 
   type NavIcon = typeof SlidersHorizontal;
 
-  const NAV: { id: CustomizePage; label: string; title: string; icon: NavIcon }[] = [
+  const NAV: { id: CustomizePage; label: string; title: string; icon: NavIcon; gap?: 'group' | 'bottom' }[] = [
     { id: 'general', label: 'General', title: 'General', icon: SlidersHorizontal },
     { id: 'appearance', label: 'Appearance', title: 'Appearance', icon: Palette },
-    { id: 'providers', label: 'Providers', title: 'Providers', icon: KeyRound },
     { id: 'keyboard', label: 'Keyboard', title: 'Keyboard', icon: Keyboard },
+    { id: 'providers', label: 'Providers', title: 'Providers', icon: KeyRound, gap: 'group' },
     { id: 'minds', label: 'Minds', title: 'Minds', icon: Users },
     { id: 'about', label: 'About you', title: 'About you', icon: User },
     { id: 'voice', label: 'Voice', title: 'Voice', icon: Volume2 },
-    { id: 'help', label: 'Help', title: 'Help', icon: CircleHelp },
+    { id: 'help', label: 'Help', title: 'Help', icon: CircleHelp, gap: 'bottom' },
   ];
 
   let card = $state<HTMLElement>();
@@ -67,7 +67,13 @@
       <nav aria-label="Settings sections">
         {#each NAV as n (n.id)}
           {@const Icon = n.icon}
-          <button class:active={app.customizePage === n.id} aria-current={app.customizePage === n.id ? 'page' : undefined} onclick={() => (app.customizePage = n.id)}>
+          <button
+            class:active={app.customizePage === n.id}
+            class:gap-group={n.gap === 'group'}
+            class:gap-bottom={n.gap === 'bottom'}
+            aria-current={app.customizePage === n.id ? 'page' : undefined}
+            onclick={() => (app.customizePage = n.id)}
+          >
             <span class="nav-icon" aria-hidden="true"><Icon size={15} strokeWidth={1.6} /></span>
             <span class="nav-label">{n.label}</span>
             {#if n.id === 'providers' && providersAttention}<i class="nav-dot" aria-hidden="true"></i>{/if}
@@ -129,25 +135,32 @@
   }
   nav {
     flex: none;
-    width: 220px;
+    width: 216px;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 18px 10px;
+    padding: 20px 10px 14px;
+    background: var(--shelf);
     border-right: 1px solid var(--rule);
   }
   nav button {
     display: flex;
     align-items: center;
     gap: 10px;
-    height: 36px;
-    padding: 0 12px;
-    border: 1px solid transparent;
-    border-radius: 9px;
+    height: 34px;
+    padding: 0 11px;
+    border-radius: 8px;
     text-align: left;
-    font-size: 14px;
+    font-size: 13.5px;
+    line-height: 1.3;
     color: var(--graphite);
-    transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui), border-color 150ms var(--ease-ui);
+    transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui);
+  }
+  nav button.gap-group {
+    margin-top: 12px;
+  }
+  nav button.gap-bottom {
+    margin-top: auto;
   }
   .nav-icon {
     flex: none;
@@ -167,18 +180,34 @@
     border-radius: 50%;
     background: var(--bulb);
   }
-  nav button:hover { color: var(--ink); }
-  nav button:hover .nav-icon { color: var(--ink); }
-  nav button.active { color: var(--ink); background: var(--riddle-wash); border-color: var(--rule); }
+  @media (hover: hover) and (pointer: fine) {
+    nav button:hover { color: var(--ink); background: var(--riddle-wash); }
+    nav button:hover .nav-icon { color: var(--ink); }
+  }
+  nav button.active { color: var(--ink); font-weight: 500; background: var(--riddle-wash); }
   nav button.active .nav-icon { color: var(--ink); }
   .main { position: relative; flex: 1; min-width: 0; }
-  .x { position: absolute; top: 24px; right: 22px; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; color: var(--graphite); }
-  .x:hover { color: var(--ink); }
-  .scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 36px 52px 36px 36px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
-  h2 { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; }
-  .page { margin-top: 20px; }
+  .x {
+    position: absolute;
+    top: 28px;
+    right: 28px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    color: var(--faint);
+    transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .x:hover { color: var(--ink); background: var(--shelf); }
+  }
+  .scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 34px 40px 40px 40px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
+  h2 { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; letter-spacing: -0.01em; }
+  .page { margin-top: 22px; }
   @media (max-width: 700px) {
-    nav { width: 150px; }
+    nav { width: 156px; }
     .scroll { padding: 28px 20px; }
   }
 </style>

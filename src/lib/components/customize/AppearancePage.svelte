@@ -18,7 +18,7 @@
 </script>
 
 <div class="group">
-  <h4 id="g-app">Appearance</h4>
+  <h4 id="g-app">Theme</h4>
   <div class="grid three" role="radiogroup" aria-labelledby="g-app">
     {#each [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']] as const as [id, name] (id)}
       <Choice selected={s.appearance === id} onpick={() => set({ appearance: id })} title={name} />
