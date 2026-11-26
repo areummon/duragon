@@ -1,6 +1,6 @@
 # Duragon
 
-A quiet local-first notebook where an AI mind reads along. You write; it asks questions in the margin when something deserves a second look, answers right under any line that starts with "Duragon,", and sketches diagrams when a picture helps. It works with local CLIs (`claude`, `agy`, `codex`), HTTP APIs (Anthropic, OpenAI, Gemini, OpenRouter, custom OpenAI-compatible), or local models (Ollama / llama.cpp), keeps your notes in a local SQLite database, and does voice fully offline.
+A quiet local-first notebook where an AI mind reads along, based on and inspired by [Riddled](https://www.riddled.ai/). You write; it asks questions in the margin when something deserves a second look, answers right under any line that starts with "Duragon,", and sketches diagrams when a picture helps. It works with local CLIs (`claude`, `agy`, `codex`), HTTP APIs (Anthropic, OpenAI, Gemini, OpenRouter, custom OpenAI-compatible), or local models (Ollama / llama.cpp), keeps your notes in a local SQLite database, and does voice fully offline.
 
 Tauri 2 + Rust backend, Svelte 5 + TipTap frontend. Design notes live in `docs/`.
 
@@ -60,6 +60,10 @@ nix develop -c cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 `scripts/e2e/` drives the real desktop window through `tauri-driver` and makes real `claude` calls; see its README. `cargo test -p duragon-voice --test real_models -- --ignored` downloads the voice models and checks a speak-then-transcribe round trip.
+
+## Acknowledgments
+
+Duragon is based on the design, interaction model, and notebook philosophy of [Riddled](https://www.riddled.ai/). All credit for the original concept and experience goes to the Riddled team.
 
 ## License
 
