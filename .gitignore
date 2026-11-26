@@ -6,3 +6,4 @@ src-tauri/gen/
 .tools/
 docs/screenshots/
 .audit/
+.agents/
