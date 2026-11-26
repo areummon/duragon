@@ -188,7 +188,9 @@
               </div>
             </div>
             {#if errorRow === def.id && errorMessage}
-              <p class="row-error" role="alert">{errorMessage}</p>
+              <div class="row-error-wrap" transition:unfold={{ duration: 160 }}>
+                <p class="row-error" role="alert">{errorMessage}</p>
+              </div>
             {/if}
           </div>
         {/each}
@@ -323,14 +325,17 @@
     padding: 4px 2px;
     transition: color var(--dur-ui) var(--ease-ui);
   }
-  .action:hover {
-    color: var(--ink);
-  }
   .action.muted {
     color: var(--faint);
   }
-  .action.muted:hover {
-    color: var(--ink);
+  @media (hover: hover) and (pointer: fine) {
+    .action:hover,
+    .action.muted:hover {
+      color: var(--ink);
+    }
+  }
+  .row-error-wrap {
+    display: flow-root;
   }
   .row-error {
     margin: 0;
@@ -363,16 +368,30 @@
     line-height: 1;
     color: var(--graphite);
     text-box: trim-both cap alphabetic;
-    transition: color var(--dur-ui) var(--ease-ui), border-color var(--dur-ui) var(--ease-ui), background-color var(--dur-ui) var(--ease-ui);
+    transition:
+      color var(--dur-ui) var(--ease-ui),
+      border-color var(--dur-ui) var(--ease-ui),
+      background-color var(--dur-ui) var(--ease-ui),
+      transform 160ms var(--ease-step);
   }
-  .reset-all:hover:not(:disabled) {
-    color: var(--ink);
-    border-color: var(--riddle-line);
-    background: var(--riddle-wash);
+  @media (hover: hover) and (pointer: fine) {
+    .reset-all:hover:not(:disabled) {
+      color: var(--ink);
+      border-color: var(--riddle-line);
+      background: var(--riddle-wash);
+    }
+  }
+  .reset-all:active:not(:disabled) {
+    transform: scale(0.97);
   }
   .reset-all:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reset-all:active:not(:disabled) {
+      transform: none;
+    }
   }
 
   @media (max-width: 640px) {

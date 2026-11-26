@@ -294,10 +294,11 @@
   .help { margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--faint); }
   .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; font-size: 13px; line-height: 1.3; color: var(--graphite); }
   .docs { display: inline-flex; align-items: center; gap: 5px; color: var(--faint); text-decoration: none; transition: color 150ms var(--ease-ui); }
-  .docs:hover { color: var(--ink); }
   .push { margin-left: auto; }
   .quiet { flex: none; color: var(--graphite); transition: color 150ms var(--ease-ui); }
-  .quiet:hover { color: var(--ink); }
+  @media (hover: hover) and (pointer: fine) {
+    .docs:hover, .quiet:hover { color: var(--ink); }
+  }
   @media (prefers-reduced-motion: reduce) {
     .ghost:active { transform: none; }
     .chev, .trigger-chev { transition: none; }
