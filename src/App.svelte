@@ -66,6 +66,7 @@
     <div
       class="vim-pill"
       class:insert={vim.mode === 'insert'}
+      class:hidden={app.sidebarOpen || app.customizeOpen || app.paletteOpen || app.trashOpen || app.mindEditor !== null}
       role="status"
       aria-live="polite"
       data-testid="vim-mode-pill"
@@ -96,7 +97,7 @@
     position: fixed;
     left: 24px;
     bottom: 20px;
-    z-index: 25;
+    z-index: 5;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -112,6 +113,10 @@
     text-box: trim-both cap alphabetic;
     pointer-events: none;
     user-select: none;
+    transition: opacity 150ms var(--ease-ui);
+  }
+  .vim-pill.hidden {
+    opacity: 0;
   }
   .vim-pill.insert {
     color: var(--graphite);

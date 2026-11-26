@@ -30,6 +30,7 @@
 
   const VIM_DURAGON: [string, string][] = [
     ['gc', 'Chat'],
+    ['gs', 'Settings'],
     ['gw', 'Web'],
     ['gv', 'Voice'],
     ['gm', 'Reading mode'],

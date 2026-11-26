@@ -2,7 +2,7 @@ import { Extension, type Editor } from '@tiptap/core';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { Plugin, PluginKey, Selection, TextSelection, type EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import { app, toggleChat, toggleJustMyWords, updateMeta } from '../state/app.svelte';
+import { app, openCustomize, toggleChat, toggleJustMyWords, updateMeta } from '../state/app.svelte';
 import { settings } from '../state/settings.svelte';
 import { slash } from './slash.svelte';
 
@@ -474,6 +474,7 @@ function handlePendingNormal(view: EditorView, pending: string, key: string) {
   if (pending === 'g') {
     if (key === 'g') moveCursor(view, topOfDoc(state));
     else if (key === 'c') toggleChat();
+    else if (key === 's') openCustomize();
     else if (key === 'w' && app.note) void updateMeta({ webOn: !app.note.webOn });
     else if (key === 'v' && app.note) void updateMeta({ voiceOn: !app.note.voiceOn });
     else if (key === 'm' && app.note) void updateMeta({ mode: app.note.mode === 'thinks' ? 'asks' : 'thinks' });
