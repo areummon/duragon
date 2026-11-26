@@ -2,20 +2,18 @@
   import Check from 'lucide-svelte/icons/check';
   import Search from 'lucide-svelte/icons/search';
   import { onMount, tick } from 'svelte';
-  import { isReady, modelsOf, THINKING_LEVELS, type Job, type ProviderView } from '../../api/providers';
+  import { isReady, modelsOf, type Job, type ProviderView } from '../../api/providers';
   import type { ProviderConfig } from '../../api/types';
   import { rise } from '../../motion/transitions';
   import { settings, updateSettings } from '../../state/settings.svelte';
-  import Pills from './Pills.svelte';
 
   interface Props {
     job: Job;
     current: ProviderView;
     views: ProviderView[];
     onclose: () => void;
-    onsetup: () => void;
   }
-  let { job, current, views, onclose, onsetup }: Props = $props();
+  let { job, current, views, onclose }: Props = $props();
 
   interface Option {
     provider: ProviderConfig;
@@ -38,12 +36,21 @@
       const { provider } = view;
       const listed = modelsOf(view);
       const models = provider === current.provider && model && !listed.includes(model) ? [model, ...listed] : listed;
-      const matches = provider.name.toLowerCase().includes(q) ? (models.length ? models : ['']) : models.filter((m) => m.toLowerCase().includes(q));
-      return { label: provider.name, options: matches.map((m): Option => ({ provider, model: m, text: m || 'Type the name of its model' })) };
+      const matches = provider.name.toLowerCase().includes(q)
+        ? (models.length ? models : [''])
+        : models.filter((m) => m.toLowerCase().includes(q));
+      return {
+        label: provider.name,
+        options: matches.map((m): Option => ({ provider, model: m, text: m || 'Type the name of its model' })),
+      };
     });
-    const free = choices.filter((v) => typed && isReady(v) && !found.some((g) => g.options.some((o) => o.provider === v.provider && o.model === typed)));
-    return [...found, { label: `Use “${typed}” with`, options: free.map(({ provider }): Option => ({ provider, model: typed, text: provider.name })) }]
-      .filter((g) => g.options.length > 0);
+    const free = choices.filter(
+      (v) => typed && isReady(v) && !found.some((g) => g.options.some((o) => o.provider === v.provider && o.model === typed)),
+    );
+    return [
+      ...found,
+      { label: `Use “${typed}” with`, options: free.map(({ provider }): Option => ({ provider, model: typed, text: provider.name })) },
+    ].filter((g) => g.options.length > 0);
   });
   const options = $derived(groups.flatMap((g) => g.options));
 
@@ -61,6 +68,7 @@
   });
 
   function go(i: number) {
+    if (!options.length) return;
     index = (i + options.length) % options.length;
     const el = list?.querySelectorAll<HTMLElement>('.opt')[index];
     if (!list || !el) return;
@@ -94,9 +102,9 @@
   }
 </script>
 
-<div class="popover picker" role="dialog" aria-label="{job.name} model" tabindex="-1" onfocus={focusInput} transition:rise={{ y: -4, scale: 0.97, duration: 180 }}>
+<div class="popover picker" role="dialog" aria-label="{job.name} model" tabindex="-1" onfocus={focusInput} transition:rise={{ y: -4, scale: 0.97, duration: 160 }}>
   <label class="find">
-    <Search size={15} strokeWidth={1.5} />
+    <Search size={14} strokeWidth={1.5} />
     <input
       bind:this={input}
       bind:value={query}
@@ -106,49 +114,120 @@
       aria-expanded={options.length > 0}
       aria-controls="models-list"
       aria-activedescendant={options.length ? `model-${index}` : undefined}
-      aria-label="Find a model, or type its name"
-      placeholder="Find a model, or type its name"
+      aria-label="Filter or type a model name"
+      placeholder="Filter or type model…"
       spellcheck="false"
       autocomplete="off"
     />
   </label>
   <div class="opts" id="models-list" role="listbox" aria-label="Models" tabindex="-1" onfocus={focusInput} bind:this={list}>
     {#each groups as g}
-      <div role="group" aria-label={g.label}>
+      <div class="group" role="group" aria-label={g.label}>
         <div class="glabel" aria-hidden="true" title={g.label}>{g.label}</div>
         {#each g.options as o (`${o.provider.id} ${o.model}`)}
           {@const i = options.indexOf(o)}
-          <div id="model-{i}" class="opt" class:active={i === index} class:note={!o.model} role="option" aria-selected={i === index} aria-disabled={!o.model} tabindex="-1" title={o.text}
-            onpointerdown={(e) => e.preventDefault()} onclick={() => pick(o)} onmousemove={() => (index = i)} onkeydown={() => {}}>
+          <div
+            id="model-{i}"
+            class="opt"
+            class:active={i === index}
+            class:current={isCurrent(o)}
+            class:note={!o.model}
+            role="option"
+            aria-selected={i === index}
+            aria-disabled={!o.model}
+            tabindex="-1"
+            title={o.text}
+            onpointerdown={(e) => e.preventDefault()}
+            onclick={() => pick(o)}
+            onmousemove={() => (index = i)}
+            onkeydown={() => {}}
+          >
             <span class="what">{o.text}</span>
-            {#if isCurrent(o)}<span class="check" role="img" aria-label="In use"><Check size={15} strokeWidth={1.6} /></span>{/if}
+            {#if isCurrent(o)}<span class="check" role="img" aria-label="In use"><Check size={14} strokeWidth={1.6} /></span>{/if}
           </div>
         {/each}
       </div>
     {/each}
   </div>
-  <div class="think">
-    <div class="glabel" id="models-thinking">Thinking</div>
-    <Pills small labelledby="models-thinking" options={THINKING_LEVELS} value={settings.value[job.thinkingKey]} onpick={(id) => void updateSettings({ [job.thinkingKey]: id })} />
-  </div>
-  <div class="more"><button class="menu-item" onclick={onsetup}>Set up another provider</button></div>
 </div>
 
 <style>
-  .picker { outline: none; top: calc(100% - 6px); right: 8px; width: 340px; max-width: calc(100% - 16px); transform-origin: top right; }
-  .find { display: flex; align-items: center; gap: 9px; height: 40px; margin: -4px -4px 4px; padding: 0 14px; border-bottom: 1px solid var(--rule); color: var(--faint); }
+  .picker {
+    outline: none;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 280px;
+    max-width: calc(100vw - 32px);
+    padding: 4px;
+    border-radius: 12px;
+    transform-origin: top right;
+  }
+  .find {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    margin: -4px -4px 4px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--faint);
+  }
   .find :global(svg) { flex: none; }
-  .find input { flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; outline: none; font: inherit; font-size: 13.5px; color: var(--ink); }
+  .find input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    outline: none;
+    font: inherit;
+    font-size: 13px;
+    color: var(--ink);
+  }
   .find input::placeholder { color: var(--faint); opacity: 1; }
-  .opts { position: relative; outline: none; max-height: 232px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
-  @media (max-height: 699px) { .opts { max-height: 152px; } }
-  .opt { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 6px 10px; border-radius: 7px; font-size: 13.5px; line-height: 1.3; cursor: default; }
-  .opt.active { background: var(--shelf); }
+  .opts {
+    position: relative;
+    outline: none;
+    max-height: 248px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+  @media (max-height: 699px) { .opts { max-height: 184px; } }
+  .group + .group {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--rule);
+  }
+  .glabel {
+    padding: 4px 10px 3px;
+    font-size: 11.5px;
+    line-height: 1.3;
+    font-weight: 500;
+    color: var(--faint);
+  }
+  .opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.3;
+    color: var(--graphite);
+    cursor: default;
+  }
+  .opt.active {
+    background: var(--riddle-wash);
+    color: var(--ink);
+  }
+  .opt.current {
+    color: var(--ink);
+    font-weight: 500;
+  }
   .opt.note { color: var(--faint); }
   .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .check { display: grid; flex: none; color: var(--graphite); }
-  .think { margin: 4px -4px 0; padding: 10px 14px 12px; border-top: 1px solid var(--rule); }
-  .think .glabel { padding: 0 0 7px; }
-  .more { margin: 0 -4px -4px; padding: 4px; border-top: 1px solid var(--rule); }
-  .more .menu-item { font-size: 13.5px; line-height: 1.3; color: var(--graphite); }
+  .check { display: grid; flex: none; color: var(--ink); }
 </style>
