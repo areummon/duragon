@@ -7,7 +7,7 @@ Holding Alt writes what the writer says into the note, and a double tap listens 
 - `voice-models` installs Parakeet, Silero VAD and Kokoro one at a time, each with its own button, and lists what the computer already has.
 - `voice-hold` writes speech at the caret when Alt is released. With the caret in the title, the words go at the end of the note. It needs any speech-to-text model.
 - `voice-hands` starts hands-free on a double tap, writes each thing said as its own paragraph, and Escape or Alt stops it. It also needs Silero VAD.
-- `voice-aloud` reads a message aloud, from a thread (`margin-threads.md`) or, with the note's `Voice` on, as it arrives. Typing in the note stops it. It needs any voice.
+- `voice-aloud` reads a message aloud, from a thread (`margin-threads.md`) or, with the note's `Voice` on, as it arrives. Typing in the note stops it, also while it is about to begin. It needs any voice.
 
 ## How to get to it (user POV)
 
@@ -19,7 +19,8 @@ Holding Alt writes what the writer says into the note, and a double tap listens 
 
 Preconditions:
 
-- Baseline state from `README.md`. The mock starts with nothing of Duragon's installed, but with three Pico and three eSpeak NG voices and two whisper.cpp models (`base.en`, `small`), so Alt works from the start. It installs Parakeet in 3 s, Silero VAD in 0.6 s and Kokoro in 2 s, and fakes what it hears. It proves the UI, not the audio.
+- Baseline state from `README.md`. The mock starts with nothing of Duragon's installed, but with three Pico and three eSpeak NG voices and two whisper.cpp models (`base.en`, `small`), so Alt works from the start. It installs Parakeet in 3 s, Silero VAD in 0.6 s and Kokoro in 2 s, and fakes what it hears. A voice begins 0.3 s after it is asked to speak. It proves the UI, not the audio.
+- The voices are listed when Customize, Voice models or the first speech needs them, so `__duragon.voice.voices` is empty until then. The speech-to-text models are listed at start.
 - Press Alt with `agent-browser keydown Alt` and release it with `agent-browser keyup Alt`.
 - To see the empty pickers and the "needs a model" toasts, empty the lists after Customize has opened: `agent-browser eval '__duragon.voice.voices = []; __duragon.voice.listenModels = []'`. Opening Customize or Voice models lists them again.
 
