@@ -117,11 +117,33 @@ export interface ProviderCredentialStatus {
   error?: string | null;
 }
 
+export type SearchEngine = 'tavily' | 'brave' | 'exa' | 'firecrawl' | 'ollama';
+
+export interface SearchEngineCredentialStatus {
+  engine: SearchEngine;
+  label: string;
+  envVar: string;
+  docsUrl: string;
+  hasStoredKey: boolean;
+  maskedKey: string | null;
+  hasEnvKey: boolean;
+  error?: string | null;
+}
+
+export interface SearchStatus {
+  available: boolean;
+  engine: SearchEngine | null;
+  pinned: SearchEngine | null;
+  reason: string;
+  engines: SearchEngineCredentialStatus[];
+}
+
 export interface Settings {
   newNoteMode: ReadingMode;
   readingPace: 'regular' | 'slow';
   questionPlacement: 'both' | 'right' | 'marks';
   webInNewNotes: boolean;
+  webSearchEngine: SearchEngine | null;
   voiceInNewNotes: boolean;
   /** `kokoro/<voice>` or `speechd/<module>/<name>`; a bare name is a Kokoro voice. */
   voiceName: string;

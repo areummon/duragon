@@ -6,16 +6,33 @@ import {
   BUILTIN_RIDDLER_ID,
   type AiTask, type BackendEvents, type DeleteMode, type MathSymbol, type ExportFormat, type Folder, type Message,
   type Note, type NoteMeta, type NoteMetaPatch, type ProviderConfig, type ProviderCredentialStatus, type Riddler,
+  type SearchEngine, type SearchEngineCredentialStatus, type SearchStatus,
   type Settings, type Thread, type ThreadKind, type ThreadStatus, type TrashList, type ModelKind, type VoiceOption, type VoiceStatus,
 } from './types';
 
 const QUOTE = 'Photosynthesis happens in the mitochondria.';
+
+const SEARCH_ENGINES: readonly {
+  engine: SearchEngine;
+  label: string;
+  envVar: string;
+  docsUrl: string;
+  prefix?: string;
+  minLength: number;
+}[] = [
+  { engine: 'tavily', label: 'Tavily', envVar: 'TAVILY_API_KEY', docsUrl: 'https://app.tavily.com/', prefix: 'tvly-', minLength: 20 },
+  { engine: 'brave', label: 'Brave Search', envVar: 'BRAVE_API_KEY', docsUrl: 'https://brave.com/search/api/', minLength: 20 },
+  { engine: 'exa', label: 'Exa', envVar: 'EXA_API_KEY', docsUrl: 'https://dashboard.exa.ai/api-keys', minLength: 12 },
+  { engine: 'firecrawl', label: 'Firecrawl', envVar: 'FIRECRAWL_API_KEY', docsUrl: 'https://www.firecrawl.dev/app/api-keys', prefix: 'fc-', minLength: 20 },
+  { engine: 'ollama', label: 'Ollama', envVar: 'OLLAMA_API_KEY', docsUrl: 'https://ollama.com/settings/keys', minLength: 12 },
+];
 
 const DEFAULT_SETTINGS: Settings = {
   newNoteMode: 'thinks',
   readingPace: 'regular',
   questionPlacement: 'both',
   webInNewNotes: false,
+  webSearchEngine: null,
   voiceInNewNotes: false,
   voiceName: 'kokoro/bm_george',
   speakingSpeed: 1,
@@ -182,6 +199,7 @@ export class MockBackend implements Backend {
   private riddlers = new Map<string, Riddler>([[BUILTIN_RIDDLER_ID, BUILTIN_RIDDLER]]);
   private settings: Settings = structuredClone(DEFAULT_SETTINGS);
   private keys = new Map<string, string>();
+  private searchKeys = new Map<SearchEngine, string>();
   private handlers = new Map<string, Set<(p: any) => void>>();
   private timers = new Map<string, number[]>();
 
@@ -502,6 +520,83 @@ export class MockBackend implements Backend {
     const p = this.knownProvider(providerId);
     this.keys.delete(providerId);
     return this.credentialStatus(p);
+  }
+  private buildSearchStatus(): SearchStatus {
+    const engines: SearchEngineCredentialStatus[] = SEARCH_ENGINES.map((spec) => {
+      const stored = this.searchKeys.get(spec.engine);
+      const maskedKey = stored
+        ? stored.length <= 8 ? '••••' : `${stored.slice(0, 4)}…${stored.slice(-4)}`
+        : null;
+      return {
+        engine: spec.engine,
+        label: spec.label,
+        envVar: spec.envVar,
+        docsUrl: spec.docsUrl,
+        hasStoredKey: !!stored,
+        maskedKey,
+        hasEnvKey: false,
+      };
+    });
+    const pinned = this.settings.webSearchEngine;
+    if (pinned) {
+      const entry = engines.find((e) => e.engine === pinned);
+      if (entry && (entry.hasStoredKey || entry.hasEnvKey)) {
+        return {
+          available: true,
+          engine: entry.engine,
+          pinned,
+          reason: `Using ${entry.label}`,
+          engines,
+        };
+      }
+      const label = entry?.label ?? pinned;
+      return {
+        available: false,
+        engine: null,
+        pinned,
+        reason: `${label} is selected, but its API key is missing`,
+        engines,
+      };
+    }
+    const auto = engines.find((e) => e.hasStoredKey || e.hasEnvKey);
+    if (auto) {
+      return {
+        available: true,
+        engine: auto.engine,
+        pinned: null,
+        reason: `Using ${auto.label} (automatic)`,
+        engines,
+      };
+    }
+    return {
+      available: false,
+      engine: null,
+      pinned: null,
+      reason: 'No search engine key set',
+      engines,
+    };
+  }
+  async getSearchStatus() {
+    return this.buildSearchStatus();
+  }
+  async setSearchKey(engine: SearchEngine, key: string) {
+    const spec = SEARCH_ENGINES.find((e) => e.engine === engine);
+    if (!spec) throw new Error(`unknown search engine "${engine}"`);
+    const trimmed = key.trim();
+    if (!trimmed) throw new Error('API key is empty');
+    if (/\s/.test(trimmed)) throw new Error('API key cannot contain whitespace');
+    if (spec.prefix && !trimmed.startsWith(spec.prefix)) {
+      throw new Error(`${spec.label} keys must start with ${spec.prefix}`);
+    }
+    if (trimmed.length < spec.minLength) {
+      throw new Error(`${spec.label} keys must be at least ${spec.minLength} characters`);
+    }
+    this.searchKeys.set(engine, trimmed);
+    return this.buildSearchStatus();
+  }
+  async deleteSearchKey(engine: SearchEngine) {
+    this.searchKeys.delete(engine);
+    return this.buildSearchStatus();
   }
   async listRiddlers() {
     return [...this.riddlers.values()];

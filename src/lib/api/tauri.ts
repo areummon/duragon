@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import type { Backend, Unsubscribe } from './backend';
 import type {
   BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
-  ProviderCredentialStatus, Riddler, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
+  ProviderCredentialStatus, Riddler, SearchEngine, SearchStatus, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
 } from './types';
 
 export class TauriBackend implements Backend {
@@ -47,6 +47,11 @@ export class TauriBackend implements Backend {
     invoke<ProviderCredentialStatus>('set_provider_key', { providerId, key });
   deleteProviderKey = (providerId: string) =>
     invoke<ProviderCredentialStatus>('delete_provider_key', { providerId });
+  getSearchStatus = () => invoke<SearchStatus>('get_search_status');
+  setSearchKey = (engine: SearchEngine, key: string) =>
+    invoke<SearchStatus>('set_search_key', { engine, key });
+  deleteSearchKey = (engine: SearchEngine) =>
+    invoke<SearchStatus>('delete_search_key', { engine });
   listRiddlers = () => invoke<Riddler[]>('list_riddlers');
   saveRiddler = (riddler: Riddler) => invoke<Riddler>('save_riddler', { riddler });
   deleteRiddler = (id: string) => invoke<void>('delete_riddler', { id });

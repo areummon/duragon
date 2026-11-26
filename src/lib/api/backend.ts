@@ -1,6 +1,6 @@
 import type {
   BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
-  ProviderCredentialStatus, Riddler, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
+  ProviderCredentialStatus, Riddler, SearchEngine, SearchStatus, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
 } from './types';
 
 export type Unsubscribe = () => void;
@@ -47,6 +47,9 @@ export interface Backend {
   localModels(providerId: string): Promise<string[]>;
   setProviderKey(providerId: string, key: string): Promise<ProviderCredentialStatus>;
   deleteProviderKey(providerId: string): Promise<ProviderCredentialStatus>;
+  getSearchStatus(): Promise<SearchStatus>;
+  setSearchKey(engine: SearchEngine, key: string): Promise<SearchStatus>;
+  deleteSearchKey(engine: SearchEngine): Promise<SearchStatus>;
   listRiddlers(): Promise<Riddler[]>;
   saveRiddler(riddler: Riddler): Promise<Riddler>;
   deleteRiddler(id: string): Promise<void>;

@@ -11,6 +11,7 @@
   import ProvidersPanel from './ProvidersPanel.svelte';
   import SwitchRow from './SwitchRow.svelte';
   import VoiceRow from './VoiceRow.svelte';
+  import WebSearchPanel from './WebSearchPanel.svelte';
 
   let { query = $bindable('') }: { query?: string } = $props();
 
@@ -29,7 +30,7 @@
     start: 'new notes start in thinks with you when you ask reading mode',
     pace: 'reading pace regular slow',
     place: 'where questions appear both margins right margin marks only',
-    web: 'web search in new notes',
+    web: 'web search in new notes tavily brave exa firecrawl ollama search engine api key',
     notes: 'search my other notes in chat recall past earlier',
     symbols: 'explain symbols in formulas math latex equation variable meaning',
     speak: 'new notes speak aloud voice',
@@ -138,6 +139,7 @@
     {/if}
     {#if on('reading', 'web')}
       <div class="group"><SwitchRow title="Web search in new notes" desc="Lets Duragon look things up, and shows where it looked." on={s.webInNewNotes} onchange={(v) => set({ webInNewNotes: v })} /></div>
+      <WebSearchPanel />
     {/if}
     {#if on('reading', 'notes')}
       <div class="group"><SwitchRow title="Search my other notes in chat" desc="In the side chat, Duragon can look through your other notes when it helps, and says which one it used. The notes it opens go to the model you picked for Chat, like the note you’re in." on={s.searchMyNotes} onchange={(v) => set({ searchMyNotes: v })} /></div>

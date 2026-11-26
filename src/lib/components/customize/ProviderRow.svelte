@@ -4,7 +4,7 @@
   import { accessProblem, accessText, DEFAULT_PROVIDERS, hostOf, isHttpKind, isServerKind, type ProviderView } from '../../api/providers';
   import type { ProviderConfig, ProviderKind } from '../../api/types';
   import { unfold } from '../../motion/transitions';
-  import { checkServers, deleteProviderKey, reasonOf, setProviderKey, settings, updateSettings } from '../../state/settings.svelte';
+  import { checkServers, deleteProviderKey, reasonOf, searchStatus, setProviderKey, settings, updateSettings } from '../../state/settings.svelte';
   import Field from './Field.svelte';
   import { follow } from './follow';
 
@@ -133,7 +133,7 @@
         <Field label="Address" value={p.baseUrl ?? ''} error={view.access.kind === 'stopped' ? `${view.access.reason}.` : null} oncommit={(t) => commit(t, 'baseUrl')}>
           {#snippet after()}<button class="solid" onclick={() => void checkServers(p.id)}>Check</button>{/snippet}
         </Field>
-        <p class="help">{SERVERS[p.id] ?? 'Its models show up here while it runs.'} It can’t search the web.</p>
+        <p class="help">{SERVERS[p.id] ?? 'Its models show up here while it runs.'} {searchStatus.value?.available ? 'Uses your web search engine when Web is on.' : 'It can’t search the web.'}</p>
         {#if p.kind === 'local'}
           <div class="gap">
             <Field

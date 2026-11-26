@@ -1,11 +1,11 @@
 import { getBackend } from '../api/backend';
 import { DEFAULT_MODELS, DEFAULT_PROVIDER_ID, DEFAULT_PROVIDERS, isServerKind, mergeProviders, withoutProvider, type Server } from '../api/providers';
-import type { ProviderCredentialStatus, Settings } from '../api/types';
+import type { ProviderCredentialStatus, SearchEngine, SearchStatus, Settings } from '../api/types';
 import { showToast } from './toast.svelte';
 
 const DEFAULTS: Settings = {
   newNoteMode: 'thinks', readingPace: 'regular', questionPlacement: 'both',
-  webInNewNotes: false, voiceInNewNotes: false, voiceName: 'kokoro/bm_george', speakingSpeed: 1, listenModel: 'parakeet',
+  webInNewNotes: false, webSearchEngine: null, voiceInNewNotes: false, voiceName: 'kokoro/bm_george', speakingSpeed: 1, listenModel: 'parakeet',
   appearance: 'system', textSize: 'default', pageWidth: null, lettering: 'own',
   inkColour: 'ink', justMyWords: false, aboutYou: '',
   learnAboutYou: true, searchMyNotes: false, explainSymbols: false,
@@ -25,6 +25,7 @@ const dark = window.matchMedia('(prefers-color-scheme: dark)');
 export const settings = $state<{ value: Settings; loaded: boolean }>({ value: { ...DEFAULTS }, loaded: false });
 /** `error` is why the saved keys can't be read. */
 export const credentialStatuses = $state<{ value: ProviderCredentialStatus[]; error: string | null }>({ value: [], error: null });
+export const searchStatus = $state<{ value: SearchStatus | null; error: string | null }>({ value: null, error: null });
 
 /** Fades the whole window from one theme to the other, in one picture. Colours that each fade restyle every frame. */
 function showTheme(theme: 'light' | 'dark') {
@@ -71,11 +72,25 @@ export async function loadSettings() {
   settings.value = await storedSettings();
   settings.loaded = true;
   apply();
-  await refreshCredentials();
+  await Promise.all([refreshCredentials(), refreshSearchStatus()]);
 }
 
 /** What went wrong, to end a sentence with. */
 export const reasonOf = (e: unknown) => (e instanceof Error ? e.message : String(e)).trim().replace(/\.+$/, '');
+
+function applySearchStatus(status: SearchStatus) {
+  searchStatus.value = status;
+  const unreadable = status.engines.find((e) => e.error)?.error;
+  searchStatus.error = unreadable ? reasonOf(unreadable) : null;
+}
+
+export async function refreshSearchStatus() {
+  try {
+    applySearchStatus(await (await getBackend()).getSearchStatus());
+  } catch (e) {
+    searchStatus.error = reasonOf(e);
+  }
+}
 
 async function refreshCredentials() {
   try {
@@ -146,6 +161,9 @@ export function updateSettings(patch: Partial<Settings>): Promise<boolean> {
       await refreshCredentials();
       void checkServers();
     }
+    if ('webSearchEngine' in patch) {
+      await refreshSearchStatus();
+    }
     return true;
   });
   if ('aboutYou' in patch) {
@@ -183,4 +201,16 @@ export function deleteProviderKey(providerId: string) {
   });
 }
 
-if (import.meta.env.DEV) Object.assign(window as object, { __duragon: { settings, updateSettings } });
+export function setSearchKey(engine: SearchEngine, key: string) {
+  return inTurn(async () => {
+    applySearchStatus(await (await getBackend()).setSearchKey(engine, key));
+  });
+}
+
+export function deleteSearchKey(engine: SearchEngine) {
+  return inTurn(async () => {
+    applySearchStatus(await (await getBackend()).deleteSearchKey(engine));
+  });
+}
+
+if (import.meta.env.DEV) Object.assign(window as object, { __duragon: { settings, updateSettings, searchStatus } });
