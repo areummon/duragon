@@ -2,6 +2,8 @@
   import Check from 'lucide-svelte/icons/check';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import ExternalLink from 'lucide-svelte/icons/external-link';
+  import { tick } from 'svelte';
   import type { SearchEngine, SearchEngineCredentialStatus } from '../../api/types';
   import { unfold } from '../../motion/transitions';
   import { deleteSearchKey, reasonOf, searchStatus, setSearchKey, settings, updateSettings } from '../../state/settings.svelte';
@@ -27,7 +29,7 @@
 
   let menuOpen = $state(false);
   let openRows = $state<Partial<Record<SearchEngine, boolean>>>({});
-  let drafts = $state<Partial<Record<SearchEngine, string>>>({});
+  let drafts = $state<Record<SearchEngine, string>>({ tavily: '', brave: '', exa: '', firecrawl: '', ollama: '' });
   let errors = $state<Partial<Record<SearchEngine, string | null>>>({});
   let inputs = $state<Partial<Record<SearchEngine, HTMLInputElement>>>({});
   const busy: Partial<Record<SearchEngine, boolean>> = {};
@@ -41,9 +43,37 @@
     return 'Not set';
   }
 
-  function pickEngine(engine: SearchEngine | null) {
+  async function toggleRow(engine: SearchEngine) {
+    const next = !openRows[engine];
+    openRows[engine] = next;
+    if (next) {
+      await tick();
+      inputs[engine]?.focus({ preventScroll: true });
+    }
+  }
+
+  async function pickEngine(engine: SearchEngine | null) {
     menuOpen = false;
     void updateSettings({ webSearchEngine: engine });
+    if (engine) {
+      const target = engines.find((item) => item.engine === engine);
+      if (target && !hasKey(target)) {
+        openRows[engine] = true;
+        await tick();
+        inputs[engine]?.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  async function openDocs(ev: MouseEvent, url: string) {
+    if (!('__TAURI_INTERNALS__' in window)) return;
+    ev.preventDefault();
+    try {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(url);
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
   }
 
   async function attempt(engine: SearchEngine, act: () => Promise<void>, failed: (reason: string) => string) {
@@ -103,7 +133,7 @@
         onclick={() => (menuOpen = !menuOpen)}
       >
         <span>{pinnedLabel}</span>
-        <ChevronDown size={14} strokeWidth={1.7} />
+        <span class="trigger-chev" class:open={menuOpen}><ChevronDown size={14} strokeWidth={1.7} /></span>
       </button>
       <Popover open={menuOpen} onclose={() => (menuOpen = false)} align="right" width={230} label="Search engine">
         <button class="menu-item" role="menuitem" onclick={() => pickEngine(null)}>
@@ -138,11 +168,11 @@
             class="head"
             id="search-engine-{e.engine}"
             aria-expanded={open}
-            onclick={() => (openRows[e.engine] = !openRows[e.engine])}
+            onclick={() => void toggleRow(e.engine)}
           >
             <span class="name" title={e.label}>{e.label}</span>
-            <span class="use">{active ? 'Active' : ''}</span>
-            <span class="status"><i class="dot" class:shown={missing}></i>{keyStatusText(e)}</span>
+            <span class="use">{#if active}<span class="pill">Active</span>{/if}</span>
+            <span class="status" class:unset={!hasKey(e) && !e.error}><i class="dot" class:shown={missing}></i>{keyStatusText(e)}</span>
             <span class="chev" class:open><ChevronRight size={14} strokeWidth={1.7} /></span>
           </button>
 
@@ -165,11 +195,21 @@
                 {#if e.hasEnvKey && !e.hasStoredKey}
                   <p class="help">Using the one in {e.envVar}. A key saved here is used instead.</p>
                 {/if}
-                {#if e.hasStoredKey}
-                  <div class="foot">
+                <div class="foot">
+                  <a
+                    class="docs"
+                    href={e.docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onclick={(ev) => void openDocs(ev, e.docsUrl)}
+                  >
+                    <span>Get a key</span>
+                    <ExternalLink size={12} strokeWidth={1.7} />
+                  </a>
+                  {#if e.hasStoredKey}
                     <button class="quiet push" onclick={() => removeKey(e)}>Remove key</button>
-                  </div>
-                {/if}
+                  {/if}
+                </div>
               </div>
             </div>
           {/if}
@@ -190,24 +230,26 @@
     align-items: center;
     gap: 6px;
     height: 30px;
-    padding: 0 11px 0 13px;
+    padding: 0 10px 0 13px;
     border: 1px solid var(--rule);
     border-radius: 999px;
     font-size: 13px;
     line-height: 1;
     color: var(--ink);
-    transition: border-color 150ms var(--ease-ui), transform 160ms var(--ease-step);
+    transition: border-color 150ms var(--ease-ui), background-color 150ms var(--ease-ui), transform 160ms var(--ease-step);
   }
-  .ghost.open { border-color: var(--faint); }
+  .ghost.open { border-color: var(--faint); background: var(--shelf); }
   @media (hover: hover) and (pointer: fine) { .ghost:hover { border-color: var(--faint); } }
   .ghost:active { transform: scale(0.97); }
+  .trigger-chev { display: grid; place-items: center; color: var(--faint); transition: transform 160ms var(--ease-ui); }
+  .trigger-chev.open { transform: rotate(180deg); }
   .picker .menu-item { display: flex; align-items: center; gap: 8px; font-size: 13.5px; line-height: 1.3; }
   .choice-label { flex: 1; min-width: 0; text-align: left; }
   .choice-meta { flex: none; font-size: 12px; color: var(--faint); }
   .check { display: grid; place-items: center; flex: none; color: var(--ink); }
   .error { margin-top: 12px; font-size: 13px; line-height: 1.4; color: var(--text-red); overflow-wrap: anywhere; }
 
-  .list { margin-top: 12px; border: 1px solid var(--rule); border-radius: 12px; }
+  .list { margin-top: 12px; border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; }
   .item { display: flow-root; scroll-margin-bottom: 12px; }
   .item:not(:first-child) > .inner { border-top: 1px solid var(--rule); }
 
@@ -216,31 +258,48 @@
     align-items: center;
     gap: 10px;
     width: 100%;
-    min-height: 42px;
+    min-height: 44px;
     padding: 0 14px 0 16px;
     text-align: left;
     font-size: 13.5px;
     line-height: 1.3;
+    transition: background-color 140ms var(--ease-ui);
   }
+  @media (hover: hover) and (pointer: fine) { .head:hover { background: var(--shelf); } }
   .head:focus-visible { outline-offset: -4px; border-radius: 11px; }
   .name, .use { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .name { flex: 0 1 auto; font-weight: 500; }
-  .use { flex: 1; color: var(--faint); }
+  .use { flex: 1; display: flex; align-items: center; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--shelf);
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--ink);
+    text-box: trim-both cap alphabetic;
+  }
   .status { flex: none; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--graphite); white-space: nowrap; font-variant-numeric: tabular-nums; transition: color 180ms var(--ease-ui); }
+  .status.unset { color: var(--faint); }
   .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: transparent; transition: background-color 180ms var(--ease-ui); }
   .dot.shown { background: var(--bulb); }
   .chev { display: grid; place-items: center; flex: none; margin-left: 2px; color: var(--faint); transition: transform 160ms var(--ease-ui); }
   .chev.open { transform: rotate(90deg); }
 
   .fold { display: flow-root; scroll-margin-bottom: 12px; }
-  .body { padding: 2px 16px 16px; }
-  .help { margin-top: 7px; font-size: 13px; line-height: 1.4; color: var(--faint); }
-  .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 14px; font-size: 13px; line-height: 1.3; color: var(--graphite); }
+  .body { padding: 4px 16px 16px; }
+  .help { margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--faint); }
+  .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; font-size: 13px; line-height: 1.3; color: var(--graphite); }
+  .docs { display: inline-flex; align-items: center; gap: 5px; color: var(--faint); text-decoration: none; transition: color 150ms var(--ease-ui); }
+  .docs:hover { color: var(--ink); }
   .push { margin-left: auto; }
   .quiet { flex: none; color: var(--graphite); transition: color 150ms var(--ease-ui); }
   .quiet:hover { color: var(--ink); }
   @media (prefers-reduced-motion: reduce) {
     .ghost:active { transform: none; }
-    .chev { transition: none; }
+    .chev, .trigger-chev { transition: none; }
   }
 </style>
