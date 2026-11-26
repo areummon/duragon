@@ -336,7 +336,11 @@ impl VoiceClient {
 
     /// Listens with the model `chosen` names, or the first one there is.
     pub async fn listen_start(&self, hands_free: bool, chosen: &str) -> Result<()> {
-        let models = self.listen_models();
+        let models = tokio::task::spawn_blocking({
+            let me = self.clone();
+            move || me.listen_models()
+        })
+        .await?;
         let model = models
             .iter()
             .find(|m| m.id() == chosen)
