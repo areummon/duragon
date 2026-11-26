@@ -1,19 +1,17 @@
 <script lang="ts">
-  import X from 'lucide-svelte/icons/x';
   import { getBackend } from '../api/backend';
   import type { NoteRevision } from '../api/types';
-  import { closeOnEscape } from '../escape';
-  import { takeFocus } from '../focus';
-  import { pop, veil } from '../motion/transitions';
   import { app, restoreNoteRevision } from '../state/app.svelte';
+  import Modal from './Modal.svelte';
 
-  let card = $state<HTMLElement>();
   let revisions = $state<NoteRevision[]>([]);
   let selectedId = $state<string | null>(null);
   let loaded = $state(false);
   let restoring = $state(false);
+  let loadSeq = 0;
 
   const close = () => (app.historyOpen = false);
+  const isEmpty = $derived(loaded && revisions.length === 0);
   const selected = $derived(revisions.find((r) => r.id === selectedId) ?? revisions[0] ?? null);
   const previewBody = $derived.by(() => {
     if (!selected) return '';
@@ -38,26 +36,23 @@
   }
 
   async function load(noteId: string) {
+    const seq = ++loadSeq;
     loaded = false;
     revisions = [];
     selectedId = null;
     try {
       const list = await (await getBackend()).listRevisions(noteId);
-      if (app.note?.id !== noteId) return;
+      if (seq !== loadSeq || app.note?.id !== noteId) return;
       revisions = list;
       selectedId = list[0]?.id ?? null;
     } finally {
-      loaded = true;
+      if (seq === loadSeq && app.note?.id === noteId) loaded = true;
     }
   }
 
   $effect.pre(() => {
     if (!app.historyOpen || !app.note) return;
     void load(app.note.id);
-  });
-
-  $effect(() => {
-    if (app.historyOpen) return closeOnEscape(close);
   });
 
   async function restore() {
@@ -84,98 +79,64 @@
   }
 </script>
 
-{#if app.historyOpen}
-  <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil|global>
-    <div
-      class="card"
-      class:is-empty={loaded && revisions.length === 0}
-      bind:this={card}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Note history"
-      tabindex="-1"
-      use:takeFocus
-      in:pop|global
-      out:pop={{ duration: 140 }}
-    >
-      {#if loaded && revisions.length === 0}
-        <button class="x" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
-        <div class="empty-wrap">
-          <h2>History</h2>
-          <p class="empty">Snapshots are saved automatically as you write.</p>
-        </div>
-      {:else}
-        <aside aria-label="Saved snapshots">
-          <div class="aside-head">History</div>
-          <div class="list" role="listbox" aria-label="Revisions" tabindex="0" onkeydown={onListKeydown}>
-            {#each revisions as rev (rev.id)}
-              {@const active = selected?.id === rev.id}
-              <button
-                class="rev"
-                class:active
-                role="option"
-                aria-selected={active}
-                onclick={() => (selectedId = rev.id)}
-              >
-                <span class="rev-time">{formatWhen(rev.createdAt)}</span>
-                <span class="rev-title">{rev.title || 'Untitled'}</span>
-              </button>
-            {/each}
-          </div>
-        </aside>
+<Modal open={app.historyOpen} onclose={close} label="Note history" class="history-card {isEmpty ? 'is-empty' : ''}">
+  {#if isEmpty}
+    <div class="empty-wrap">
+      <h2>History</h2>
+      <p class="empty">Snapshots are saved automatically as you write.</p>
+    </div>
+  {:else}
+    <aside aria-label="Saved snapshots">
+      <div class="aside-head">History</div>
+      <div class="list" role="listbox" aria-label="Revisions" tabindex="0" onkeydown={onListKeydown}>
+        {#each revisions as rev (rev.id)}
+          {@const active = selected?.id === rev.id}
+          <button
+            class="rev"
+            class:active
+            role="option"
+            aria-selected={active}
+            onclick={() => (selectedId = rev.id)}
+          >
+            <span class="rev-time">{formatWhen(rev.createdAt)}</span>
+            <span class="rev-title">{rev.title || 'Untitled'}</span>
+          </button>
+        {/each}
+      </div>
+    </aside>
 
-        <div class="main">
-          <button class="x" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
-          {#if selected}
-            <div class="head">
-              <div class="head-title">{selected.title || 'Untitled'}</div>
-              <div class="head-time">{formatWhen(selected.createdAt)}</div>
-            </div>
-            <div class="preview">
-              {#if previewBody}
-                <div class="plain">{previewBody}</div>
-              {:else}
-                <p class="empty-body">Empty note.</p>
-              {/if}
-            </div>
-            <div class="foot">
-              <span class="note">Your current draft is saved first.</span>
-              <button class="restore" disabled={restoring} onclick={restore}>
-                {restoring ? 'Restoring…' : 'Restore this draft'}
-              </button>
-            </div>
+    <div class="main">
+      {#if selected}
+        <div class="head">
+          <div class="head-title">{selected.title || 'Untitled'}</div>
+          <div class="head-time">{formatWhen(selected.createdAt)}</div>
+        </div>
+        <div class="preview">
+          {#if previewBody}
+            <div class="plain">{previewBody}</div>
+          {:else}
+            <p class="empty-body">Empty note.</p>
           {/if}
+        </div>
+        <div class="foot">
+          <span class="note">Your current draft is saved first.</span>
+          <button class="restore" disabled={restoring} onclick={restore}>
+            {restoring ? 'Restoring…' : 'Restore this draft'}
+          </button>
         </div>
       {/if}
     </div>
-  </div>
-{/if}
+  {/if}
+</Modal>
 
 <style>
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    place-items: center;
-    padding: 24px;
-    background: var(--veil);
-  }
-  .card {
-    position: relative;
+  :global(.card.history-card) {
     display: flex;
     width: min(760px, 100%);
     height: min(560px, calc(100vh - 48px));
     overflow: hidden;
-    border-radius: 14px;
-    background: var(--paper);
-    box-shadow: var(--lift);
-    font-size: 14px;
-    line-height: 1.4;
-    outline: none;
   }
-  .card.is-empty {
+  :global(.card.history-card.is-empty) {
     display: block;
     width: min(460px, 100%);
     height: auto;
@@ -264,25 +225,6 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-  }
-  .x {
-    position: absolute;
-    top: 18px;
-    right: 18px;
-    z-index: 2;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    color: var(--faint);
-    transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .x:hover {
-      color: var(--ink);
-      background: var(--shelf);
-    }
   }
   .head {
     padding: 22px 56px 14px 28px;

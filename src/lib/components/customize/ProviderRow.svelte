@@ -5,6 +5,7 @@
   import type { ProviderConfig, ProviderKind } from '../../api/types';
   import { unfold } from '../../motion/transitions';
   import { checkServers, deleteProviderKey, reasonOf, searchStatus, setProviderKey, settings, updateSettings } from '../../state/settings.svelte';
+  import ApiKeyField from './ApiKeyField.svelte';
   import Field from './Field.svelte';
   import { follow } from './follow';
 
@@ -33,11 +34,10 @@
   const saved = $derived(view.saved);
   const jobs = $derived(view.jobs.length ? `for ${LIST.format(view.jobs.map((j) => j.name))}` : '');
 
-  let key = $state('');
-  let error = $state<string | null>(null);
-  let busy = false;
+  let removeError = $state<string | null>(null);
+  let removing = false;
   let changing = $state(false);
-  let keyInput = $state<HTMLInputElement>();
+  let keyField = $state<ApiKeyField>();
   let addressInput = $state<HTMLInputElement>();
 
   function patch(change: Partial<ProviderConfig>) {
@@ -57,40 +57,18 @@
     return args.join(' ');
   }
 
-  async function attempt(act: () => Promise<void>, failed: (reason: string) => string) {
-    if (busy) return;
-    busy = true;
-    error = null;
+  async function remove() {
+    if (removing) return;
+    removing = true;
+    removeError = null;
     try {
-      await act();
+      await onremove();
     } catch (e) {
-      error = failed(reasonOf(e));
+      removeError = `The provider wasn’t removed: ${reasonOf(e)}.`;
     } finally {
-      busy = false;
+      removing = false;
     }
   }
-
-  const saveKey = () =>
-    key.trim() &&
-    attempt(
-      async () => {
-        await setProviderKey(p.id, key.trim());
-        key = '';
-        keyInput?.focus();
-      },
-      (reason) => `The key wasn’t saved: ${reason}.${saved ? ' Your old key is still in place.' : ''}`,
-    );
-
-  const removeKey = () =>
-    attempt(
-      async () => {
-        await deleteProviderKey(p.id);
-        keyInput?.focus();
-      },
-      (reason) => `The key wasn’t removed: ${reason}.`,
-    );
-
-  const remove = () => attempt(onremove, (reason) => `The provider wasn’t removed: ${reason}.`);
 
   async function change() {
     changing = true;
@@ -110,20 +88,14 @@
   <div class="fold" transition:unfold={{ duration: 200 }} onintrostart={(e) => follow(e.currentTarget)}>
     <div class="body">
       {#if isHttpKind(p.kind)}
-        <Field
-          label="API key"
-          type="password"
-          placeholder={saved ? 'Paste a new key to replace it' : 'Paste a key'}
-          bind:value={key}
-          bind:input={keyInput}
-          {error}
-          onkeydown={(e) => e.key === 'Enter' && !e.isComposing && void saveKey()}
-        >
-          {#snippet after()}<button class="solid" disabled={!key.trim()} onclick={saveKey}>Save</button>{/snippet}
-        </Field>
-        {#if view.access.kind === 'system'}
-          <p class="help">Using the one in {view.access.envVar}. A key saved here is used instead.</p>
-        {/if}
+        <ApiKeyField
+          bind:this={keyField}
+          {saved}
+          envVar={view.access.kind === 'system' ? view.access.envVar : null}
+          externalError={removeError}
+          onsave={(key) => setProviderKey(p.id, key)}
+          onremove={() => deleteProviderKey(p.id)}
+        />
         {#if changing || !p.baseUrl}
           <div class="fold" transition:unfold={{ duration: 200 }} onintrostart={(e) => follow(e.currentTarget)}>
             <div class="gap"><Field label="Address" value={p.baseUrl ?? ''} bind:input={addressInput} oncommit={(t) => commit(t, 'baseUrl')} /></div>
@@ -136,23 +108,19 @@
         <p class="help">{SERVERS[p.id] ?? 'Its models show up here while it runs.'} {searchStatus.value?.available ? 'Uses your web search engine when Web is on.' : 'It can’t search the web.'}</p>
         {#if p.kind === 'local'}
           <div class="gap">
-            <Field
-              label="API key"
+            <ApiKeyField
+              bind:this={keyField}
+              {saved}
               hint="Only if it asks for one"
-              type="password"
-              placeholder={saved ? 'Paste a new key to replace it' : 'Paste a key'}
-              bind:value={key}
-              bind:input={keyInput}
-              {error}
-              onkeydown={(e) => e.key === 'Enter' && !e.isComposing && void saveKey()}
-            >
-              {#snippet after()}<button class="solid" disabled={!key.trim()} onclick={saveKey}>Save</button>{/snippet}
-            </Field>
+              externalError={removeError}
+              onsave={(key) => setProviderKey(p.id, key)}
+              onremove={() => deleteProviderKey(p.id)}
+            />
           </div>
         {/if}
       {:else}
         <div class="two">
-          <Field label="Command" value={p.command ?? ''} oncommit={(t) => commit(t, 'command')} {error} />
+          <Field label="Command" value={p.command ?? ''} oncommit={(t) => commit(t, 'command')} error={removeError} />
           {#if p.kind !== 'claude-cli'}<Field label="Options" value={p.args.join(' ')} oncommit={commitOptions} />{/if}
         </div>
         {#if SIGN_IN[p.kind]}<p class="help">{SIGN_IN[p.kind]}</p>{/if}
@@ -165,7 +133,7 @@
               {#if !changing}<span class="sep">·</span><button class="quiet" aria-label="Change the address" onclick={change}>Change</button>{/if}
             </span>
           {/if}
-          {#if saved}<button class="quiet push" onclick={removeKey}>Remove key</button>{/if}
+          {#if saved}<button class="quiet push" onclick={() => keyField?.remove()}>Remove key</button>{/if}
           {#if !p.builtin}<button class="quiet danger" class:push={!saved} onclick={remove}>Remove provider</button>{/if}
         </div>
       {/if}

@@ -2,9 +2,9 @@
   import Check from 'lucide-svelte/icons/check';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import { accessProblem, jobProvider, THINKING_LEVELS, type Job, type ProviderView } from '../../api/providers';
-  import { closeOnEscape } from '../../escape';
-  import { rise } from '../../motion/transitions';
+  import { dismissOnOutside } from '../../escape';
   import { settings, updateSettings } from '../../state/settings.svelte';
+  import Popover from '../Popover.svelte';
   import ModelPicker from './ModelPicker.svelte';
   import Reach from './Reach.svelte';
 
@@ -15,7 +15,6 @@
   let open = $state<'model' | 'thinking' | null>(null);
   let root = $state<HTMLElement>();
   let modelBtn = $state<HTMLElement>();
-  let thinkBtn = $state<HTMLElement>();
 
   const current = $derived(jobProvider(views, settings.value, job));
   const model = $derived(settings.value[job.modelKey] || 'Choose model');
@@ -37,19 +36,7 @@
   }
 
   $effect(() => {
-    if (!open) return;
-    const anchor = open === 'model' ? () => modelBtn : () => thinkBtn;
-    const away = (e: Event) => {
-      if (!root?.contains(e.target as Node)) close();
-    };
-    window.addEventListener('pointerdown', away, true);
-    window.addEventListener('focusin', away);
-    const off = closeOnEscape(close, anchor);
-    return () => {
-      window.removeEventListener('pointerdown', away, true);
-      window.removeEventListener('focusin', away);
-      off();
-    };
+    if (open === 'model') return dismissOnOutside(() => root, close, () => modelBtn);
   });
 </script>
 
@@ -93,7 +80,6 @@
         type="button"
         class="select"
         class:open={open === 'thinking'}
-        bind:this={thinkBtn}
         aria-haspopup="listbox"
         aria-expanded={open === 'thinking'}
         aria-label="{job.name} thinking: {thinkingLevel.name}"
@@ -103,30 +89,30 @@
         <span class="select-val">{thinkingLevel.name}</span>
         <ChevronDown class="chev" size={13} strokeWidth={1.7} />
       </button>
-      {#if open === 'thinking'}
-        <div
-          class="popover think-menu"
-          role="listbox"
-          aria-label="{job.name} thinking level"
-          transition:rise={{ y: -4, scale: 0.97, duration: 150 }}
-        >
-          {#each THINKING_LEVELS as level (level.id)}
-            {@const active = level.id === thinkingLevel.id}
-            <button
-              type="button"
-              class="think-opt"
-              class:active
-              role="option"
-              aria-selected={active}
-              onclick={() => pickThinking(level.id)}
-            >
-              <span>{level.name}</span>
-              {#if active}<Check size={14} strokeWidth={1.6} />{/if}
-            </button>
-          {/each}
-        </div>
-        <Reach />
-      {/if}
+      <Popover
+        open={open === 'thinking'}
+        onclose={close}
+        align="right"
+        width={128}
+        role="listbox"
+        label="{job.name} thinking level"
+      >
+        {#each THINKING_LEVELS as level (level.id)}
+          {@const active = level.id === thinkingLevel.id}
+          <button
+            type="button"
+            class="think-opt"
+            class:active
+            role="option"
+            aria-selected={active}
+            onclick={() => pickThinking(level.id)}
+          >
+            <span>{level.name}</span>
+            {#if active}<Check size={14} strokeWidth={1.6} />{/if}
+          </button>
+        {/each}
+      </Popover>
+      {#if open === 'thinking'}<Reach />{/if}
     </div>
   </div>
 </div>
@@ -230,14 +216,6 @@
   .select.open :global(.chev) {
     color: var(--ink);
     transform: rotate(180deg);
-  }
-  .think-menu {
-    top: calc(100% + 6px);
-    right: 0;
-    width: 128px;
-    padding: 4px;
-    border-radius: 12px;
-    transform-origin: top right;
   }
   .think-opt {
     display: flex;

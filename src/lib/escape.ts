@@ -48,3 +48,23 @@ export function closeTop() {
   layer.close();
   requestAnimationFrame(() => giveBack(layer));
 }
+
+/** Dismisses an open popup on outside click/focus or Escape; returns cleanup. */
+export function dismissOnOutside(
+  root: () => HTMLElement | null | undefined,
+  close: () => void,
+  focusBack?: Layer['instead'],
+): () => void {
+  const away = (e: Event) => {
+    const el = root();
+    if (!el || !el.contains(e.target as Node)) close();
+  };
+  window.addEventListener('pointerdown', away, true);
+  window.addEventListener('focusin', away);
+  const off = closeOnEscape(close, focusBack);
+  return () => {
+    window.removeEventListener('pointerdown', away, true);
+    window.removeEventListener('focusin', away);
+    off();
+  };
+}

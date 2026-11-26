@@ -28,11 +28,17 @@
   let dragSide = $state<-1 | 1 | null>(null);
   let backlinks = $state<NoteMeta[]>([]);
   const noteId = $derived(app.note?.id);
+  const otherNotesKey = $derived(
+    notes.list
+      .filter((n) => n.id !== noteId)
+      .map((n) => `${n.id}:${n.updatedAt}:${n.title}`)
+      .join('|'),
+  );
 
   $effect(() => {
     const id = noteId;
-    // Re-read backlinks whenever the open note changes or any note is saved/updated.
-    void notes.list;
+    // Re-read backlinks when the open note changes or another note is saved/renamed.
+    void otherNotesKey;
     if (!id) {
       backlinks = [];
       return;

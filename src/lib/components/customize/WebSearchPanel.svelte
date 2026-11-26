@@ -3,25 +3,18 @@
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import ExternalLink from 'lucide-svelte/icons/external-link';
-  import { tick } from 'svelte';
+  import { isTauri, openExternalUrl } from '../../api/platform';
+  import { FALLBACK_SEARCH_ENGINES } from '../../api/search';
   import type { SearchEngine, SearchEngineCredentialStatus } from '../../api/types';
   import { unfold } from '../../motion/transitions';
-  import { deleteSearchKey, reasonOf, searchStatus, setSearchKey, settings, updateSettings } from '../../state/settings.svelte';
+  import { deleteSearchKey, searchStatus, setSearchKey, settings, updateSettings } from '../../state/settings.svelte';
   import Popover from '../Popover.svelte';
-  import Field from './Field.svelte';
+  import ApiKeyField from './ApiKeyField.svelte';
   import { follow } from './follow';
   import Reach from './Reach.svelte';
 
-  const FALLBACK_ENGINES: SearchEngineCredentialStatus[] = [
-    { engine: 'tavily', label: 'Tavily', envVar: 'TAVILY_API_KEY', docsUrl: 'https://app.tavily.com/', hasStoredKey: false, maskedKey: null, hasEnvKey: false },
-    { engine: 'brave', label: 'Brave Search', envVar: 'BRAVE_API_KEY', docsUrl: 'https://brave.com/search/api/', hasStoredKey: false, maskedKey: null, hasEnvKey: false },
-    { engine: 'exa', label: 'Exa', envVar: 'EXA_API_KEY', docsUrl: 'https://dashboard.exa.ai/api-keys', hasStoredKey: false, maskedKey: null, hasEnvKey: false },
-    { engine: 'firecrawl', label: 'Firecrawl', envVar: 'FIRECRAWL_API_KEY', docsUrl: 'https://www.firecrawl.dev/app/api-keys', hasStoredKey: false, maskedKey: null, hasEnvKey: false },
-    { engine: 'ollama', label: 'Ollama', envVar: 'OLLAMA_API_KEY', docsUrl: 'https://ollama.com/settings/keys', hasStoredKey: false, maskedKey: null, hasEnvKey: false },
-  ];
-
   const status = $derived(searchStatus.value);
-  const engines = $derived(status?.engines ?? FALLBACK_ENGINES);
+  const engines = $derived(status?.engines ?? FALLBACK_SEARCH_ENGINES);
   const pinned = $derived(settings.value.webSearchEngine);
   const pinnedLabel = $derived(pinned ? (engines.find((e) => e.engine === pinned)?.label ?? pinned) : 'Automatic');
   const statusLine = $derived(status?.reason ?? 'No search engine key set');
@@ -29,10 +22,6 @@
 
   let menuOpen = $state(false);
   let openRows = $state<Partial<Record<SearchEngine, boolean>>>({});
-  let drafts = $state<Record<SearchEngine, string>>({ tavily: '', brave: '', exa: '', firecrawl: '', ollama: '' });
-  let errors = $state<Partial<Record<SearchEngine, string | null>>>({});
-  let inputs = $state<Partial<Record<SearchEngine, HTMLInputElement>>>({});
-  const busy: Partial<Record<SearchEngine, boolean>> = {};
 
   const hasKey = (e: SearchEngineCredentialStatus) => e.hasStoredKey || e.hasEnvKey;
 
@@ -43,75 +32,23 @@
     return 'Not set';
   }
 
-  async function toggleRow(engine: SearchEngine) {
-    const next = !openRows[engine];
-    openRows[engine] = next;
-    if (next) {
-      await tick();
-      inputs[engine]?.focus({ preventScroll: true });
-    }
+  function toggleRow(engine: SearchEngine) {
+    openRows[engine] = !openRows[engine];
   }
 
-  async function pickEngine(engine: SearchEngine | null) {
+  function pickEngine(engine: SearchEngine | null) {
     menuOpen = false;
     void updateSettings({ webSearchEngine: engine });
     if (engine) {
       const target = engines.find((item) => item.engine === engine);
-      if (target && !hasKey(target)) {
-        openRows[engine] = true;
-        await tick();
-        inputs[engine]?.focus({ preventScroll: true });
-      }
+      if (target && !hasKey(target)) openRows[engine] = true;
     }
   }
 
-  async function openDocs(ev: MouseEvent, url: string) {
-    if (!('__TAURI_INTERNALS__' in window)) return;
+  function openDocs(ev: MouseEvent, url: string) {
+    if (!isTauri()) return;
     ev.preventDefault();
-    try {
-      const { openUrl } = await import('@tauri-apps/plugin-opener');
-      await openUrl(url);
-    } catch {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
-  }
-
-  async function attempt(engine: SearchEngine, act: () => Promise<void>, failed: (reason: string) => string) {
-    if (busy[engine]) return;
-    busy[engine] = true;
-    errors[engine] = null;
-    try {
-      await act();
-    } catch (err) {
-      errors[engine] = failed(reasonOf(err));
-    } finally {
-      busy[engine] = false;
-    }
-  }
-
-  function saveKey(e: SearchEngineCredentialStatus) {
-    const trimmed = (drafts[e.engine] ?? '').trim();
-    if (!trimmed) return;
-    void attempt(
-      e.engine,
-      async () => {
-        await setSearchKey(e.engine, trimmed);
-        drafts[e.engine] = '';
-        inputs[e.engine]?.focus();
-      },
-      (reason) => `The key wasn’t saved: ${reason}.${e.hasStoredKey ? ' Your old key is still in place.' : ''}`,
-    );
-  }
-
-  function removeKey(e: SearchEngineCredentialStatus) {
-    void attempt(
-      e.engine,
-      async () => {
-        await deleteSearchKey(e.engine);
-        inputs[e.engine]?.focus();
-      },
-      (reason) => `The key wasn’t removed: ${reason}.`,
-    );
+    void openExternalUrl(url);
   }
 </script>
 
@@ -168,7 +105,7 @@
             class="head"
             id="search-engine-{e.engine}"
             aria-expanded={open}
-            onclick={() => void toggleRow(e.engine)}
+            onclick={() => toggleRow(e.engine)}
           >
             <span class="name" title={e.label}>{e.label}</span>
             <span class="use">{#if active}<span class="pill">Active</span>{/if}</span>
@@ -179,37 +116,26 @@
           {#if open}
             <div class="fold" transition:unfold={{ duration: 200 }} onintrostart={(ev) => follow(ev.currentTarget)}>
               <div class="body">
-                <Field
-                  label="API key"
-                  type="password"
-                  placeholder={e.hasStoredKey ? 'Paste a new key to replace it' : 'Paste a key'}
-                  bind:value={drafts[e.engine]}
-                  bind:input={inputs[e.engine]}
-                  error={errors[e.engine] ?? null}
-                  onkeydown={(ev) => ev.key === 'Enter' && !ev.isComposing && saveKey(e)}
+                <ApiKeyField
+                  saved={e.hasStoredKey}
+                  envVar={e.hasEnvKey && !e.hasStoredKey ? e.envVar : null}
+                  autofocus
+                  onsave={(key) => setSearchKey(e.engine, key)}
+                  onremove={() => deleteSearchKey(e.engine)}
                 >
-                  {#snippet after()}
-                    <button class="solid" disabled={!(drafts[e.engine] ?? '').trim()} onclick={() => saveKey(e)}>Save</button>
+                  {#snippet beforeRemove()}
+                    <a
+                      class="docs"
+                      href={e.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onclick={(ev) => openDocs(ev, e.docsUrl)}
+                    >
+                      <span>Get a key</span>
+                      <ExternalLink size={12} strokeWidth={1.7} />
+                    </a>
                   {/snippet}
-                </Field>
-                {#if e.hasEnvKey && !e.hasStoredKey}
-                  <p class="help">Using the one in {e.envVar}. A key saved here is used instead.</p>
-                {/if}
-                <div class="foot">
-                  <a
-                    class="docs"
-                    href={e.docsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onclick={(ev) => void openDocs(ev, e.docsUrl)}
-                  >
-                    <span>Get a key</span>
-                    <ExternalLink size={12} strokeWidth={1.7} />
-                  </a>
-                  {#if e.hasStoredKey}
-                    <button class="quiet push" onclick={() => removeKey(e)}>Remove key</button>
-                  {/if}
-                </div>
+                </ApiKeyField>
               </div>
             </div>
           {/if}
@@ -291,13 +217,9 @@
 
   .fold { display: flow-root; scroll-margin-bottom: 12px; }
   .body { padding: 4px 16px 16px; }
-  .help { margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--faint); }
-  .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; font-size: 13px; line-height: 1.3; color: var(--graphite); }
   .docs { display: inline-flex; align-items: center; gap: 5px; color: var(--faint); text-decoration: none; transition: color 150ms var(--ease-ui); }
-  .push { margin-left: auto; }
-  .quiet { flex: none; color: var(--graphite); transition: color 150ms var(--ease-ui); }
   @media (hover: hover) and (pointer: fine) {
-    .docs:hover, .quiet:hover { color: var(--ink); }
+    .docs:hover { color: var(--ink); }
   }
   @media (prefers-reduced-motion: reduce) {
     .ghost:active { transform: none; }

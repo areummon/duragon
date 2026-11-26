@@ -12,10 +12,15 @@
   import { settings, updateSettings } from '../../state/settings.svelte';
   import SwitchRow from './SwitchRow.svelte';
 
-  const SCOPES: { scope: KeyScope; label: string }[] = [
-    { scope: 'navigation', label: 'Navigation' },
-    { scope: 'note', label: 'Note' },
-  ];
+  const SCOPES = (
+    [
+      { scope: 'navigation', label: 'Navigation' },
+      { scope: 'note', label: 'Note' },
+    ] as const satisfies readonly { scope: KeyScope; label: string }[]
+  ).map((s) => ({
+    ...s,
+    actions: KEYBOARD_ACTIONS.filter((a) => a.scope === s.scope),
+  }));
 
   const VIM_MOTIONS: [string, string][] = [
     ['h j k l', 'Move'],
@@ -42,26 +47,20 @@
   const MODIFIER_KEYS = new Set(['Control', 'Meta', 'Alt', 'Shift']);
 
   let rebinding = $state<KeyAction | null>(null);
-  let errorRow = $state<KeyAction | null>(null);
-  let errorMessage = $state<string | null>(null);
+  let error = $state<{ id: KeyAction; message: string } | null>(null);
 
   function beginRebind(id: KeyAction) {
     rebinding = id;
-    errorRow = null;
-    errorMessage = null;
+    error = null;
   }
 
   function cancelRebind() {
     rebinding = null;
-    errorRow = null;
-    errorMessage = null;
+    error = null;
   }
 
   function resetOne(id: KeyAction) {
-    if (errorRow === id) {
-      errorRow = null;
-      errorMessage = null;
-    }
+    if (error?.id === id) error = null;
     resetBinding(id);
   }
 
@@ -89,18 +88,28 @@
 
       const res = setBinding(target, binding);
       if (!res.ok) {
-        errorRow = target;
-        errorMessage = res.error;
+        error = { id: target, message: res.error };
         return;
       }
 
       rebinding = null;
-      errorRow = null;
-      errorMessage = null;
+      error = null;
     };
 
+    const onPointerDown = (e: PointerEvent) => {
+      const row = (e.target as Element | null)?.closest(`[data-testid="kbd-row-${target}"]`);
+      if (!row) cancelRebind();
+    };
+    const onBlur = () => cancelRebind();
+
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('blur', onBlur);
+    };
   });
 </script>
 
@@ -149,8 +158,7 @@
   <h3>Shortcuts</h3>
   <p class="sub">Click Rebind, then press a new shortcut. Escape cancels.</p>
 
-  {#each SCOPES as { scope, label } (scope)}
-    {@const actions = KEYBOARD_ACTIONS.filter((a) => a.scope === scope)}
+  {#each SCOPES as { scope, label, actions } (scope)}
     <div class="group">
       <h4>{label}</h4>
       <div class="list" data-testid="kbd-scope-{scope}">
@@ -188,9 +196,9 @@
                 {/if}
               </div>
             </div>
-            {#if errorRow === def.id && errorMessage}
+            {#if error?.id === def.id}
               <div class="row-error-wrap" transition:unfold={{ duration: 160 }}>
-                <p class="row-error" role="alert">{errorMessage}</p>
+                <p class="row-error" role="alert">{error.message}</p>
               </div>
             {/if}
           </div>

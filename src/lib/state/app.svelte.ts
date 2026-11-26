@@ -1,5 +1,6 @@
 import { tick } from 'svelte';
 import { getBackend } from '../api/backend';
+import { pickOpenPath, pickSavePath } from '../api/platform';
 import type { DeleteMode, ExportFormat, Note, NoteMetaPatch } from '../api/types';
 import { markdownish } from '../editor/plain';
 import { notes, refreshNotes, removeMeta, upsertMeta } from './notes.svelte';
@@ -50,8 +51,10 @@ export async function initApp() {
 
 /** Notes in the order they were last open, the one open now last. */
 const visited: string[] = [];
+let openSeq = 0;
 
 function show(note: Note) {
+  openSeq++;
   const i = visited.indexOf(note.id);
   if (i >= 0) visited.splice(i, 1);
   visited.push(note.id);
@@ -61,9 +64,14 @@ function show(note: Note) {
 
 export async function openNote(id: string) {
   if (app.note?.id === id) return;
+  const seq = ++openSeq;
   await flushSave?.();
+  if (seq !== openSeq) return;
   await storeNote(id);
-  show(await (await getBackend()).getNote(id));
+  if (seq !== openSeq) return;
+  const note = await (await getBackend()).getNote(id);
+  if (seq !== openSeq) return;
+  show(note);
 }
 
 export async function newNote(title = '') {
@@ -135,11 +143,12 @@ export async function restoreNote(id: string): Promise<boolean> {
 
 export async function restoreNoteRevision(revisionId: string) {
   if (!app.note) return;
+  const noteId = app.note.id;
   try {
     await flushSave?.();
-    await storeNote(app.note.id);
-    const note = await (await getBackend()).restoreRevision(app.note.id, revisionId);
-    app.note = note;
+    await storeNote(noteId);
+    const note = await (await getBackend()).restoreRevision(noteId, revisionId);
+    show(note);
     upsertMeta(note);
     app.historyOpen = false;
     showToast('Restored earlier draft');
@@ -200,27 +209,21 @@ const EXT: Record<ExportFormat, string> = { md: 'md', docx: 'docx' };
 
 export async function exportNote(format: ExportFormat) {
   if (!app.note) return;
+  const noteId = app.note.id;
   await flushSave?.();
-  if (!('__TAURI_INTERNALS__' in window)) return;
-  const { save } = await import('@tauri-apps/plugin-dialog');
-  const path = await save({
+  const path = await pickSavePath({
     defaultPath: `${noteTitle()}.${EXT[format]}`,
     filters: [{ name: format === 'md' ? 'Markdown' : 'Word', extensions: [EXT[format]] }],
   });
-  if (path) await (await getBackend()).exportNote(app.note.id, format, path);
+  if (path) await (await getBackend()).exportNote(noteId, format, path);
 }
 
 export async function importMarkdownNote(folderId: string | null = null) {
   await flushSave?.();
-  let path: string | null = 'Imported note.md';
-  if ('__TAURI_INTERNALS__' in window) {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const picked = await open({
-      multiple: false,
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }],
-    });
-    path = typeof picked === 'string' ? picked : null;
-  }
+  const path = await pickOpenPath({
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }],
+    mockFallback: 'Imported note.md',
+  });
   if (!path) return;
   try {
     const note = await (await getBackend()).importMarkdown(path, folderId);
@@ -234,12 +237,10 @@ export async function importMarkdownNote(folderId: string | null = null) {
 
 export async function exportAllMarkdown(folderId: string | null = null) {
   await flushSave?.();
-  let dir: string | null = '/mock/export';
-  if ('__TAURI_INTERNALS__' in window) {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const picked = await open({ directory: true, multiple: false });
-    dir = typeof picked === 'string' ? picked : null;
-  }
+  const dir = await pickOpenPath({
+    directory: true,
+    mockFallback: '/mock/export',
+  });
   if (!dir) return;
   try {
     const count = await (await getBackend()).exportMarkdownDir(dir, folderId);
@@ -251,4 +252,7 @@ export async function exportAllMarkdown(folderId: string | null = null) {
 
 export const exportPdf = () => window.print();
 
-if (import.meta.env.DEV) Object.assign((window as unknown as { __duragon: object }).__duragon, { app, notes });
+if (import.meta.env.DEV) {
+  const w = window as unknown as { __duragon?: Record<string, unknown> };
+  w.__duragon = Object.assign(w.__duragon ?? {}, { app, notes });
+}

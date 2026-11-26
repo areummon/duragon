@@ -1,20 +1,8 @@
 import { getBackend } from '../api/backend';
-import { DEFAULT_MODELS, DEFAULT_PROVIDER_ID, DEFAULT_PROVIDERS, isServerKind, mergeProviders, withoutProvider, type Server } from '../api/providers';
+import { DEFAULT_SETTINGS } from '../api/defaults';
+import { isServerKind, mergeProviders, withoutProvider, type Server } from '../api/providers';
 import type { ProviderCredentialStatus, SearchEngine, SearchStatus, Settings } from '../api/types';
 import { showToast } from './toast.svelte';
-
-const DEFAULTS: Settings = {
-  newNoteMode: 'thinks', readingPace: 'regular', questionPlacement: 'both',
-  webInNewNotes: false, webSearchEngine: null, voiceInNewNotes: false, voiceName: 'kokoro/bm_george', speakingSpeed: 1, listenModel: 'parakeet',
-  appearance: 'system', textSize: 'default', pageWidth: null, lettering: 'own',
-  inkColour: 'ink', justMyWords: false, aboutYou: '',
-  learnAboutYou: true, searchMyNotes: false, explainSymbols: false,
-  readProvider: DEFAULT_PROVIDER_ID, chatProvider: DEFAULT_PROVIDER_ID, drawProvider: DEFAULT_PROVIDER_ID,
-  ...DEFAULT_MODELS,
-  readThinking: 'default', chatThinking: 'default', drawThinking: 'default',
-  providers: DEFAULT_PROVIDERS.map((p) => ({ ...p, args: [...p.args], models: [...p.models] })),
-  sidebarOpen: false, deletedNotes: 'duragon', vimMode: false,
-};
 
 export const PAGE_WIDTH_DEFAULT = 690;
 export const PAGE_WIDTH_MIN = 520;
@@ -22,7 +10,7 @@ export const PAGE_WIDTH_MAX = 1100;
 
 const dark = window.matchMedia('(prefers-color-scheme: dark)');
 
-export const settings = $state<{ value: Settings; loaded: boolean }>({ value: { ...DEFAULTS }, loaded: false });
+export const settings = $state<{ value: Settings; loaded: boolean }>({ value: structuredClone(DEFAULT_SETTINGS), loaded: false });
 /** `error` is why the saved keys can't be read. */
 export const credentialStatuses = $state<{ value: ProviderCredentialStatus[]; error: string | null }>({ value: [], error: null });
 export const searchStatus = $state<{ value: SearchStatus | null; error: string | null }>({ value: null, error: null });
@@ -61,7 +49,7 @@ dark.addEventListener('change', apply);
 
 async function storedSettings(): Promise<Settings> {
   const loaded = await (await getBackend()).getSettings();
-  return { ...DEFAULTS, ...loaded, providers: mergeProviders(loaded.providers) };
+  return { ...DEFAULT_SETTINGS, ...loaded, providers: mergeProviders(loaded.providers) };
 }
 
 export async function loadSettings() {
@@ -213,4 +201,7 @@ export function deleteSearchKey(engine: SearchEngine) {
   });
 }
 
-if (import.meta.env.DEV) Object.assign(window as object, { __duragon: { settings, updateSettings, searchStatus } });
+if (import.meta.env.DEV) {
+  const w = window as unknown as { __duragon?: Record<string, unknown> };
+  w.__duragon = Object.assign(w.__duragon ?? {}, { settings, updateSettings, searchStatus });
+}

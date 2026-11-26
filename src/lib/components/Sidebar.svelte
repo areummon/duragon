@@ -17,7 +17,7 @@
   import { layout } from '../state/layout.svelte';
   import { settings } from '../state/settings.svelte';
   import { closeOnEscape } from '../escape';
-  import { focusLost } from '../focus';
+  import { focusLost, topDialog } from '../focus';
   import { bindingLabel } from '../state/keymap.svelte';
   import { unfold, veil } from '../motion/transitions';
   import Blot from './Blot.svelte';
@@ -140,7 +140,7 @@
 
   const busy = () =>
     drag !== null || noteMenu !== null || folderMenu !== null || settingsOpen || editing !== null ||
-    app.paletteOpen || app.customizeOpen || app.trashOpen || app.mindEditor !== null;
+    topDialog() !== undefined;
 
   // Beside the edge, resting on the empty page opens a peek too. Nothing lies over the page there, so its threads and
   // words keep the pointer. Once it has opened or been closed, the pointer has to leave and come back.

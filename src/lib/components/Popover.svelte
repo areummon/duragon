@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { closeOnEscape } from '../escape';
+  import { dismissOnOutside } from '../escape';
   import { menuKeys } from '../focus';
   import { rise } from '../motion/transitions';
 
@@ -12,28 +12,20 @@
     at?: { x: number; y: number };
     width?: number;
     label?: string;
+    role?: 'menu' | 'listbox';
     children: Snippet;
   }
-  let { open, onclose, align = 'left', up = false, at, width, label, children }: Props = $props();
+  let { open, onclose, align = 'left', up = false, at, width, label, role = 'menu', children }: Props = $props();
+
+  let el = $state<HTMLElement>();
 
   $effect(() => {
-    if (open) return closeOnEscape(() => onclose());
-  });
-
-  function dismiss(node: HTMLElement) {
+    if (!open || !el) return;
+    const node = el;
     // A menu under its button counts the button as inside, so pressing it toggles. One opened at the pointer has no
     // button beside it, and its parent can hold the whole page, so only the menu itself is inside.
-    const away = (e: PointerEvent) => {
-      const inside = at ? node : node.parentElement;
-      if (!inside?.contains(e.target as Node)) onclose();
-    };
-    window.addEventListener('pointerdown', away, true);
-    return {
-      destroy() {
-        window.removeEventListener('pointerdown', away, true);
-      },
-    };
-  }
+    return dismissOnOutside(() => (at ? node : node.parentElement), () => onclose());
+  });
 </script>
 
 {#if open}
@@ -41,13 +33,13 @@
     class="popover"
     class:up
     class:right={align === 'right'}
-    role="menu"
+    bind:this={el}
+    {role}
     aria-label={label}
     style:position={at ? 'fixed' : undefined}
     style:left={at ? `${at.x}px` : undefined}
     style:top={at ? `${at.y}px` : undefined}
     style:min-width={width ? `${width}px` : undefined}
-    use:dismiss
     use:menuKeys={() => onclose()}
     transition:rise={{ y: up ? 4 : -4, scale: 0.97, duration: 180 }}
   >

@@ -7,13 +7,12 @@
   import User from 'lucide-svelte/icons/user';
   import Users from 'lucide-svelte/icons/users';
   import Volume2 from 'lucide-svelte/icons/volume-2';
-  import X from 'lucide-svelte/icons/x';
-  import { tick } from 'svelte';
+  import type { Component } from 'svelte';
   import { accessProblem, jobProvider, JOBS, providerViews } from '../../api/providers';
-  import { closeOnEscape } from '../../escape';
-  import { pop, rise, veil } from '../../motion/transitions';
+  import { rise } from '../../motion/transitions';
   import { app, type CustomizePage } from '../../state/app.svelte';
   import { credentialStatuses, searchStatus, servers, settings } from '../../state/settings.svelte';
+  import Modal from '../Modal.svelte';
   import AboutPage from './AboutPage.svelte';
   import AppearancePage from './AppearancePage.svelte';
   import GeneralPage from './GeneralPage.svelte';
@@ -25,113 +24,86 @@
 
   type NavIcon = typeof SlidersHorizontal;
 
-  const NAV: { id: CustomizePage; label: string; title: string; icon: NavIcon; gap?: 'group' | 'bottom' }[] = [
-    { id: 'general', label: 'General', title: 'General', icon: SlidersHorizontal },
-    { id: 'appearance', label: 'Appearance', title: 'Appearance', icon: Palette },
-    { id: 'keyboard', label: 'Keyboard', title: 'Keyboard', icon: Keyboard },
-    { id: 'providers', label: 'Providers', title: 'Providers', icon: KeyRound, gap: 'group' },
-    { id: 'minds', label: 'Minds', title: 'Minds', icon: Users },
-    { id: 'about', label: 'About you', title: 'About you', icon: User },
-    { id: 'voice', label: 'Voice', title: 'Voice', icon: Volume2 },
-    { id: 'help', label: 'Help', title: 'Help', icon: CircleHelp, gap: 'bottom' },
+  interface NavItem {
+    id: CustomizePage;
+    label: string;
+    title: string;
+    icon: NavIcon;
+    component: Component;
+    gap?: 'group' | 'bottom';
+  }
+
+  const NAV: NavItem[] = [
+    { id: 'general', label: 'General', title: 'General', icon: SlidersHorizontal, component: GeneralPage },
+    { id: 'appearance', label: 'Appearance', title: 'Appearance', icon: Palette, component: AppearancePage },
+    { id: 'keyboard', label: 'Keyboard', title: 'Keyboard', icon: Keyboard, component: KeyboardPage },
+    { id: 'providers', label: 'Providers', title: 'Providers', icon: KeyRound, component: ProvidersPage, gap: 'group' },
+    { id: 'minds', label: 'Minds', title: 'Minds', icon: Users, component: MindsPage },
+    { id: 'about', label: 'About you', title: 'About you', icon: User, component: AboutPage },
+    { id: 'voice', label: 'Voice', title: 'Voice', icon: Volume2, component: VoicePage },
+    { id: 'help', label: 'Help', title: 'Help', icon: CircleHelp, component: HelpPage, gap: 'bottom' },
   ];
 
-  let card = $state<HTMLElement>();
   let scrollEl = $state<HTMLElement>();
   const current = $derived(NAV.find((n) => n.id === app.customizePage) ?? NAV[0]);
-  const views = $derived(providerViews(settings.value, credentialStatuses.value, credentialStatuses.error !== null, servers));
+  const views = $derived(
+    app.customizeOpen
+      ? providerViews(settings.value, credentialStatuses.value, credentialStatuses.error !== null, servers)
+      : [],
+  );
   const providersAttention = $derived(
-    JOBS.some((job) => accessProblem(jobProvider(views, settings.value, job)) !== null) ||
-      !!(searchStatus.value?.pinned && !searchStatus.value.available),
+    app.customizeOpen &&
+      (JOBS.some((job) => accessProblem(jobProvider(views, settings.value, job)) !== null) ||
+        !!(searchStatus.value?.pinned && !searchStatus.value.available)),
   );
 
   const close = () => (app.customizeOpen = false);
 
   $effect(() => {
-    if (app.customizeOpen) void tick().then(() => card?.focus());
-  });
-
-  $effect(() => {
     void app.customizePage;
     if (scrollEl) scrollEl.scrollTop = 0;
   });
-
-  $effect(() => {
-    if (app.customizeOpen) return closeOnEscape(close);
-  });
 </script>
 
-{#if app.customizeOpen}
-  <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil|global>
-    <div class="card" bind:this={card} tabindex="-1" role="dialog" aria-modal="true" aria-label="Customize Duragon" in:pop|global out:pop={{ duration: 140 }}>
-      <nav aria-label="Settings sections">
-        {#each NAV as n (n.id)}
-          {@const Icon = n.icon}
-          <button
-            class:active={app.customizePage === n.id}
-            class:gap-group={n.gap === 'group'}
-            class:gap-bottom={n.gap === 'bottom'}
-            aria-current={app.customizePage === n.id ? 'page' : undefined}
-            onclick={() => (app.customizePage = n.id)}
-          >
-            <span class="nav-icon" aria-hidden="true"><Icon size={15} strokeWidth={1.6} /></span>
-            <span class="nav-label">{n.label}</span>
-            {#if n.id === 'providers' && providersAttention}<i class="nav-dot" aria-hidden="true"></i>{/if}
-          </button>
-        {/each}
-      </nav>
-      <div class="main">
-        <button class="x" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
-        <div class="scroll" bind:this={scrollEl}>
-          <h2>{current.title}</h2>
-          {#key app.customizePage}
-            <div class="page" in:rise={{ y: 4, duration: 180 }}>
-              {#if app.customizePage === 'general'}
-                <GeneralPage />
-              {:else if app.customizePage === 'appearance'}
-                <AppearancePage />
-              {:else if app.customizePage === 'providers'}
-                <ProvidersPage />
-              {:else if app.customizePage === 'keyboard'}
-                <KeyboardPage />
-              {:else if app.customizePage === 'minds'}
-                <MindsPage />
-              {:else if app.customizePage === 'about'}
-                <AboutPage />
-              {:else if app.customizePage === 'voice'}
-                <VoicePage />
-              {:else}
-                <HelpPage />
-              {/if}
-            </div>
-          {/key}
+<Modal open={app.customizeOpen} onclose={close} label="Customize Duragon" class="customize-card">
+  <nav aria-label="Settings sections">
+    {#each NAV as n (n.id)}
+      {@const Icon = n.icon}
+      <button
+        class:active={app.customizePage === n.id}
+        class:gap-group={n.gap === 'group'}
+        class:gap-bottom={n.gap === 'bottom'}
+        aria-current={app.customizePage === n.id ? 'page' : undefined}
+        onclick={() => (app.customizePage = n.id)}
+      >
+        <span class="nav-icon" aria-hidden="true"><Icon size={15} strokeWidth={1.6} /></span>
+        <span class="nav-label">{n.label}</span>
+        {#if n.id === 'providers' && providersAttention}<i class="nav-dot" aria-hidden="true"></i>{/if}
+      </button>
+    {/each}
+  </nav>
+  <div class="main">
+    <div class="scroll" bind:this={scrollEl}>
+      <h2>{current.title}</h2>
+      {#key app.customizePage}
+        <div class="page" in:rise={{ y: 4, duration: 180 }}>
+          <current.component />
         </div>
-      </div>
+      {/key}
     </div>
   </div>
-{/if}
+</Modal>
 
 <style>
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: grid;
-    place-items: center;
-    padding: 24px;
-    background: var(--veil);
-  }
-  .card {
+  :global(.card.customize-card) {
     display: flex;
     width: min(860px, 100%);
     height: min(720px, 100%);
     overflow: hidden;
-    border-radius: 14px;
-    background: var(--paper);
-    box-shadow: var(--lift);
-    font-size: 14px;
-    line-height: 1.4;
-    outline: none;
+  }
+  :global(.card.customize-card > .x) {
+    top: 28px;
+    right: 28px;
   }
   nav {
     flex: none;
@@ -187,22 +159,6 @@
   nav button.active { color: var(--ink); font-weight: 500; background: var(--riddle-wash); }
   nav button.active .nav-icon { color: var(--ink); }
   .main { position: relative; flex: 1; min-width: 0; }
-  .x {
-    position: absolute;
-    top: 28px;
-    right: 28px;
-    z-index: 2;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    color: var(--faint);
-    transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .x:hover { color: var(--ink); background: var(--shelf); }
-  }
   .scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 34px 40px 40px 40px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
   h2 { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; letter-spacing: -0.01em; }
   .page { margin-top: 22px; }

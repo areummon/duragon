@@ -1,7 +1,7 @@
 <script lang="ts">
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import type { ComponentProps } from 'svelte';
-  import { closeOnEscape } from '../../escape';
+  import { dismissOnOutside } from '../../escape';
   import Reach from './Reach.svelte';
   import VoicePicker from './VoicePicker.svelte';
 
@@ -15,18 +15,7 @@
   const close = () => (open = false);
 
   $effect(() => {
-    if (!open) return;
-    const away = (e: Event) => {
-      if (!root?.contains(e.target as Node)) close();
-    };
-    window.addEventListener('pointerdown', away, true);
-    window.addEventListener('focusin', away);
-    const off = closeOnEscape(close, () => button);
-    return () => {
-      window.removeEventListener('pointerdown', away, true);
-      window.removeEventListener('focusin', away);
-      off();
-    };
+    if (open) return dismissOnOutside(() => root, close, () => button);
   });
 </script>
 
