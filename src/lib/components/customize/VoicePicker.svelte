@@ -45,20 +45,24 @@
   const shown = $derived(groups.flatMap((g) => g.options));
   const start = () => (q ? 0 : Math.max(0, shown.findIndex((o) => o.id === current)));
 
-  let index = $state(start());
+  /** Kept by id, so the same option stays highlighted while the list changes under it. */
+  let active = $state<string>();
+  const index = $derived(Math.max(0, shown.findIndex((o) => o.id === active)));
 
   const focusInput = () => input?.focus({ preventScroll: true });
 
   onMount(() => {
     focusInput();
-    go(index);
+    go(start());
   });
 
   function go(i: number) {
-    index = (i + shown.length) % shown.length;
-    const el = list?.querySelectorAll<HTMLElement>('.opt')[index];
+    if (!shown.length) return;
+    const n = (i + shown.length) % shown.length;
+    active = shown[n].id;
+    const el = list?.querySelectorAll<HTMLElement>('.opt')[n];
     if (!list || !el) return;
-    if (index === 0) list.scrollTop = 0;
+    if (n === 0) list.scrollTop = 0;
     else if (el.offsetTop < list.scrollTop) list.scrollTop = el.offsetTop;
     else list.scrollTop = Math.max(list.scrollTop, el.offsetTop + el.offsetHeight - list.clientHeight);
   }
@@ -69,10 +73,9 @@
   }
 
   async function oninput() {
-    index = start();
     await tick();
     if (list) list.scrollTop = 0;
-    go(index);
+    go(start());
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -116,7 +119,7 @@
             {@const i = shown.indexOf(o)}
             {@const playing = samples && samplePlaying(o.id)}
             <div id="{id}-{i}" class="opt" class:active={i === index} role="option" aria-selected={i === index} tabindex="-1" title="{o.name} · {describe(o)}"
-              onpointerdown={(e) => e.preventDefault()} onclick={() => pick(o)} onmousemove={() => (index = i)} onkeydown={() => {}}>
+              onpointerdown={(e) => e.preventDefault()} onclick={() => pick(o)} onmousemove={() => (active = o.id)} onkeydown={() => {}}>
               <span class="what">{o.name}</span>
               <span class="desc">{describe(o)}</span>
               <span class="check">{#if o.id === current}<span role="img" aria-label="In use"><Check size={15} strokeWidth={1.6} /></span>{/if}</span>
