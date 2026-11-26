@@ -17,11 +17,13 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import FindBar from '../components/FindBar.svelte';
-  import { registerFlush, type OpenNote } from '../state/app.svelte';
+  import { openNote, registerFlush, type OpenNote } from '../state/app.svelte';
   import { keepWords, storeNote } from '../state/saves';
   import { settings } from '../state/settings.svelte';
+  import { showToast } from '../state/toast.svelte';
   import { createEditor } from './create';
   import { attachFindEditor, find } from './find.svelte';
+  import NoteLinkMenu from './NoteLinkMenu.svelte';
   import { changedBlocks, docBlocks, normalizeDoc, withoutLastLine } from './plain';
   import { findQuote } from './quote';
   import SlashMenu from './SlashMenu.svelte';
@@ -107,11 +109,39 @@
   $effect(() => {
     if (settings.value.vimMode) resetVimMode('normal');
   });
+
+  function openLinkTarget(target: EventTarget | null): boolean {
+    const link = (target as HTMLElement | null)?.closest<HTMLElement>('.note-link[data-note-link]');
+    const id = link?.dataset.noteLink;
+    if (!id) return false;
+    void openNote(id).catch(() => showToast('That note no longer exists.'));
+    return true;
+  }
+
+  $effect(() => {
+    const el = element;
+    if (!el) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      if (openLinkTarget(e.target)) e.preventDefault();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (openLinkTarget(e.target)) e.preventDefault();
+    };
+    el.addEventListener('click', onClick);
+    el.addEventListener('keydown', onKeyDown);
+    return () => {
+      el.removeEventListener('click', onClick);
+      el.removeEventListener('keydown', onKeyDown);
+    };
+  });
 </script>
 
 <div class="editor" class:vim-normal={settings.value.vimMode && vim.mode === 'normal'} bind:this={element}></div>
 {#if editor}
   <SlashMenu {editor} />
+  <NoteLinkMenu {editor} />
 {/if}
 {#if find.open}
   <FindBar />
@@ -120,8 +150,8 @@
 <style>
   .editor {
     position: relative;
-    min-height: 60vh;
-    padding-bottom: 40vh;
+    min-height: 50vh;
+    padding-bottom: 64px;
   }
   .editor :global(.ProseMirror .find-match) {
     background: var(--riddle-wash);

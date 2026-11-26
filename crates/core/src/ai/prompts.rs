@@ -148,6 +148,21 @@ pub const NOTES_SEARCH: &str = r#"
 
 You can look through the writer's other notes: search_notes finds them by a few words, and read_note opens one by its id. Use them when the writer refers to earlier work, or when a past note would clearly help with what they are thinking through now. When you draw on one, name it by its title (for example: "you worked through this in your note Hash maps")."#;
 
+/// Compact index of notes linked from the current note so the mind can call `read_note` on demand.
+pub fn linked_notes_hint(links: &[(String, String)]) -> String {
+    if links.is_empty() {
+        return String::new();
+    }
+    let list = links
+        .iter()
+        .map(|(id, title)| format!("\"{}\" (id: {id})", title.replace('"', "'")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "\n\nThis note links to: {list}. Call read_note with an id only when the question needs what is in that linked note."
+    )
+}
+
 const LEARN: &str = r#"You maintain a short "About you" paragraph that a notebook assistant keeps about its writer, so every note starts out knowing it. You are given the current paragraph and the writer's latest message.
 
 Decide whether the writer said something lasting about themselves: what they study or do, how they like feedback, their goals, strengths or struggles. Passing details about the note's topic, one-off requests and anything about other people do not count.

@@ -16,6 +16,11 @@ fn inline(nodes: &[Value]) -> String {
         match kind(n) {
             "text" => out.push_str(&marked(n)),
             "hardBreak" => out.push_str("  \n"),
+            "noteLink" => {
+                out.push_str("[[");
+                out.push_str(attr_str(n, "title").unwrap_or(""));
+                out.push_str("]]");
+            }
             _ => out.push_str(&inline(children(n))),
         }
     }

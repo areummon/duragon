@@ -1,8 +1,11 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { getBackend } from '../api/backend';
+  import type { NoteMeta } from '../api/types';
   import { closeOnEscape } from '../escape';
   import EditorView, { type EditorApi } from '../editor/Editor.svelte';
-  import { app } from '../state/app.svelte';
+  import { app, openNote } from '../state/app.svelte';
+  import { notes } from '../state/notes.svelte';
   import { riddlerName } from '../state/riddler';
   import {
     PAGE_WIDTH_DEFAULT, PAGE_WIDTH_MAX, PAGE_WIDTH_MIN, updateSettings,
@@ -23,7 +26,30 @@
   let page = $state<HTMLElement>();
   let riddle = $state.raw<Riddle | null>(null);
   let dragSide = $state<-1 | 1 | null>(null);
+  let backlinks = $state<NoteMeta[]>([]);
   const noteId = $derived(app.note?.id);
+
+  $effect(() => {
+    const id = noteId;
+    // Re-read backlinks whenever the open note changes or any note is saved/updated.
+    void notes.list;
+    if (!id) {
+      backlinks = [];
+      return;
+    }
+    let cancelled = false;
+    void getBackend()
+      .then((be) => be.listBacklinks(id))
+      .then((list) => {
+        if (!cancelled) backlinks = list;
+      })
+      .catch(() => {
+        if (!cancelled) backlinks = [];
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   $effect(() => {
     const id = noteId;
@@ -145,6 +171,15 @@
         onBlocksChanged={(t) => riddle?.onBlocksChanged(t)}
         changeDelay={() => riddle?.delay() ?? 900}
       />
+      {#if backlinks.length > 0}
+        <footer class="backlinks" aria-label="Backlinks">
+          <span class="backlinks-label">Mentioned in</span>
+          {#each backlinks as link, i (link.id)}
+            {#if i > 0}<span class="backlinks-sep" aria-hidden="true">·</span>{/if}
+            <button class="backlink" onclick={() => void openNote(link.id)}>{link.title || 'Untitled'}</button>
+          {/each}
+        </footer>
+      {/if}
     {/if}
     {#if api && page}
       <!-- Before the margin, so Tab goes on from the toolbar to the margin. -->
@@ -167,6 +202,7 @@
     position: relative;
     margin: 0 auto;
     padding-top: 106px;
+    padding-bottom: 34vh;
   }
   .handle {
     position: absolute;
@@ -239,6 +275,34 @@
   .brief:hover .label, .brief:hover .text { color: var(--ink); }
   .title-gap { height: 12px; }
   .title-gap.has-meta { height: 4px; }
+
+  .backlinks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .backlinks-label {
+    color: var(--faint);
+    margin-right: 2px;
+  }
+  .backlinks-sep {
+    color: var(--faint);
+    user-select: none;
+  }
+  .backlink {
+    color: var(--graphite);
+    cursor: var(--cursor-pointer);
+    transition: color var(--dur-ui) var(--ease-ui);
+  }
+  .backlink:hover {
+    color: var(--ink);
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .stage { transition: opacity var(--dur-drawer) var(--ease-drawer); }

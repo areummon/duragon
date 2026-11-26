@@ -70,11 +70,26 @@ function plainOf(doc: unknown): string {
   const out: string[] = [];
   const walk = (n: any) => {
     if (n.type === 'text') out.push(n.text);
+    else if (n.type === 'noteLink' && typeof n.attrs?.title === 'string') out.push(n.attrs.title);
     n.content?.forEach(walk);
-    if (n.type !== 'doc' && n.type !== 'text') out.push('\n');
+    if (n.type !== 'doc' && n.type !== 'text' && n.type !== 'noteLink') out.push('\n');
   };
   walk(doc);
   return out.join('').trim();
+}
+
+function hasNoteLink(doc: unknown, targetId: string): boolean {
+  let found = false;
+  const walk = (n: any) => {
+    if (found || !n || typeof n !== 'object') return;
+    if (n.type === 'noteLink' && n.attrs?.id === targetId) {
+      found = true;
+      return;
+    }
+    if (Array.isArray(n.content)) n.content.forEach(walk);
+  };
+  walk(doc);
+  return found;
 }
 
 export function sampleDrawing(): string {
@@ -342,6 +357,12 @@ export class MockBackend implements Backend {
       const n = this.notes.get(m.id)!;
       return q === '' || m.title.toLowerCase().includes(q) || plainOf(n.doc).toLowerCase().includes(q);
     });
+  }
+  async listBacklinks(noteId: string) {
+    return [...this.notes.values()]
+      .filter((n) => n.id !== noteId && hasNoteLink(n.doc, noteId))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((n) => this.meta(n));
   }
   async getNote(id: string) {
     return structuredClone({ ...this.requireNote(id), ...this.meta(this.requireNote(id)) });

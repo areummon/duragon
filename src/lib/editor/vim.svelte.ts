@@ -5,6 +5,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { app, openCustomize, toggleChat, toggleJustMyWords, updateMeta } from '../state/app.svelte';
 import { settings } from '../state/settings.svelte';
 import { clearFindHighlights, find, nextMatch, openFind, prevMatch } from './find.svelte';
+import { noteLinkMenu } from './notelink.svelte';
 import { slash } from './slash.svelte';
 
 export type VimMode = 'normal' | 'insert' | 'visual';
@@ -634,7 +635,7 @@ export const VimMode = Extension.create({
           handleKeyDown(view, event) {
             if (!settings.value.vimMode) return false;
             if (event.isComposing) return false;
-            if (slash.open) return false;
+            if (slash.open || noteLinkMenu.open) return false;
 
             const key = event.key;
             if (MODIFIER_KEYS.has(key)) return false;

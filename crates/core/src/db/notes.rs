@@ -109,6 +109,31 @@ impl Db {
             .optional()?)
     }
 
+    /// Notes other than `note_id` whose document contains a `noteLink` referencing `note_id`.
+    pub fn list_backlinks(&self, note_id: &str) -> Result<Vec<NoteMeta>> {
+        let escaped = note_id.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+        let pattern = format!("%{escaped}%");
+        let conn = self.conn();
+        let mut st = conn.prepare_cached(&format!(
+            "SELECT {META_COLS}, n.doc FROM notes n
+             WHERE n.id != ?1 AND n.doc LIKE ?2 ESCAPE '\\'
+             ORDER BY n.updated_at DESC, n.rowid DESC"
+        ))?;
+        let candidates: Vec<(NoteMeta, String)> = st
+            .query_map(params![note_id, pattern], |r| Ok((meta_row(r)?, r.get(5)?)))?
+            .collect::<Result<_, _>>()?;
+        let out = candidates
+            .into_iter()
+            .filter(|(_, raw_doc)| {
+                serde_json::from_str::<Value>(raw_doc)
+                    .map(|doc| doc::linked_note_ids(&doc).iter().any(|id| id == note_id))
+                    .unwrap_or(false)
+            })
+            .map(|(meta, _)| meta)
+            .collect();
+        Ok(out)
+    }
+
     pub fn get_note(&self, id: &str) -> Result<Note> {
         self.find_note(id)?.ok_or_else(|| anyhow!("note not found: {id}"))
     }

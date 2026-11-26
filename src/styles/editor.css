@@ -127,8 +127,25 @@
 }
 
 @media print {
-  body::before, .bar, .sidebar, .hint, .handle, .row, .tell, .brief, .code-tools, .code-copy, .caret { display: none !important; }
+  body::before, .bar, .sidebar, .hint, .handle, .row, .tell, .brief, .backlinks, .code-tools, .code-copy, .caret { display: none !important; }
   .stage { transform: none !important; opacity: 1 !important; }
+}
+
+.ProseMirror .note-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  cursor: var(--cursor-pointer);
+  transition: text-decoration-color var(--dur-ui) var(--ease-ui);
+}
+.ProseMirror .note-link:hover {
+  text-decoration-color: var(--ink);
+}
+.ProseMirror .note-link.ProseMirror-selectednode {
+  background: var(--riddle-wash);
+  border-radius: 4px;
 }
 
 .ProseMirror u { text-underline-offset: 3px; }

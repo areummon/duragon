@@ -9,6 +9,7 @@ import type {
 export class TauriBackend implements Backend {
   listNotes = () => invoke<NoteMeta[]>('list_notes');
   searchNotes = (query: string) => invoke<NoteMeta[]>('search_notes', { query });
+  listBacklinks = (noteId: string) => invoke<NoteMeta[]>('list_backlinks', { noteId });
   getNote = (id: string) => invoke<Note>('get_note', { id });
   createNote = (title?: string) => invoke<Note>('create_note', { title });
   saveNote = (id: string, title: string, doc: unknown, plain: string) =>

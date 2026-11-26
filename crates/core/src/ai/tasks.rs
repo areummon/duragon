@@ -279,6 +279,21 @@ impl Ai {
         );
         if notes.is_some() {
             system_prompt.push_str(prompts::NOTES_SEARCH);
+            let links: Vec<(String, String)> = doc::linked_note_ids(&ctx.note.doc)
+                .into_iter()
+                .filter(|id| id != &ctx.note.meta.id)
+                .filter_map(|id| {
+                    let linked = self.db.get_note(&id).ok()?;
+                    let title = if linked.meta.title.trim().is_empty() {
+                        "Untitled".to_string()
+                    } else {
+                        linked.meta.title
+                    };
+                    Some((id, title))
+                })
+                .take(12)
+                .collect();
+            system_prompt.push_str(&prompts::linked_notes_hint(&links));
         }
         let mut schema = prompts::schema(task, web);
         if ctx.settings.explain_symbols && spec.symbols {

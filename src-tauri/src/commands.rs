@@ -28,6 +28,12 @@ pub async fn search_notes(state: State<'_, AppState>, query: String) -> Res<Vec<
 }
 
 #[tauri::command]
+pub async fn list_backlinks(state: State<'_, AppState>, note_id: String) -> Res<Vec<NoteMeta>> {
+    let db = state.db.clone();
+    blocking(move || db.list_backlinks(&note_id)).await
+}
+
+#[tauri::command]
 pub async fn get_note(state: State<'_, AppState>, id: String) -> Res<Note> {
     let db = state.db.clone();
     blocking(move || db.get_note(&id)).await
@@ -422,7 +428,7 @@ pub async fn stop_speaking(state: State<'_, AppState>) -> Res<()> {
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
-        list_notes, search_notes, get_note, create_note, save_note, update_note_meta, delete_note,
+        list_notes, search_notes, list_backlinks, get_note, create_note, save_note, update_note_meta, delete_note,
         list_revisions, restore_revision,
         list_trash, restore_note, delete_trashed,
         list_folders, create_folder, rename_folder, move_folder, delete_folder,

@@ -12,6 +12,7 @@ const isTextblock = (n: JsonNode) => n.type === 'paragraph' || n.type === 'headi
 function inlineText(n: JsonNode): string {
   if (n.type === 'text') return n.text ?? '';
   if (n.type === 'hardBreak') return '\n';
+  if (n.type === 'noteLink') return typeof n.attrs?.title === 'string' ? n.attrs.title : '';
   return (n.content ?? []).map(inlineText).join('');
 }
 
@@ -30,7 +31,10 @@ export function blockTexts(doc: unknown): string[] {
 }
 
 /** One top-level block's text, as `blockTexts` reads it. */
-export const blockText = (block: PMNode) => block.textBetween(0, block.content.size, '\n', '\n');
+export const blockText = (block: PMNode) =>
+  block.textBetween(0, block.content.size, '\n', (leaf) =>
+    leaf.type.name === 'noteLink' ? String(leaf.attrs.title ?? '') : '\n',
+  );
 
 /** `blockTexts` of the live editor doc, without serializing it: each top-level block's text, title first. */
 export function docBlocks(doc: PMNode): string[] {

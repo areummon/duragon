@@ -8,6 +8,7 @@ import { Caret } from './caret';
 import { CodeBlock } from './codeblock';
 import { FindHighlight } from './find.svelte';
 import { MathPreview } from './math';
+import { NoteLink } from './notelink.svelte';
 import { TextColor } from './textcolor';
 import { SlashCommands } from './slash.svelte';
 import { NoteDocument, Title } from './title';
@@ -128,6 +129,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       Caret,
       FindHighlight,
       VimMode,
+      NoteLink,
       SlashCommands,
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),
       SkipEmpty,

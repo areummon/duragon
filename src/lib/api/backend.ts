@@ -8,6 +8,7 @@ export type Unsubscribe = () => void;
 export interface Backend {
   listNotes(): Promise<NoteMeta[]>;
   searchNotes(query: string): Promise<NoteMeta[]>;
+  listBacklinks(noteId: string): Promise<NoteMeta[]>;
   getNote(id: string): Promise<Note>;
   createNote(title?: string): Promise<Note>;
   saveNote(id: string, title: string, doc: unknown, plain: string): Promise<NoteMeta>;

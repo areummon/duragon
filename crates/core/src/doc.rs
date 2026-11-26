@@ -47,8 +47,14 @@ pub fn blocks(doc: &Value) -> Vec<Block> {
         if let Some(t) = n.get("text").and_then(Value::as_str) {
             out.push_str(t);
         }
-        if n.get("type").and_then(Value::as_str) == Some("hardBreak") {
-            out.push('\n');
+        match n.get("type").and_then(Value::as_str) {
+            Some("hardBreak") => out.push('\n'),
+            Some("noteLink") => {
+                if let Some(title) = n.get("attrs").and_then(|a| a.get("title")).and_then(Value::as_str) {
+                    out.push_str(title);
+                }
+            }
+            _ => {}
         }
         for c in children(n) {
             inline(c, out);
@@ -76,4 +82,23 @@ pub fn children(n: &Value) -> &[Value] {
         .and_then(Value::as_array)
         .map(Vec::as_slice)
         .unwrap_or(&[])
+}
+
+/// Deduplicated `attrs.id` values from all `noteLink` nodes in reading order.
+pub fn linked_note_ids(doc: &Value) -> Vec<String> {
+    fn walk(n: &Value, out: &mut Vec<String>) {
+        if n.get("type").and_then(Value::as_str) == Some("noteLink") {
+            if let Some(id) = n.get("attrs").and_then(|a| a.get("id")).and_then(Value::as_str) {
+                if !id.is_empty() && !out.iter().any(|seen| seen == id) {
+                    out.push(id.to_string());
+                }
+            }
+        }
+        for c in children(n) {
+            walk(c, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(doc, &mut out);
+    out
 }
