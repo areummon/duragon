@@ -3,6 +3,7 @@
 
   const KEYS = $derived<[string, string][]>([
     [bindingLabel('find-note'), 'Find a note, or name a new one'],
+    [bindingLabel('find-in-note'), 'Find in this note'],
     [bindingLabel('new-note'), 'New note'],
     ['/', 'Commands: headings, lists, quote, code block, divider'],
     ['---', 'A divider'],

@@ -15,6 +15,7 @@
   import { enlarge, lightbox } from './lib/state/layout.svelte';
   import { settings } from './lib/state/settings.svelte';
   import { threads } from './lib/state/threads.svelte';
+  import { openFind } from './lib/editor/find.svelte';
   import { vim } from './lib/editor/vim.svelte';
   import {
     app, copyNote, exportNote, initApp, newNote, toggleChat, toggleJustMyWords,
@@ -47,6 +48,7 @@
         if (onTop || !topDialog()) act();
       });
     if (matchesAction(e, 'find-note')) toggle(app.paletteOpen, () => (app.paletteOpen = !app.paletteOpen));
+    else if (matchesAction(e, 'find-in-note')) toggle(false, () => openFind());
     else if (matchesAction(e, 'toggle-chat')) toggle(false, toggleChat);
     else if (matchesAction(e, 'open-customize')) toggle(app.customizeOpen && !app.mindEditor, () => (app.customizeOpen = !app.customizeOpen));
     else if (matchesAction(e, 'copy-note')) handled(() => void copyNote());

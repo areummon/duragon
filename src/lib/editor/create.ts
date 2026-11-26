@@ -6,6 +6,7 @@ import { Plugin, Selection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { Caret } from './caret';
 import { CodeBlock } from './codeblock';
+import { FindHighlight } from './find.svelte';
 import { MathPreview } from './math';
 import { TextColor } from './textcolor';
 import { SlashCommands } from './slash.svelte';
@@ -125,6 +126,7 @@ export function createEditor({ element, content, autofocus, onUpdate }: EditorOp
       CodeBlock,
       MathPreview,
       Caret,
+      FindHighlight,
       VimMode,
       SlashCommands,
       Placeholder.configure({ placeholder, showOnlyCurrent: false }),

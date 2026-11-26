@@ -29,6 +29,7 @@
   ];
 
   const VIM_DURAGON: [string, string][] = [
+    ['/ n N', 'Find in note'],
     ['gc', 'Chat'],
     ['gs', 'Settings'],
     ['gw', 'Web'],

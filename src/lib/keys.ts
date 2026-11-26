@@ -16,6 +16,7 @@ export type KeyAction =
   | 'new-note'
   | 'toggle-chat'
   | 'open-customize'
+  | 'find-in-note'
   | 'copy-note'
   | 'export-note'
   | 'just-my-words'
@@ -35,6 +36,7 @@ export const KEYBOARD_ACTIONS: readonly KeyActionDef[] = [
   { id: 'new-note', label: 'New note', scope: 'navigation', binding: 'mod+n' },
   { id: 'toggle-chat', label: 'Open or close chat', scope: 'navigation', binding: 'mod+j' },
   { id: 'open-customize', label: 'Open settings', scope: 'navigation', binding: 'mod+,' },
+  { id: 'find-in-note', label: 'Find in this note', scope: 'note', binding: 'mod+f' },
   { id: 'copy-note', label: 'Copy this note', scope: 'note', binding: 'mod+shift+c' },
   { id: 'export-note', label: 'Export this note', scope: 'note', binding: 'mod+shift+e' },
   { id: 'just-my-words', label: 'Just my words', scope: 'note', binding: 'mod+shift+.' },

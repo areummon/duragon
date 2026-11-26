@@ -16,10 +16,12 @@
 
 <script lang="ts">
   import { untrack } from 'svelte';
+  import FindBar from '../components/FindBar.svelte';
   import { registerFlush, type OpenNote } from '../state/app.svelte';
   import { keepWords, storeNote } from '../state/saves';
   import { settings } from '../state/settings.svelte';
   import { createEditor } from './create';
+  import { attachFindEditor, find } from './find.svelte';
   import { changedBlocks, docBlocks, normalizeDoc, withoutLastLine } from './plain';
   import { findQuote } from './quote';
   import SlashMenu from './SlashMenu.svelte';
@@ -78,11 +80,13 @@
     });
     let lastBlocks = docBlocks(ed.state.doc);
     editor = ed;
+    attachFindEditor(ed);
     registerFlush(save);
     onReady?.({ editor: ed, findQuote: (quote) => findQuote(ed.state.doc, quote) });
 
     return () => {
       window.clearTimeout(changeTimer);
+      attachFindEditor(null);
       registerFlush(null);
       onReady?.(null);
       saveSoon();
@@ -107,12 +111,23 @@
 {#if editor}
   <SlashMenu {editor} />
 {/if}
+{#if find.open}
+  <FindBar />
+{/if}
 
 <style>
   .editor {
     position: relative;
     min-height: 60vh;
     padding-bottom: 40vh;
+  }
+  .editor :global(.ProseMirror .find-match) {
+    background: var(--riddle-wash);
+    border-radius: 2px;
+  }
+  .editor :global(.ProseMirror .find-match-current) {
+    background: color-mix(in srgb, var(--bulb) 35%, transparent);
+    border-radius: 2px;
   }
   .editor.vim-normal :global(.ProseMirror:not(.drawn-caret)) {
     caret-color: var(--ink);

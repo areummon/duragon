@@ -4,6 +4,7 @@ import { Plugin, PluginKey, Selection, TextSelection, type EditorState } from '@
 import type { EditorView } from '@tiptap/pm/view';
 import { app, openCustomize, toggleChat, toggleJustMyWords, updateMeta } from '../state/app.svelte';
 import { settings } from '../state/settings.svelte';
+import { clearFindHighlights, find, nextMatch, openFind, prevMatch } from './find.svelte';
 import { slash } from './slash.svelte';
 
 export type VimMode = 'normal' | 'insert' | 'visual';
@@ -584,6 +585,18 @@ function handleNormalKey(editor: Editor, view: EditorView, key: string, event: K
       event.preventDefault();
       editor.commands.undo();
       return true;
+    case '/':
+      event.preventDefault();
+      openFind('');
+      return true;
+    case 'n':
+      event.preventDefault();
+      nextMatch({ moveCursor: true });
+      return true;
+    case 'N':
+      event.preventDefault();
+      prevMatch({ moveCursor: true });
+      return true;
     default:
       break;
   }
@@ -655,6 +668,12 @@ export const VimMode = Extension.create({
                 event.preventDefault();
                 event.stopPropagation();
                 vim.pending = '';
+                return true;
+              }
+              if (!find.open && find.query) {
+                event.preventDefault();
+                event.stopPropagation();
+                clearFindHighlights();
                 return true;
               }
               return false;
