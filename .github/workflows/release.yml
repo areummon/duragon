@@ -60,7 +60,7 @@ jobs:
       - name: Build Flatpak single-file bundle
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
+          flatpak install --user -y flathub org.gnome.Platform//48 org.gnome.Sdk//48
           flatpak-builder --user --force-clean --repo=flatpak-repo build-flatpak packaging/flatpak/dev.duragon.app.yml
           TAG="${GITHUB_REF_NAME}"
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
