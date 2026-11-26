@@ -15,7 +15,9 @@ use super::acp::run_acp;
 use super::codex::run_codex;
 use super::http::{run_anthropic, run_gemini, run_openai};
 use super::local::run_local;
-use super::notes_mcp::{NotesTool, TOOL_NAMES};
+use super::notes_mcp::{
+    NotesSearch, NotesTool, DURAGON_NOTES_TOOL_NAMES, TOOL_NAMES, WEB_TOOL_NAMES,
+};
 use super::quiet::quiet;
 use super::search::SearchClient;
 use super::veil::Veil;
@@ -64,6 +66,8 @@ pub struct ClaudeRequest {
     pub bin: Option<PathBuf>,
     /// Lets the call search the writer's other notes.
     pub notes: Option<NotesTool>,
+    /// Configured MCP server for web_search/web_fetch when a search engine key is active.
+    pub web_mcp: Option<NotesSearch>,
 }
 
 /// Unified request dispatched across Claude CLI, ACP (`agy acp`), Codex CLI, and HTTP APIs.
@@ -83,6 +87,8 @@ pub struct AiRequest {
     pub bin: Option<PathBuf>,
     /// Lets the call search the writer's other notes.
     pub notes: Option<NotesTool>,
+    /// App binary + db info for spawning `--notes-mcp` even when notes search itself is off.
+    pub mcp_server: Option<NotesSearch>,
     /// Database handle for in-process notes search in HTTP providers.
     pub db: Option<Db>,
     /// Configured web search client, when a search engine key is active and web is enabled.
@@ -127,7 +133,8 @@ impl Drop for Registration {
 }
 
 fn args(req: &ClaudeRequest, thinking: ThinkingLevel) -> Vec<String> {
-    let tools = if req.web { "WebSearch,WebFetch" } else { "" };
+    let use_mcp_web = req.web && req.web_mcp.is_some();
+    let tools = if req.web && !use_mcp_web { "WebSearch,WebFetch" } else { "" };
     let mut a: Vec<String> = [
         "-p",
         "--model",
@@ -153,10 +160,21 @@ fn args(req: &ClaudeRequest, thinking: ThinkingLevel) -> Vec<String> {
         a.push(thinking.as_str().into());
     }
     let mut allowed: Vec<&str> = Vec::new();
-    if req.web {
+    if req.web && !use_mcp_web {
         allowed.extend(["WebSearch", "WebFetch"]);
     }
-    if let Some(notes) = &req.notes {
+    if use_mcp_web {
+        let server = req.web_mcp.as_ref().expect("checked above").clone();
+        let open_note_id = req.notes.as_ref().map(|n| n.open_note_id.clone()).unwrap_or_default();
+        let notes_on = req.notes.is_some();
+        let mcp = NotesTool { server, open_note_id };
+        a.push("--mcp-config".into());
+        a.push(mcp.mcp_config_with_options(notes_on, true));
+        if notes_on {
+            allowed.extend(DURAGON_NOTES_TOOL_NAMES);
+        }
+        allowed.extend(WEB_TOOL_NAMES);
+    } else if let Some(notes) = &req.notes {
         a.push("--mcp-config".into());
         a.push(notes.mcp_config());
         allowed.extend(TOOL_NAMES);
@@ -293,6 +311,11 @@ async fn run_provider(req: AiRequest) -> Result<Value, AiError> {
             .clone()
             .or_else(|| std::env::var_os("DURAGON_CLAUDE_BIN").map(PathBuf::from))
             .or_else(|| req.provider.command.as_deref().filter(|s| !s.trim().is_empty()).map(PathBuf::from));
+        let web_mcp = if req.web && req.web_search.is_some() {
+            req.notes.as_ref().map(|n| n.server.clone()).or(req.mcp_server)
+        } else {
+            None
+        };
         return run_claude_with_thinking(
             ClaudeRequest {
                 model: req.model,
@@ -304,6 +327,7 @@ async fn run_provider(req: AiRequest) -> Result<Value, AiError> {
                 cancel: req.cancel,
                 bin,
                 notes: req.notes,
+                web_mcp,
             },
             req.thinking,
         )

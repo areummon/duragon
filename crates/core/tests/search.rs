@@ -1,11 +1,15 @@
-use duragon_core::ai::search::{resolve_search, run_web_search_tool, SearchClient, SearchHit};
+use duragon_core::ai::notes_mcp::{serve_with_web, NotesSearch, NotesTool};
+use duragon_core::ai::search::{
+    fetch_web_page, is_public_ip, resolve_search, run_web_search_tool, SearchClient, SearchHit,
+};
 use duragon_core::ai::{run_ai, AiRequest};
 use duragon_core::credentials::{self, validate_search_key, CredentialsStore};
 use duragon_core::db::Db;
 use duragon_core::model::{ProviderConfig, ProviderKind, SearchEngine, ThinkingLevel};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::net::{IpAddr, TcpListener};
+use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 
 #[derive(Debug, Clone)]
@@ -372,6 +376,7 @@ async fn end_to_end_tool_loop_openai_and_ollama() {
         if idx == 0 {
             let tools = body["tools"].as_array().expect("tools should be present");
             assert!(tools.iter().any(|t| t["function"]["name"] == "web_search"));
+            assert!(tools.iter().any(|t| t["function"]["name"] == "web_fetch"));
             (
                 200,
                 json!({
@@ -455,6 +460,7 @@ async fn end_to_end_tool_loop_openai_and_ollama() {
         cancel: None,
         bin: None,
         notes: None,
+        mcp_server: None,
         db: None,
         web_search: Some(search_client.clone()),
     };
@@ -479,6 +485,7 @@ async fn end_to_end_tool_loop_openai_and_ollama() {
         if !msgs.iter().any(|m| m["role"] == "tool") {
             let tools = body["tools"].as_array().expect("tools should be sent to Ollama");
             assert!(tools.iter().any(|t| t["function"]["name"] == "web_search"));
+            assert!(tools.iter().any(|t| t["function"]["name"] == "web_fetch"));
             (
                 200,
                 json!({
@@ -535,6 +542,7 @@ async fn end_to_end_tool_loop_openai_and_ollama() {
         cancel: None,
         bin: None,
         notes: None,
+        mcp_server: None,
         db: None,
         web_search: Some(search_client),
     };
@@ -584,4 +592,278 @@ async fn web_search_tool_masks_emails_known_keys_and_active_search_key() {
     assert!(sent.contains("[email]"), "expected masked email in: {sent}");
     assert!(sent.contains("[key]"), "expected masked key in: {sent}");
     assert!(sent.contains("rust docs"), "expected non-secret terms preserved in: {sent}");
+}
+
+#[test]
+fn is_public_ip_rejects_private_reserved_and_allows_public() {
+    let blocked = [
+        "0.0.0.0",
+        "0.1.2.3",
+        "10.0.0.1",
+        "10.255.255.254",
+        "100.64.0.1",
+        "100.127.255.254",
+        "127.0.0.1",
+        "127.255.255.254",
+        "169.254.169.254",
+        "169.254.0.1",
+        "172.16.0.1",
+        "172.31.255.254",
+        "192.0.0.1",
+        "192.0.2.1",
+        "192.88.99.1",
+        "192.168.1.1",
+        "198.18.0.1",
+        "198.19.255.254",
+        "198.51.100.1",
+        "203.0.113.1",
+        "224.0.0.1",
+        "240.0.0.1",
+        "255.255.255.255",
+        "::",
+        "::1",
+        "fc00::1",
+        "fd12:3456::1",
+        "fe80::1",
+        "ff02::1",
+        "64:ff9b::1",
+        "64:ff9b:1::1",
+        "100::1",
+        "2001:db8::1",
+        "2002::1",
+        "::ffff:127.0.0.1",
+        "::ffff:169.254.169.254",
+        "::ffff:10.0.0.1",
+    ];
+    for raw in blocked {
+        let ip: IpAddr = raw.parse().unwrap();
+        assert!(!is_public_ip(ip), "expected {raw} to be blocked");
+    }
+
+    let allowed = [
+        "1.1.1.1",
+        "8.8.8.8",
+        "100.63.255.255",
+        "100.128.0.1",
+        "172.15.255.255",
+        "172.32.0.1",
+        "2606:4700:4700::1111",
+        "2001:4860:4860::8888",
+        "::ffff:1.1.1.1",
+    ];
+    for raw in allowed {
+        let ip: IpAddr = raw.parse().unwrap();
+        assert!(is_public_ip(ip), "expected {raw} to be public");
+    }
+}
+
+fn start_raw_server(
+    reply: impl Fn(&str) -> (u16, &'static str, Vec<u8>) + Send + 'static,
+) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for socket in listener.incoming() {
+            let Ok(mut socket) = socket else { break };
+            let mut buf = [0u8; 4096];
+            let n = socket.read(&mut buf).unwrap_or(0);
+            let req = String::from_utf8_lossy(&buf[..n]);
+            let path = req
+                .lines()
+                .next()
+                .and_then(|l| l.split(' ').nth(1))
+                .unwrap_or("/");
+            let (status, content_type, body) = reply(path);
+            let header = format!(
+                "HTTP/1.1 {status} OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = socket.write_all(header.as_bytes());
+            let _ = socket.write_all(&body);
+        }
+    });
+    url
+}
+
+#[tokio::test]
+async fn fetch_web_page_ssrf_html_credentials_and_binary_checks() {
+    let base = start_raw_server(|path| match path {
+        "/page" => (
+            200,
+            "text/html; charset=utf-8",
+            b"<html><head><title>Rust &amp; Friends</title><style>body{color:red}</style><script>alert(1)</script></head><body><noscript>nojs</noscript><svg><path d=\"M0 0\"/></svg><h1>Hello &lt;World&gt;</h1><p>It&#39;s&nbsp;&quot;clean&quot;.</p></body></html>".to_vec(),
+        ),
+        "/bin" => (200, "image/png", vec![0x89, 0x50, 0x4E, 0x47]),
+        "/pdf" => (200, "application/pdf", b"%PDF-1.4".to_vec()),
+        _ => (404, "text/plain", b"missing".to_vec()),
+    });
+
+    // 1. Blocked when allow_private = false
+    let err = fetch_web_page(&format!("{base}/page"), false).await.unwrap_err();
+    assert!(err.contains("non-public"), "expected SSRF block, got: {err}");
+
+    // 2. Clean HTML extraction when allow_private = true
+    let out = fetch_web_page(&format!("{base}/page"), true).await.unwrap();
+    assert!(out.starts_with(&format!("Source: {base}/page\n\n")), "{out}");
+    assert!(out.contains("Title: Rust & Friends"), "{out}");
+    assert!(out.contains("Hello <World>"), "{out}");
+    assert!(out.contains("It's \"clean\"."), "{out}");
+    assert!(!out.contains("alert(1)"), "{out}");
+    assert!(!out.contains("color:red"), "{out}");
+    assert!(!out.contains("nojs"), "{out}");
+
+    // 3. Embedded credentials rejected
+    let with_creds = base.replacen("http://", "http://user:pass@", 1);
+    let err = fetch_web_page(&format!("{with_creds}/page"), true)
+        .await
+        .unwrap_err();
+    assert!(err.contains("credentials"), "got: {err}");
+
+    // 4. Binary content types rejected
+    let err = fetch_web_page(&format!("{base}/bin"), true).await.unwrap_err();
+    assert!(err.contains("unsupported content type"), "got: {err}");
+    let err = fetch_web_page(&format!("{base}/pdf"), true).await.unwrap_err();
+    assert!(err.contains("unsupported content type"), "got: {err}");
+}
+
+#[tokio::test]
+async fn notes_mcp_serve_with_web_exposes_web_tools_and_omits_notes_when_off() {
+    let search_server = StubServer::start(|_, _| {
+        (
+            200,
+            json!({
+                "results": [
+                    { "title": "MCP Hit", "url": "https://example.com/mcp", "content": "from mcp" }
+                ]
+            })
+            .to_string(),
+        )
+    });
+    let client = SearchClient::with_base_url(
+        SearchEngine::Tavily,
+        "tvly-12345678901234567890".into(),
+        search_server.url,
+    );
+    let db = Db::open_in_memory().unwrap();
+
+    let requests = [
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}),
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"web_search","arguments":{"query":"mcp test","count":2}}}),
+        json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"web_fetch","arguments":{"url":"http://127.0.0.1:9/blocked"}}}),
+        json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"search_notes","arguments":{"query":"anything"}}}),
+    ];
+    let input: String = requests.iter().map(|r| format!("{r}\n")).collect();
+    let mut out = Vec::new();
+    serve_with_web(&db, "", false, Some(client), input.as_bytes(), &mut out).unwrap();
+
+    let replies: Vec<Value> = String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(replies.len(), 4);
+
+    // tools/list has web_search + web_fetch, and omits search_notes/read_note
+    let names: Vec<&str> = replies[0]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["web_search", "web_fetch"]);
+
+    // web_search succeeds through the configured SearchClient
+    assert_eq!(replies[1]["result"]["isError"], false);
+    let search_text = replies[1]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(search_text.contains("MCP Hit"), "{search_text}");
+
+    // web_fetch runs SSRF check and reports error cleanly
+    assert_eq!(replies[2]["result"]["isError"], true);
+    let fetch_text = replies[2]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(fetch_text.contains("web_fetch failed:"), "{fetch_text}");
+
+    // search_notes is rejected when notes_on = false
+    assert_eq!(replies[3]["error"]["code"], -32602);
+}
+
+#[tokio::test]
+async fn claude_cli_uses_builtin_web_without_search_key_and_mcp_web_with_search_key() {
+    let run_with = |web_search: Option<SearchClient>, notes: Option<NotesTool>, mcp_server: Option<NotesSearch>| async move {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("claude");
+        std::fs::write(
+            &bin,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$0.args\"\ncat >/dev/null\necho '{\"structured_output\":{\"ok\":true}}'\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let req = AiRequest {
+            provider: ProviderConfig {
+                id: "claude-cli".into(),
+                name: "Claude".into(),
+                kind: ProviderKind::ClaudeCli,
+                base_url: None,
+                command: None,
+                args: vec![],
+                env_var: None,
+                models: vec![],
+                builtin: true,
+            },
+            model: "haiku".into(),
+            thinking: ThinkingLevel::Default,
+            api_key: None,
+            system_prompt: "SYS".into(),
+            schema: json!({"type":"object"}),
+            payload: "hello".into(),
+            web: true,
+            timeout: Duration::from_secs(10),
+            cancel: None,
+            bin: Some(bin),
+            notes,
+            mcp_server,
+            db: None,
+            web_search,
+        };
+        run_ai(req).await.unwrap();
+        let raw = std::fs::read_to_string(dir.path().join("claude.args")).unwrap();
+        raw.lines().map(String::from).collect::<Vec<String>>()
+    };
+
+    let server = NotesSearch { exe: "/opt/duragon".into(), db: "/data/duragon.db".into() };
+    let search_client = SearchClient::new(SearchEngine::Tavily, "tvly-12345678901234567890".into());
+
+    // 1. web = true, web_search = None -> preserves built-in WebSearch,WebFetch
+    let args = run_with(None, None, Some(server.clone())).await;
+    let at = |args: &[String], flag: &str| args[args.iter().position(|a| a == flag).unwrap() + 1].clone();
+    assert_eq!(at(&args, "--tools"), "WebSearch,WebFetch");
+    assert_eq!(at(&args, "--allowedTools"), "WebSearch,WebFetch");
+    assert!(!args.iter().any(|a| a == "--mcp-config"));
+
+    // 2. web = true, web_search = Some(...), notes = None, mcp_server = Some(...) -> MCP web only
+    let args = run_with(Some(search_client.clone()), None, Some(server.clone())).await;
+    assert_eq!(at(&args, "--tools"), "");
+    assert_eq!(
+        at(&args, "--allowedTools"),
+        "mcp__duragon-notes__web_search,mcp__duragon-notes__web_fetch"
+    );
+    let cfg: Value = serde_json::from_str(&at(&args, "--mcp-config")).unwrap();
+    assert_eq!(
+        cfg,
+        json!({"mcpServers":{"duragon-notes":{"command":"/opt/duragon","args":["--notes-mcp","/data/duragon.db","","--web","--no-notes"]}}})
+    );
+
+    // 3. web = true, web_search = Some(...), notes = Some(...) -> MCP notes + web, no built-in web
+    let notes_tool = NotesTool { server: server.clone(), open_note_id: "note-42".into() };
+    let args = run_with(Some(search_client), Some(notes_tool), Some(server)).await;
+    assert_eq!(at(&args, "--tools"), "");
+    assert_eq!(
+        at(&args, "--allowedTools"),
+        "mcp__duragon-notes__search_notes,mcp__duragon-notes__read_note,mcp__duragon-notes__web_search,mcp__duragon-notes__web_fetch"
+    );
+    let cfg: Value = serde_json::from_str(&at(&args, "--mcp-config")).unwrap();
+    assert_eq!(
+        cfg,
+        json!({"mcpServers":{"duragon-notes":{"command":"/opt/duragon","args":["--notes-mcp","/data/duragon.db","note-42","--web"]}}})
+    );
 }

@@ -67,6 +67,7 @@ async fn real_draw() {
         cancel: None,
         bin: None,
         notes: None,
+        web_mcp: None,
     })
     .await
     .unwrap();

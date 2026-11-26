@@ -17,6 +17,7 @@ fn req(bin: std::path::PathBuf) -> ClaudeRequest {
         cancel: None,
         bin: Some(bin),
         notes: None,
+        web_mcp: None,
     }
 }
 

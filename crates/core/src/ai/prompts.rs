@@ -119,7 +119,7 @@ Label the summary: carbon dioxide + water + light energy → glucose + oxygen.")
 
 const WEB_SOURCES: &str = r#"
 
-Web access is on. When you used WebSearch, WebFetch, or web_search for your answer, also return "sources": the pages you actually used, each as {"url", "title"}, copied from your WebSearch, WebFetch, or web_search results. Never invent or guess a source. Never put who the writer is, such as their name, email or account, in a search or an address you open. If you used no page, leave "sources" out or empty."#;
+Web access is on. When you used WebSearch, WebFetch, web_search, or web_fetch for your answer, also return "sources": the pages you actually used, each as {"url", "title"}, copied from your WebSearch, WebFetch, web_search, or web_fetch results. Never invent or guess a source. Never put who the writer is, such as their name, email or account, in a search or an address you open. If you used no page, leave "sources" out or empty."#;
 
 /// Appended to the prompt of a task that writes to the writer when they turned on symbol explanations.
 pub const EXPLAIN_SYMBOLS: &str = r#"

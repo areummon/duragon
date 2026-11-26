@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use super::notes_mcp;
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, gemini_schema, has_required, json_instruction, strict_schema, strip_nulls};
-use super::search::run_web_search_tool;
+use super::search::{run_web_fetch_tool, run_web_search_tool};
 use crate::credentials::validate_base_url;
 use crate::model::ThinkingLevel;
 
@@ -110,6 +110,13 @@ pub(super) async fn run_tool(req: &AiRequest, name: &str, args: &Value) -> Strin
             None => "Web search is unavailable.".into(),
         };
     }
+    if name == "web_fetch" {
+        return if req.web_search.is_some() {
+            run_web_fetch_tool(args).await
+        } else {
+            "Web fetch is unavailable.".into()
+        };
+    }
     run_note_tool(req, name, args)
 }
 
@@ -133,6 +140,20 @@ pub(super) fn openai_tools(has_notes: bool, has_web_search: bool) -> Vec<Value> 
                         "count": { "type": "integer", "description": "Number of results to return (default 5)" }
                     },
                     "required": ["query"]
+                }
+            }
+        }));
+        tools.push(json!({
+            "type": "function",
+            "function": {
+                "name": "web_fetch",
+                "description": "Fetch and read the text content of a web page by URL.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": { "type": "string", "description": "The http or https URL to fetch" }
+                    },
+                    "required": ["url"]
                 }
             }
         }));
@@ -314,6 +335,17 @@ pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
                 "required": ["query"]
             }
         }));
+        tools.push(json!({
+            "name": "web_fetch",
+            "description": "Fetch and read the text content of a web page by URL.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "The http or https URL to fetch" }
+                },
+                "required": ["url"]
+            }
+        }));
     } else if req.web {
         tools.push(json!({
             "type": "web_search_20250305",
@@ -409,7 +441,7 @@ pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
                 let name = block.get("name").and_then(Value::as_str).unwrap_or("");
                 if name == "search_notes"
                     || name == "read_note"
-                    || (name == "web_search" && req.web_search.is_some())
+                    || ((name == "web_search" || name == "web_fetch") && req.web_search.is_some())
                 {
                     let id = block.get("id").and_then(Value::as_str).unwrap_or("");
                     let input = block.get("input").unwrap_or(&Value::Null);
@@ -492,6 +524,17 @@ pub async fn run_gemini(req: &AiRequest) -> Result<Value, AiError> {
                     "count": { "type": "INTEGER" }
                 },
                 "required": ["query"]
+            }
+        }));
+        fn_decls.push(json!({
+            "name": "web_fetch",
+            "description": "Fetch and read the text content of a web page by URL.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "url": { "type": "STRING" }
+                },
+                "required": ["url"]
             }
         }));
     }

@@ -31,6 +31,7 @@ fn request(kind: ProviderKind, base_url: String) -> AiRequest {
         cancel: None,
         bin: None,
         notes: None,
+        mcp_server: None,
         db: None,
         web_search: None,
     }

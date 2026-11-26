@@ -299,6 +299,7 @@ impl Ai {
             cancel: Some(CancelKey { note_id: ctx.note.meta.id.clone(), task }),
             bin: self.bin.clone(),
             notes,
+            mcp_server: self.notes_search.clone(),
             db: Some(self.db.clone()),
             web_search: if web { web_search } else { None },
         })
@@ -352,6 +353,7 @@ impl Ai {
             cancel: None,
             bin: self.bin.clone(),
             notes: None,
+            mcp_server: None,
             db: None,
             web_search: None,
         };

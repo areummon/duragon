@@ -26,6 +26,14 @@ const NOTES_TOOLS: [&str; 4] = [
     "mcp_duragon_notes_read_note",
 ];
 
+/// Configured web search/fetch MCP tools exposed through the same server.
+const WEB_MCP_TOOLS: [&str; 4] = [
+    "mcp__duragon_notes__web_search",
+    "mcp__duragon_notes__web_fetch",
+    "mcp_duragon_notes_web_search",
+    "mcp_duragon_notes_web_fetch",
+];
+
 const STDERR_WAIT: Duration = Duration::from_secs(1);
 
 /// Antigravity's own web tools, which it uses without asking.
@@ -52,7 +60,17 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
     if req.provider.kind == ProviderKind::AgyAcp && !args.iter().any(|a| a == AGY_OFF) {
         args.push(AGY_OFF.into());
     }
-    let grants = Grants { web: req.web, notes: req.notes.is_some() };
+    let web_mcp_server = if req.web && req.web_search.is_some() {
+        req.notes.as_ref().map(|n| &n.server).or(req.mcp_server.as_ref())
+    } else {
+        None
+    };
+    let use_mcp_web = web_mcp_server.is_some();
+    let grants = Grants {
+        web_builtin: req.web && !use_mcp_web,
+        web_mcp: use_mcp_web,
+        notes: req.notes.is_some(),
+    };
     // Before the child, so it is dropped after it.
     let cwd = WorkDir::new().map_err(|e| AiError::Failed(format!("could not make a folder for {command}: {e}")))?;
     if req.provider.kind == ProviderKind::AgyAcp {
@@ -125,14 +143,32 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
     let _init = wait_for_response(&mut reader, &mut stdin, init_id, grants, None).await?;
 
     // 2. session/new
-    let mcp_servers: Vec<Value> = match &req.notes {
-        Some(notes) => vec![json!({
+    let mcp_servers: Vec<Value> = if let Some(server) = web_mcp_server {
+        let open_note_id = req.notes.as_ref().map(|n| n.open_note_id.as_str()).unwrap_or("");
+        let mut mcp_args = vec![
+            "--notes-mcp".to_string(),
+            server.db.to_string_lossy().into_owned(),
+            open_note_id.to_string(),
+            "--web".to_string(),
+        ];
+        if req.notes.is_none() {
+            mcp_args.push("--no-notes".to_string());
+        }
+        vec![json!({
+            "name": NOTES_SERVER,
+            "command": server.exe.to_string_lossy(),
+            "args": mcp_args,
+            "env": []
+        })]
+    } else if let Some(notes) = &req.notes {
+        vec![json!({
             "name": NOTES_SERVER,
             "command": notes.server.exe.to_string_lossy(),
             "args": ["--notes-mcp", notes.server.db.to_string_lossy(), notes.open_note_id],
             "env": []
-        })],
-        None => vec![],
+        })]
+    } else {
+        vec![]
     };
     let new_id = next_id;
     next_id += 1;
@@ -349,15 +385,17 @@ fn collect_update_text(params: &Value, out: &mut String) {
 /// What the writer lets the agent use in this call.
 #[derive(Debug, Clone, Copy)]
 struct Grants {
-    web: bool,
+    web_builtin: bool,
+    web_mcp: bool,
     notes: bool,
 }
 
 /// Antigravity reads hooks from the folder it works in, and asks them before every tool.
 fn deny_other_tools(cwd: &Path, grants: Grants) -> std::io::Result<()> {
-    let web = AGY_WEB_TOOLS.iter().filter(|_| grants.web);
+    let web_builtin = AGY_WEB_TOOLS.iter().filter(|_| grants.web_builtin);
+    let web_mcp = WEB_MCP_TOOLS.iter().filter(|_| grants.web_mcp);
     let notes = NOTES_TOOLS.iter().filter(|_| grants.notes);
-    let allowed: Vec<&str> = web.chain(notes).copied().collect();
+    let allowed: Vec<&str> = web_builtin.chain(web_mcp).chain(notes).copied().collect();
     let deny = r#"echo '{"decision":"deny","reason":"The writer has not allowed this tool. Answer without it."}'"#;
     let hooks = json!({ "duragon": { "PreToolUse": [{
         "matcher": all_but(&allowed),
@@ -415,9 +453,12 @@ enum OptionKind {
 /// `search` covers the writer's files as well as the web, so web access doesn't grant it.
 fn granted(call: &ToolCall, grants: Grants) -> bool {
     let notes_tool = call.name.as_deref().is_some_and(|n| NOTES_TOOLS.contains(&n));
+    let web_mcp_tool = call.name.as_deref().is_some_and(|n| WEB_MCP_TOOLS.contains(&n));
     match call.kind {
-        Some(ToolKind::Fetch) => grants.web,
-        Some(ToolKind::Read | ToolKind::Search | ToolKind::Other) | None => grants.notes && notes_tool,
+        Some(ToolKind::Fetch) => grants.web_builtin || (grants.web_mcp && web_mcp_tool),
+        Some(ToolKind::Read | ToolKind::Search | ToolKind::Other) | None => {
+            (grants.notes && notes_tool) || (grants.web_mcp && web_mcp_tool)
+        }
         Some(ToolKind::Ungranted) => false,
     }
 }

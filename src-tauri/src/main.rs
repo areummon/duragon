@@ -106,22 +106,43 @@ pub struct AppState {
     pub credentials: CredentialsStore,
 }
 
-/// `duragon --notes-mcp <db> <open note id>`: the side chat's notes search server, spawned by the `claude` CLI.
-fn serve_notes_mcp(db: &str, exclude: &str) -> anyhow::Result<()> {
-    let db = Db::open_read_only(std::path::Path::new(db))?;
-    notes_mcp::serve(&db, exclude, std::io::stdin().lock(), std::io::stdout().lock())
+/// `duragon --notes-mcp <db> <open note id> [--web] [--no-notes]`:
+/// the side chat's notes & web search MCP server, spawned by CLI runners.
+fn serve_notes_mcp(db_path: &str, exclude: &str, web_on: bool, notes_on: bool) -> anyhow::Result<()> {
+    let db_path = std::path::Path::new(db_path);
+    let db = Db::open_read_only(db_path)?;
+    let search_client = if web_on {
+        let pinned = db.get_settings().ok().and_then(|s| s.web_search_engine);
+        let creds = db_path
+            .parent()
+            .map(|dir| CredentialsStore::new(dir.join("credentials.json")));
+        duragon_core::ai::search::SearchClient::resolve(pinned, creds.as_ref())
+    } else {
+        None
+    };
+    notes_mcp::serve_with_web(
+        &db,
+        exclude,
+        notes_on,
+        search_client,
+        std::io::stdin().lock(),
+        std::io::stdout().lock(),
+    )
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if let [_, flag, db, exclude] = args.as_slice() {
-        if flag == "--notes-mcp" {
-            if let Err(e) = serve_notes_mcp(db, exclude) {
-                eprintln!("duragon: notes search failed: {e}");
-                std::process::exit(1);
-            }
-            return;
+    if args.len() >= 4 && args[1] == "--notes-mcp" {
+        let db = &args[2];
+        let exclude = &args[3];
+        let rest = &args[4..];
+        let web_on = rest.iter().any(|a| a == "--web");
+        let notes_on = !rest.iter().any(|a| a == "--no-notes");
+        if let Err(e) = serve_notes_mcp(db, exclude, web_on, notes_on) {
+            eprintln!("duragon: notes search failed: {e}");
+            std::process::exit(1);
         }
+        return;
     }
 
     tauri::Builder::default()

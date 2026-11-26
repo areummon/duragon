@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
+use super::search::{run_web_fetch_tool, run_web_search_tool, SearchClient};
 use super::veil::mask;
 use crate::db::Db;
 
@@ -23,6 +24,14 @@ pub struct NotesTool {
 }
 
 pub const TOOL_NAMES: [&str; 2] = ["mcp__notes__search_notes", "mcp__notes__read_note"];
+pub const DURAGON_NOTES_TOOL_NAMES: [&str; 2] = [
+    "mcp__duragon-notes__search_notes",
+    "mcp__duragon-notes__read_note",
+];
+pub const WEB_TOOL_NAMES: [&str; 2] = [
+    "mcp__duragon-notes__web_search",
+    "mcp__duragon-notes__web_fetch",
+];
 
 const SEARCH_LIMIT: usize = 8;
 const READ_MAX_CHARS: usize = 8000;
@@ -36,17 +45,50 @@ impl NotesTool {
         }}})
         .to_string()
     }
+
+    /// The inline `--mcp-config` JSON when configured web tools may also be served.
+    pub fn mcp_config_with_options(&self, notes_on: bool, web_on: bool) -> String {
+        if !web_on {
+            return self.mcp_config();
+        }
+        let mut args = vec![
+            Value::String("--notes-mcp".into()),
+            json!(self.server.db),
+            Value::String(self.open_note_id.clone()),
+            Value::String("--web".into()),
+        ];
+        if !notes_on {
+            args.push(Value::String("--no-notes".into()));
+        }
+        json!({ "mcpServers": { "duragon-notes": {
+            "command": self.server.exe,
+            "args": args,
+        }}})
+        .to_string()
+    }
 }
 
 /// Serves newline-delimited JSON-RPC 2.0 until `input` ends.
-pub fn serve(db: &Db, exclude: &str, input: impl BufRead, mut output: impl Write) -> Result<()> {
+pub fn serve(db: &Db, exclude: &str, input: impl BufRead, output: impl Write) -> Result<()> {
+    serve_with_web(db, exclude, true, None, input, output)
+}
+
+/// Serves newline-delimited JSON-RPC 2.0 with optional notes and/or web tools until `input` ends.
+pub fn serve_with_web(
+    db: &Db,
+    exclude: &str,
+    notes_on: bool,
+    search_client: Option<SearchClient>,
+    input: impl BufRead,
+    mut output: impl Write,
+) -> Result<()> {
     for line in input.lines() {
         let line = line?;
         if line.trim().is_empty() {
             continue;
         }
         let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(msg) => handle(db, exclude, &msg),
+            Ok(msg) => handle(db, exclude, notes_on, search_client.as_ref(), &msg),
             Err(e) => Some(error(Value::Null, -32700, &format!("parse error: {e}"))),
         };
         if let Some(reply) = reply {
@@ -58,7 +100,13 @@ pub fn serve(db: &Db, exclude: &str, input: impl BufRead, mut output: impl Write
 }
 
 /// Notifications (no `id`) get no reply.
-fn handle(db: &Db, exclude: &str, msg: &Value) -> Option<Value> {
+fn handle(
+    db: &Db,
+    exclude: &str,
+    notes_on: bool,
+    search_client: Option<&SearchClient>,
+    msg: &Value,
+) -> Option<Value> {
     let id = msg.get("id")?.clone();
     let params = msg.get("params").cloned().unwrap_or(Value::Null);
     let result = match msg.get("method").and_then(Value::as_str).unwrap_or("") {
@@ -68,8 +116,8 @@ fn handle(db: &Db, exclude: &str, msg: &Value) -> Option<Value> {
             "serverInfo": { "name": "duragon-notes", "version": env!("CARGO_PKG_VERSION") },
         })),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({ "tools": tools() })),
-        "tools/call" => call(db, exclude, &params),
+        "tools/list" => Ok(json!({ "tools": tools(notes_on, search_client.is_some()) })),
+        "tools/call" => call(db, exclude, notes_on, search_client, &params),
         m => Err((-32601, format!("method not found: {m}"))),
     };
     Some(match result {
@@ -82,9 +130,10 @@ fn error(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
 }
 
-fn tools() -> Value {
-    json!([
-        {
+fn tools(notes_on: bool, web_on: bool) -> Value {
+    let mut list = Vec::new();
+    if notes_on {
+        list.push(json!({
             "name": "search_notes",
             "description": "Full-text search over the writer's other notes (not the one open now). Returns up to 8 matches, best first, each with its id, title, last-edited date and an excerpt.",
             "inputSchema": {
@@ -92,8 +141,8 @@ fn tools() -> Value {
                 "properties": { "query": { "type": "string", "description": "A few words to look for" } },
                 "required": ["query"],
             },
-        },
-        {
+        }));
+        list.push(json!({
             "name": "read_note",
             "description": "Reads one of the writer's other notes in full, by the id search_notes returned.",
             "inputSchema": {
@@ -101,15 +150,79 @@ fn tools() -> Value {
                 "properties": { "id": { "type": "string", "description": "The note id from search_notes" } },
                 "required": ["id"],
             },
-        },
-    ])
+        }));
+    }
+    if web_on {
+        list.push(json!({
+            "name": "web_search",
+            "description": "Search the web for up-to-date information. Returns a JSON array of {title, url, snippet} results.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "The search query" },
+                    "count": { "type": "integer", "description": "Number of results to return (default 5)" }
+                },
+                "required": ["query"],
+            },
+        }));
+        list.push(json!({
+            "name": "web_fetch",
+            "description": "Fetch and read the text content of a web page by URL.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "The http or https URL to fetch" }
+                },
+                "required": ["url"],
+            },
+        }));
+    }
+    Value::Array(list)
 }
 
-fn call(db: &Db, exclude: &str, params: &Value) -> Result<Value, (i64, String)> {
+fn run_async<F: std::future::Future<Output = String> + Send>(fut: F) -> String {
+    if tokio::runtime::Handle::try_current().is_ok() {
+        std::thread::scope(|s| {
+            s.spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("tokio runtime for notes_mcp");
+                rt.block_on(fut)
+            })
+            .join()
+            .unwrap_or_else(|_| "tool execution failed".into())
+        })
+    } else {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime for notes_mcp");
+        rt.block_on(fut)
+    }
+}
+
+fn call(
+    db: &Db,
+    exclude: &str,
+    notes_on: bool,
+    search_client: Option<&SearchClient>,
+    params: &Value,
+) -> Result<Value, (i64, String)> {
     let arg = |k: &str| params["arguments"][k].as_str().map(str::to_string).ok_or((-32602, format!("missing argument: {k}")));
+    let args = params.get("arguments").unwrap_or(&Value::Null);
     let outcome = match params["name"].as_str().unwrap_or("") {
-        "search_notes" => search(db, exclude, &arg("query")?),
-        "read_note" => read(db, exclude, &arg("id")?),
+        "search_notes" if notes_on => search(db, exclude, &arg("query")?),
+        "read_note" if notes_on => read(db, exclude, &arg("id")?),
+        "web_search" if search_client.is_some() => {
+            let client = search_client.expect("checked above");
+            let out = run_async(run_web_search_tool(client, args));
+            if out.starts_with("web_search failed:") { Err(out) } else { Ok(out) }
+        }
+        "web_fetch" if search_client.is_some() => {
+            let out = run_async(run_web_fetch_tool(args));
+            if out.starts_with("web_fetch failed:") { Err(out) } else { Ok(out) }
+        }
         n => return Err((-32602, format!("unknown tool: {n}"))),
     };
     let (text, is_error) = match outcome {

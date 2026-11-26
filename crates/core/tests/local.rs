@@ -90,6 +90,7 @@ fn request(kind: ProviderKind, url: &str) -> AiRequest {
         cancel: None,
         bin: None,
         notes: None,
+        mcp_server: None,
         db: None,
         web_search: None,
     }
