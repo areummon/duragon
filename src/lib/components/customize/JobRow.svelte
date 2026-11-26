@@ -97,6 +97,7 @@
         aria-haspopup="listbox"
         aria-expanded={open === 'thinking'}
         aria-label="{job.name} thinking: {thinkingLevel.name}"
+        title="Thinking: {thinkingLevel.name}"
         onclick={() => toggle('thinking')}
       >
         <span class="select-val">{thinkingLevel.name}</span>
