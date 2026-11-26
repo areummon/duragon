@@ -134,7 +134,46 @@ export function cellDrawing(): string {
 </svg>`;
 }
 
+export function segmentTreeDrawing(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 210" style="fill:none;stroke-linecap:round;stroke-linejoin:round">
+<g data-step="1" data-caption="Each leaf holds one array element">
+<rect x="20" y="152" width="52" height="30" rx="6" stroke="var(--ink)" stroke-width="1.5" style="fill:var(--riddle-wash)"/>
+<text x="46" y="172" text-anchor="middle" font-size="14" fill="var(--ink)" style="font-family:var(--font-voice)">2</text>
+<text x="46" y="198" text-anchor="middle" font-size="11" fill="var(--faint)" style="font-family:var(--font-sans)">[0]</text>
+<rect x="92" y="152" width="52" height="30" rx="6" stroke="var(--ink)" stroke-width="1.5" style="fill:var(--riddle-wash)"/>
+<text x="118" y="172" text-anchor="middle" font-size="14" fill="var(--ink)" style="font-family:var(--font-voice)">5</text>
+<text x="118" y="198" text-anchor="middle" font-size="11" fill="var(--faint)" style="font-family:var(--font-sans)">[1]</text>
+<rect x="176" y="152" width="52" height="30" rx="6" stroke="var(--ink)" stroke-width="1.5" style="fill:var(--riddle-wash)"/>
+<text x="202" y="172" text-anchor="middle" font-size="14" fill="var(--ink)" style="font-family:var(--font-voice)">1</text>
+<text x="202" y="198" text-anchor="middle" font-size="11" fill="var(--faint)" style="font-family:var(--font-sans)">[2]</text>
+<rect x="248" y="152" width="52" height="30" rx="6" stroke="var(--ink)" stroke-width="1.5" style="fill:var(--riddle-wash)"/>
+<text x="274" y="172" text-anchor="middle" font-size="14" fill="var(--ink)" style="font-family:var(--font-voice)">4</text>
+<text x="274" y="198" text-anchor="middle" font-size="11" fill="var(--faint)" style="font-family:var(--font-sans)">[3]</text>
+</g>
+<g data-step="2" data-caption="Internal nodes store the sum of their two children">
+<path d="M82 118 Q64 134 48 150" stroke="var(--graphite)" stroke-width="1.3"/>
+<path d="M82 118 Q100 134 116 150" stroke="var(--graphite)" stroke-width="1.3"/>
+<path d="M238 118 Q220 134 204 150" stroke="var(--graphite)" stroke-width="1.3"/>
+<path d="M238 118 Q256 134 272 150" stroke="var(--graphite)" stroke-width="1.3"/>
+<rect x="46" y="84" width="72" height="34" rx="7" stroke="var(--ink)" stroke-width="1.6" style="fill:var(--riddle-wash)"/>
+<text x="82" y="106" text-anchor="middle" font-size="14" fill="var(--ink)" style="font-family:var(--font-voice)">7</text>
+<text x="82" y="76" text-anchor="middle" font-size="11" fill="var(--graphite)" style="font-family:var(--font-sans)">[0..1]</text>
+<rect x="202" y="84" width="72" height="34" rx="7" stroke="var(--ink)" stroke-width="1.6" style="fill:var(--riddle-wash)"/>
+<text x="238" y="106" text-anchor="middle" font-size="14" fill="var(--ink)" style="font-family:var(--font-voice)">5</text>
+<text x="238" y="76" text-anchor="middle" font-size="11" fill="var(--graphite)" style="font-family:var(--font-sans)">[2..3]</text>
+</g>
+<g data-step="3" data-caption="The root covers the whole range in O(log n) height">
+<path d="M160 50 Q122 66 86 82" stroke="var(--graphite)" stroke-width="1.3"/>
+<path d="M160 50 Q198 66 234 82" stroke="var(--graphite)" stroke-width="1.3"/>
+<rect x="120" y="16" width="80" height="34" rx="7" stroke="var(--ink)" stroke-width="1.8" style="fill:var(--riddle-wash)"/>
+<text x="160" y="38" text-anchor="middle" font-size="15" fill="var(--ink)" style="font-family:var(--font-voice)">12</text>
+<text x="160" y="10" text-anchor="middle" font-size="11" fill="var(--graphite)" style="font-family:var(--font-sans)">[0..3]</text>
+</g>
+</svg>`;
+}
+
 export function drawingFor(topic: string): string {
+  if (/segment\s*tree/i.test(topic)) return segmentTreeDrawing();
   return /cell/i.test(topic) ? cellDrawing() : sampleDrawing();
 }
 

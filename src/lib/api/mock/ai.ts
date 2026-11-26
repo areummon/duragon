@@ -84,6 +84,9 @@ export class MockAi {
 
   private answerText(topic: string) {
     if (RICH.test(topic)) return RICH_ANSWER;
+    if (/segment\s*tree/i.test(topic)) {
+      return 'Show a segment tree over [2, 5, 1, 4] with leaf values at the bottom, pair sums 7 and 5 in the middle, and total 12 at the root. Range queries and point updates touch at most two nodes per level, keeping both O(log n).';
+    }
     return `Here is how I would put it: ${topic.replace(/[.?!]+$/, '')} comes down to a few moving parts that depend on each other. Tell me where that does not fit what you had in mind.`;
   }
 
