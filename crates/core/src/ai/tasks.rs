@@ -13,6 +13,7 @@ use super::local::payload_budget;
 use super::notes_mcp::{NotesSearch, NotesTool};
 use super::prompts;
 use super::runner::{cancel, cancellable, run_ai, AiError, AiRequest, CancelKey};
+use super::search::SearchClient;
 use super::spec::TaskSpec;
 use super::svg;
 use crate::credentials::CredentialsStore;
@@ -261,7 +262,8 @@ impl Ai {
     fn request(&self, ctx: &Ctx, task: AiTask) -> Result<AiRequest, AiError> {
         let spec = task.spec();
         let provider = ctx.settings.provider(spec.model.provider_of(&ctx.settings));
-        let web = ctx.note.web_on && spec.web && provider.searches_web();
+        let web_search = SearchClient::resolve(ctx.settings.web_search_engine, self.credentials.as_ref());
+        let web = ctx.note.web_on && spec.web && (provider.searches_web() || web_search.is_some());
         let notes = match &self.notes_search {
             Some(server) if spec.notes && ctx.settings.search_my_notes => {
                 Some(NotesTool { server: server.clone(), open_note_id: ctx.note.meta.id.clone() })
@@ -298,6 +300,7 @@ impl Ai {
             bin: self.bin.clone(),
             notes,
             db: Some(self.db.clone()),
+            web_search: if web { web_search } else { None },
         })
     }
 
@@ -350,6 +353,7 @@ impl Ai {
             bin: self.bin.clone(),
             notes: None,
             db: None,
+            web_search: None,
         };
         serde_json::from_value(run_ai(req).await.ok()?).ok()
     }

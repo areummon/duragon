@@ -119,7 +119,7 @@ Label the summary: carbon dioxide + water + light energy → glucose + oxygen.")
 
 const WEB_SOURCES: &str = r#"
 
-Web access is on. When you used WebSearch or WebFetch for your answer, also return "sources": the pages you actually used, each as {"url", "title"}, copied from your WebSearch or WebFetch results. Never invent or guess a source. Never put who the writer is, such as their name, email or account, in a search or an address you open. If you used no page, leave "sources" out or empty."#;
+Web access is on. When you used WebSearch, WebFetch, or web_search for your answer, also return "sources": the pages you actually used, each as {"url", "title"}, copied from your WebSearch, WebFetch, or web_search results. Never invent or guess a source. Never put who the writer is, such as their name, email or account, in a search or an address you open. If you used no page, leave "sources" out or empty."#;
 
 /// Appended to the prompt of a task that writes to the writer when they turned on symbol explanations.
 pub const EXPLAIN_SYMBOLS: &str = r#"
@@ -259,7 +259,7 @@ pub fn schema(task: AiTask, web: bool) -> Value {
     if web && task.spec().sources {
         props["sources"] = json!({
             "type": "array",
-            "description": "Pages actually used from WebSearch/WebFetch results; never invented",
+            "description": "Pages actually used from WebSearch, WebFetch, or web_search results; never invented",
             "items": {
                 "type": "object",
                 "properties": { "url": s("Page URL"), "title": s("Page title") },

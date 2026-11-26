@@ -3,9 +3,9 @@ use serde_json::Value;
 use std::ops::Range;
 
 /// How API keys of the services people use start.
-const KEY_STARTS: [&str; 19] = [
+const KEY_STARTS: [&str; 21] = [
     "sk-", "sk_", "pk_", "rk_", "AIza", "AKIA", "ASIA", "ya29", "ghp_", "gho_", "ghs_", "github_pat_", "glpat-", "xoxb-",
-    "xoxp-", "hf_", "gsk_", "pplx-", "nvapi-",
+    "xoxp-", "hf_", "gsk_", "pplx-", "nvapi-", "tvly-", "fc-",
 ];
 const KEY_LEAST: usize = 16;
 

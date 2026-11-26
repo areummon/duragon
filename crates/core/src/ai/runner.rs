@@ -17,6 +17,7 @@ use super::http::{run_anthropic, run_gemini, run_openai};
 use super::local::run_local;
 use super::notes_mcp::{NotesTool, TOOL_NAMES};
 use super::quiet::quiet;
+use super::search::SearchClient;
 use super::veil::Veil;
 use crate::db::Db;
 use crate::private::WorkDir;
@@ -84,6 +85,8 @@ pub struct AiRequest {
     pub notes: Option<NotesTool>,
     /// Database handle for in-process notes search in HTTP providers.
     pub db: Option<Db>,
+    /// Configured web search client, when a search engine key is active and web is enabled.
+    pub web_search: Option<SearchClient>,
 }
 
 static REGISTRY: LazyLock<Mutex<HashMap<CancelKey, Arc<Notify>>>> =

@@ -7,9 +7,12 @@ use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use crate::ai::search::resolve_search;
 use crate::consent::{asks, Asks};
 use crate::db::Db;
-use crate::model::{ProviderConfig, ProviderCredentialStatus, Settings};
+use crate::model::{
+    ProviderConfig, ProviderCredentialStatus, SearchEngine, SearchEngineCredentialStatus, SearchStatus, Settings,
+};
 use crate::private;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -125,6 +128,115 @@ impl CredentialsStore {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let data = self.read_file().map_err(|e| format!("{e:#}"));
         providers.iter().map(|p| status_from_data(&data, p)).collect()
+    }
+
+    pub fn resolve_search_key(&self, engine: SearchEngine) -> Result<Option<String>> {
+        self.resolve(&engine.credential_key(), Some(engine.env_var()))
+    }
+
+    pub fn search_statuses(&self) -> Vec<SearchEngineCredentialStatus> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let data = self.read_file().map_err(|e| format!("{e:#}"));
+        SearchEngine::ALL
+            .into_iter()
+            .map(|engine| search_status_from_data(&data, engine))
+            .collect()
+    }
+
+    pub fn set_search_key(&self, engine: SearchEngine, key: &str) -> Result<()> {
+        let valid = validate_search_key(engine, key)?;
+        self.set_key(&engine.credential_key(), &valid)
+    }
+
+    pub fn delete_search_key(&self, engine: SearchEngine) -> Result<()> {
+        self.delete_key(&engine.credential_key())
+    }
+}
+
+pub fn validate_search_key(engine: SearchEngine, raw: &str) -> Result<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        bail!("{} API key cannot be empty", engine.label());
+    }
+    if trimmed.chars().any(char::is_whitespace) {
+        bail!("{} API key must not contain whitespace", engine.label());
+    }
+    match engine {
+        SearchEngine::Tavily => {
+            if !trimmed.starts_with("tvly-") || trimmed.len() < 20 {
+                bail!("Tavily API key must start with \"tvly-\" and be at least 20 characters");
+            }
+        }
+        SearchEngine::Firecrawl => {
+            if !trimmed.starts_with("fc-") || trimmed.len() < 20 {
+                bail!("Firecrawl API key must start with \"fc-\" and be at least 20 characters");
+            }
+        }
+        SearchEngine::Brave => {
+            if trimmed.len() < 20 {
+                bail!("Brave Search API key must be at least 20 characters");
+            }
+        }
+        SearchEngine::Exa | SearchEngine::Ollama => {
+            if trimmed.len() < 12 {
+                bail!("{} API key must be at least 12 characters", engine.label());
+            }
+        }
+    }
+    Ok(trimmed.to_string())
+}
+
+pub fn search_status(db: &Db, store: &CredentialsStore) -> Result<SearchStatus> {
+    let pinned = db.get_settings()?.web_search_engine;
+    let engines = store.search_statuses();
+    let keys: Vec<(SearchEngine, Option<String>)> = SearchEngine::ALL
+        .into_iter()
+        .map(|eng| (eng, store.resolve_search_key(eng).ok().flatten()))
+        .collect();
+    let (available, engine, reason, _) = resolve_search(pinned, &keys);
+    Ok(SearchStatus { available, engine, pinned, reason, engines })
+}
+
+pub fn set_search_key(
+    db: &Db,
+    store: &CredentialsStore,
+    engine: SearchEngine,
+    key: &str,
+) -> Result<SearchStatus> {
+    store.set_search_key(engine, key)?;
+    search_status(db, store)
+}
+
+pub fn delete_search_key(
+    db: &Db,
+    store: &CredentialsStore,
+    engine: SearchEngine,
+) -> Result<SearchStatus> {
+    store.delete_search_key(engine)?;
+    search_status(db, store)
+}
+
+fn search_status_from_data(data: &Result<FileData, String>, engine: SearchEngine) -> SearchEngineCredentialStatus {
+    let error = data.as_ref().err().cloned();
+    let stored = data
+        .as_ref()
+        .ok()
+        .and_then(|d| d.keys.get(&engine.credential_key()))
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let has_env_key = error.is_none()
+        && std::env::var(engine.env_var())
+            .ok()
+            .is_some_and(|v| !v.trim().is_empty());
+    SearchEngineCredentialStatus {
+        engine,
+        label: engine.label().to_string(),
+        env_var: engine.env_var().to_string(),
+        docs_url: engine.docs_url().to_string(),
+        has_stored_key: stored.is_some(),
+        masked_key: stored.map(mask_key),
+        has_env_key,
+        error,
     }
 }
 

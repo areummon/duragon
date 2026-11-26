@@ -58,6 +58,78 @@ str_enum!(
     }
 );
 str_enum!(
+    /// Web search providers in automatic priority order.
+    SearchEngine {
+        Tavily => "tavily",
+        Brave => "brave",
+        Exa => "exa",
+        Firecrawl => "firecrawl",
+        Ollama => "ollama",
+    }
+);
+
+impl SearchEngine {
+    pub const ALL: [SearchEngine; 5] = [Self::Tavily, Self::Brave, Self::Exa, Self::Firecrawl, Self::Ollama];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Tavily => "Tavily",
+            Self::Brave => "Brave Search",
+            Self::Exa => "Exa",
+            Self::Firecrawl => "Firecrawl",
+            Self::Ollama => "Ollama",
+        }
+    }
+
+    pub fn env_var(self) -> &'static str {
+        match self {
+            Self::Tavily => "TAVILY_API_KEY",
+            Self::Brave => "BRAVE_API_KEY",
+            Self::Exa => "EXA_API_KEY",
+            Self::Firecrawl => "FIRECRAWL_API_KEY",
+            Self::Ollama => "OLLAMA_API_KEY",
+        }
+    }
+
+    pub fn docs_url(self) -> &'static str {
+        match self {
+            Self::Tavily => "https://app.tavily.com/",
+            Self::Brave => "https://brave.com/search/api/",
+            Self::Exa => "https://dashboard.exa.ai/api-keys",
+            Self::Firecrawl => "https://www.firecrawl.dev/app/api-keys",
+            Self::Ollama => "https://ollama.com/settings/keys",
+        }
+    }
+
+    pub fn credential_key(self) -> String {
+        format!("search:{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchEngineCredentialStatus {
+    pub engine: SearchEngine,
+    pub label: String,
+    pub env_var: String,
+    pub docs_url: String,
+    pub has_stored_key: bool,
+    pub masked_key: Option<String>,
+    pub has_env_key: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchStatus {
+    pub available: bool,
+    pub engine: Option<SearchEngine>,
+    pub pinned: Option<SearchEngine>,
+    pub reason: String,
+    pub engines: Vec<SearchEngineCredentialStatus>,
+}
+
+str_enum!(
     /// How Duragon talks to an AI provider.
     ProviderKind {
         ClaudeCli => "claude-cli",
@@ -499,6 +571,7 @@ pub struct Settings {
     pub providers: Vec<ProviderConfig>,
     pub sidebar_open: bool,
     pub deleted_notes: DeleteMode,
+    pub web_search_engine: Option<SearchEngine>,
 }
 
 impl Default for Settings {
@@ -534,6 +607,7 @@ impl Default for Settings {
             providers: default_providers(),
             sidebar_open: false,
             deleted_notes: DeleteMode::Duragon,
+            web_search_engine: None,
         }
     }
 }

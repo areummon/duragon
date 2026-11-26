@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 use super::notes_mcp;
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, gemini_schema, has_required, json_instruction, strict_schema, strip_nulls};
+use super::search::run_web_search_tool;
 use crate::model::ThinkingLevel;
 
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
@@ -101,6 +102,43 @@ pub(super) fn note_tools() -> Value {
     ])
 }
 
+pub(super) async fn run_tool(req: &AiRequest, name: &str, args: &Value) -> String {
+    if name == "web_search" {
+        return match &req.web_search {
+            Some(client) => run_web_search_tool(client, args).await,
+            None => "Web search is unavailable.".into(),
+        };
+    }
+    run_note_tool(req, name, args)
+}
+
+pub(super) fn openai_tools(has_notes: bool, has_web_search: bool) -> Vec<Value> {
+    let mut tools = Vec::new();
+    if has_notes {
+        if let Value::Array(note_list) = note_tools() {
+            tools.extend(note_list);
+        }
+    }
+    if has_web_search {
+        tools.push(json!({
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "Search the web for up-to-date information. Returns a JSON array of {title, url, snippet} results.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string", "description": "The search query" },
+                        "count": { "type": "integer", "description": "Number of results to return (default 5)" }
+                    },
+                    "required": ["query"]
+                }
+            }
+        }));
+    }
+    tools
+}
+
 /// OpenAI-compatible Chat Completions (OpenAI, OpenRouter, DeepSeek, Z.AI/GLM, MiMo, custom).
 pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
     let key = require_key(req)?;
@@ -109,7 +147,7 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
     let is_openrouter = base.contains("openrouter.ai");
 
     let mut model = req.model.trim().to_string();
-    if is_openrouter && req.web && !model.ends_with(":online") {
+    if is_openrouter && req.web && req.web_search.is_none() && !model.ends_with(":online") {
         model.push_str(":online");
     }
 
@@ -122,6 +160,7 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
     let strict = strict_schema(&req.schema);
     let mut use_json_schema = true;
     let mut send_reasoning = req.thinking != ThinkingLevel::Default;
+    let tools = openai_tools(req.notes.is_some() && req.db.is_some(), req.web_search.is_some());
 
     for _round in 0..MAX_TOOL_ROUNDS {
         let response_format = if use_json_schema {
@@ -148,8 +187,8 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
             };
             body["reasoning_effort"] = json!(effort);
         }
-        if req.notes.is_some() && req.db.is_some() {
-            body["tools"] = note_tools();
+        if !tools.is_empty() {
+            body["tools"] = Value::Array(tools.clone());
         }
 
         let builder = CLIENT
@@ -194,7 +233,7 @@ pub async fn run_openai(req: &AiRequest) -> Result<Value, AiError> {
                     let name = call["function"].get("name").and_then(Value::as_str).unwrap_or("");
                     let args_str = call["function"].get("arguments").and_then(Value::as_str).unwrap_or("{}");
                     let args: Value = serde_json::from_str(args_str).unwrap_or(json!({}));
-                    let out = run_note_tool(req, name, &args);
+                    let out = run_tool(req, name, &args).await;
                     messages.push(json!({
                         "role": "tool",
                         "tool_call_id": id,
@@ -261,7 +300,20 @@ pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
             }
         }));
     }
-    if req.web {
+    if req.web_search.is_some() {
+        tools.push(json!({
+            "name": "web_search",
+            "description": "Search the web for up-to-date information. Returns a JSON array of {title, url, snippet} results.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "The search query" },
+                    "count": { "type": "integer", "description": "Number of results to return (default 5)" }
+                },
+                "required": ["query"]
+            }
+        }));
+    } else if req.web {
         tools.push(json!({
             "type": "web_search_20250305",
             "name": "web_search",
@@ -349,15 +401,18 @@ pub async fn run_anthropic(req: &AiRequest) -> Result<Value, AiError> {
             }
         }
 
-        // Handle notes tool calls if any.
+        // Handle notes and custom web_search tool calls if any.
         let mut tool_results = Vec::new();
         for block in &content {
             if block.get("type").and_then(Value::as_str) == Some("tool_use") {
                 let name = block.get("name").and_then(Value::as_str).unwrap_or("");
-                if name == "search_notes" || name == "read_note" {
+                if name == "search_notes"
+                    || name == "read_note"
+                    || (name == "web_search" && req.web_search.is_some())
+                {
                     let id = block.get("id").and_then(Value::as_str).unwrap_or("");
                     let input = block.get("input").unwrap_or(&Value::Null);
-                    let out = run_note_tool(req, name, input);
+                    let out = run_tool(req, name, input).await;
                     tool_results.push(json!({
                         "type": "tool_result",
                         "tool_use_id": id,
@@ -404,31 +459,45 @@ pub async fn run_gemini(req: &AiRequest) -> Result<Value, AiError> {
 
     let has_notes = req.notes.is_some() && req.db.is_some();
     let mut tools: Vec<Value> = Vec::new();
+    let mut fn_decls: Vec<Value> = Vec::new();
     if has_notes {
-        tools.push(json!({
-            "functionDeclarations": [
-                {
-                    "name": "search_notes",
-                    "description": "Full-text search over the writer's other notes (not the one open now).",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": { "query": { "type": "STRING" } },
-                        "required": ["query"]
-                    }
-                },
-                {
-                    "name": "read_note",
-                    "description": "Reads one of the writer's other notes in full by its id.",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": { "id": { "type": "STRING" } },
-                        "required": ["id"]
-                    }
-                }
-            ]
+        fn_decls.push(json!({
+            "name": "search_notes",
+            "description": "Full-text search over the writer's other notes (not the one open now).",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": { "query": { "type": "STRING" } },
+                "required": ["query"]
+            }
+        }));
+        fn_decls.push(json!({
+            "name": "read_note",
+            "description": "Reads one of the writer's other notes in full by its id.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": { "id": { "type": "STRING" } },
+                "required": ["id"]
+            }
         }));
     }
-    if req.web {
+    if req.web_search.is_some() {
+        fn_decls.push(json!({
+            "name": "web_search",
+            "description": "Search the web for up-to-date information. Returns a JSON array of {title, url, snippet} results.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "query": { "type": "STRING" },
+                    "count": { "type": "INTEGER" }
+                },
+                "required": ["query"]
+            }
+        }));
+    }
+    if !fn_decls.is_empty() {
+        tools.push(json!({ "functionDeclarations": fn_decls }));
+    }
+    if req.web && req.web_search.is_none() {
         tools.push(json!({ "googleSearch": {} }));
     }
 
@@ -502,7 +571,7 @@ pub async fn run_gemini(req: &AiRequest) -> Result<Value, AiError> {
             if let Some(fc) = part.get("functionCall") {
                 let name = fc.get("name").and_then(Value::as_str).unwrap_or("");
                 let args = fc.get("args").unwrap_or(&Value::Null);
-                let out = run_note_tool(req, name, args);
+                let out = run_tool(req, name, args).await;
                 fn_responses.push(json!({
                     "functionResponse": {
                         "name": name,

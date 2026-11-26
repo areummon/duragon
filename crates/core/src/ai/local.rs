@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use super::budget::tokens;
-use super::http::{note_tools, run_note_tool};
+use super::http::{openai_tools, run_tool};
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, has_required, json_instruction, strict_schema};
 use crate::credentials::{self, CredentialsStore};
@@ -50,8 +50,15 @@ struct Reply {
 /// What a request still asks of the server. A server that refuses one is asked again without it.
 struct Asks {
     notes: bool,
+    web_search: bool,
     thinking: bool,
     schema: bool,
+}
+
+impl Asks {
+    fn has_tools(&self) -> bool {
+        self.notes || self.web_search
+    }
 }
 
 fn fail<T>(msg: impl Into<String>) -> Result<T, AiError> {
@@ -96,21 +103,22 @@ impl Api {
 
     fn chat(&self, req: &AiRequest, messages: &[Value], asks: &Asks, window: usize) -> RequestBuilder {
         let mut body = json!({ "model": req.model.trim(), "messages": messages, "stream": false });
-        if asks.notes {
-            body["tools"] = note_tools();
+        let tools = openai_tools(asks.notes, asks.web_search);
+        if !tools.is_empty() {
+            body["tools"] = Value::Array(tools);
         }
         let schema = strict_schema(&req.schema);
         let (url, thinking) = match self {
             Api::Ollama(root) => {
                 body["options"] = json!({ "num_ctx": window });
                 body["truncate"] = json!(false);
-                if asks.schema && !asks.notes {
+                if asks.schema && !asks.has_tools() {
                     body["format"] = schema;
                 }
                 (format!("{root}/api/chat"), "think")
             }
             Api::OpenAi(base) => {
-                if asks.schema && !asks.notes {
+                if asks.schema && !asks.has_tools() {
                     body["response_format"] =
                         json!({ "type": "json_schema", "json_schema": { "name": "duragon_output", "strict": true, "schema": schema } });
                 }
@@ -213,7 +221,12 @@ pub async fn run_local(req: &AiRequest) -> Result<Value, AiError> {
         Api::Ollama(_) => window(req).await?.unwrap_or(OLLAMA_WINDOW),
         Api::OpenAi(_) => 0,
     };
-    let mut asks = Asks { notes: req.notes.is_some() && req.db.is_some(), thinking: req.thinking != ThinkingLevel::Default, schema: true };
+    let mut asks = Asks {
+        notes: req.notes.is_some() && req.db.is_some(),
+        web_search: req.web_search.is_some(),
+        thinking: req.thinking != ThinkingLevel::Default,
+        schema: true,
+    };
     let mut messages = vec![
         json!({ "role": "system", "content": format!("{}{}", req.system_prompt, json_instruction(&req.schema)) }),
         json!({ "role": "user", "content": req.payload }),
@@ -226,8 +239,9 @@ pub async fn run_local(req: &AiRequest) -> Result<Value, AiError> {
                 asks.thinking = false;
                 continue;
             }
-            Err((400 | 500, _)) if asks.notes => {
+            Err((400 | 500, _)) if asks.has_tools() => {
                 asks.notes = false;
+                asks.web_search = false;
                 continue;
             }
             Err((400 | 500, said)) if asks.schema && !said.contains("context") => {
@@ -237,20 +251,24 @@ pub async fn run_local(req: &AiRequest) -> Result<Value, AiError> {
             Err((status, said)) => return fail(format!("{} answered {status}: {said}", req.provider.name)),
         };
         let Reply { message, calls } = api.reply(&body);
-        if asks.notes && !calls.is_empty() {
+        if asks.has_tools() && !calls.is_empty() {
             messages.push(message);
             for (id, name, args) in calls {
-                let found: String = run_note_tool(req, &name, &args).chars().take(MAX_TOOL_CHARS).collect();
+                let found: String = run_tool(req, &name, &args).await.chars().take(MAX_TOOL_CHARS).collect();
                 messages.push(json!({ "role": "tool", "tool_call_id": id, "tool_name": name, "content": found }));
             }
             rounds += 1;
-            asks.notes = rounds < MAX_TOOL_ROUNDS;
+            if rounds >= MAX_TOOL_ROUNDS {
+                asks.notes = false;
+                asks.web_search = false;
+            }
             continue;
         }
         let answer = extract_json(message["content"].as_str().unwrap_or_default());
         // A schema keeps a model from calling tools, so it is only held to one once it has stopped.
-        if asks.notes && !answer.as_ref().is_ok_and(|a| has_required(a, &req.schema)) {
+        if asks.has_tools() && !answer.as_ref().is_ok_and(|a| has_required(a, &req.schema)) {
             asks.notes = false;
+            asks.web_search = false;
             continue;
         }
         return answer.map_err(|e| AiError::Failed(format!("{}: {e}", req.provider.name)));

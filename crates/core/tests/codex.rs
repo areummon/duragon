@@ -32,6 +32,7 @@ fn request(dir: &Path) -> AiRequest {
         bin: None,
         notes: None,
         db: None,
+        web_search: None,
     }
 }
 

@@ -10,6 +10,7 @@ pub mod prompts;
 mod quiet;
 pub mod runner;
 pub mod schema_util;
+pub mod search;
 pub mod spec;
 pub mod svg;
 pub mod tasks;

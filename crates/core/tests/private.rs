@@ -38,6 +38,7 @@ fn request(kind: ProviderKind) -> AiRequest {
         bin: None,
         notes: None,
         db: None,
+        web_search: None,
     }
 }
 
