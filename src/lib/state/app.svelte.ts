@@ -2,6 +2,7 @@ import { tick } from 'svelte';
 import { getBackend } from '../api/backend';
 import { pickOpenPath, pickSavePath } from '../api/platform';
 import type { DeleteMode, ExportFormat, Note, NoteMetaPatch } from '../api/types';
+import { exposeDebug } from '../debug';
 import { markdownish } from '../editor/plain';
 import { notes, refreshNotes, removeMeta, upsertMeta } from './notes.svelte';
 import { storeNote } from './saves';
@@ -252,7 +253,5 @@ export async function exportAllMarkdown(folderId: string | null = null) {
 
 export const exportPdf = () => window.print();
 
-if (import.meta.env.DEV) {
-  const w = window as unknown as { __duragon?: Record<string, unknown> };
-  w.__duragon = Object.assign(w.__duragon ?? {}, { app, notes });
-}
+exposeDebug('app', app);
+exposeDebug('notes', notes);

@@ -2,6 +2,7 @@ import { getBackend } from '../api/backend';
 import { DEFAULT_SETTINGS } from '../api/defaults';
 import { isServerKind, mergeProviders, withoutProvider, type Server } from '../api/providers';
 import type { ProviderCredentialStatus, SearchEngine, SearchStatus, Settings } from '../api/types';
+import { exposeDebug } from '../debug';
 import { showToast } from './toast.svelte';
 
 export const PAGE_WIDTH_DEFAULT = 690;
@@ -201,7 +202,6 @@ export function deleteSearchKey(engine: SearchEngine) {
   });
 }
 
-if (import.meta.env.DEV) {
-  const w = window as unknown as { __duragon?: Record<string, unknown> };
-  w.__duragon = Object.assign(w.__duragon ?? {}, { settings, updateSettings, searchStatus });
-}
+exposeDebug('settings', settings);
+exposeDebug('updateSettings', updateSettings);
+exposeDebug('searchStatus', searchStatus);

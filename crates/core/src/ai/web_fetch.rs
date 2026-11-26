@@ -131,7 +131,6 @@ fn extract_html_text(html: &str) -> (Option<String>, String) {
 
     while i < bytes.len() {
         if bytes[i] == b'<' {
-            // Check for closing </title>
             if in_title && bytes.get(i + 1) == Some(&b'/') && starts_with_tag(bytes, i + 2, b"title") {
                 in_title = false;
                 if title.is_none() && !title_buf.out.is_empty() {
@@ -142,7 +141,6 @@ fn extract_html_text(html: &str) -> (Option<String>, String) {
                 continue;
             }
 
-            // Check for opening <title>
             if !in_title && title.is_none() && starts_with_tag(bytes, i + 1, b"title") {
                 if let Some(gt) = bytes[i..].iter().position(|&b| b == b'>') {
                     let self_closing = gt > 0 && bytes[i + gt - 1] == b'/';
@@ -157,7 +155,6 @@ fn extract_html_text(html: &str) -> (Option<String>, String) {
                 break;
             }
 
-            // Check for skipped blocks (<script>, <style>, <noscript>, <svg>)
             if let Some(&skip_tag) = SKIP_TAGS.iter().find(|&&tag| starts_with_tag(bytes, i + 1, tag)) {
                 if let Some(gt) = bytes[i..].iter().position(|&b| b == b'>') {
                     let self_closing = gt > 0 && bytes[i + gt - 1] == b'/';
@@ -196,7 +193,6 @@ fn extract_html_text(html: &str) -> (Option<String>, String) {
                 break;
             }
 
-            // Regular HTML tag: skip to '>'
             i = bytes[i..].iter().position(|&b| b == b'>').map_or(bytes.len(), |gt| i + gt + 1);
             if in_title {
                 title_buf.mark_space();
@@ -206,7 +202,6 @@ fn extract_html_text(html: &str) -> (Option<String>, String) {
             continue;
         }
 
-        // Entity or regular char
         let (ch, step) = if bytes[i] == b'&' {
             let tail = &html[i..];
             if let Some(&(entity, decoded)) = ENTITIES.iter().find(|(e, _)| tail.starts_with(e)) {
