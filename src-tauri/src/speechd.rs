@@ -220,19 +220,26 @@ impl Speech {
 pub(crate) mod tests {
     use super::*;
     use std::os::unix::net::UnixListener;
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
     use std::sync::{Arc, Mutex};
 
     /// A Speech Dispatcher that answers like the real one and records what it was sent. A line of the text
     /// steers it: `END NOW` ends the speech at once, `DEAF` stops reading. It takes a while to start speaking,
     /// as when a module loads.
     pub(crate) fn fake(dir: &std::path::Path) -> (PathBuf, Arc<Mutex<Vec<String>>>) {
+        fake_refusing(dir, 0)
+    }
+
+    /// A fake that refuses its first `refusals` voice listings.
+    pub(crate) fn fake_refusing(dir: &std::path::Path, refusals: usize) -> (PathBuf, Arc<Mutex<Vec<String>>>) {
+        let refusals = Arc::new(AtomicUsize::new(refusals));
         let path = dir.join("speechd.sock");
         let listener = UnixListener::bind(&path).unwrap();
         let seen: Arc<Mutex<Vec<String>>> = Arc::default();
         let log = seen.clone();
         thread::spawn(move || {
             for stream in listener.incoming().flatten() {
-                let log = log.clone();
+                let (log, refusals) = (log.clone(), refusals.clone());
                 thread::spawn(move || {
                     let mut w = stream.try_clone().unwrap();
                     let mut module = String::new();
@@ -254,6 +261,8 @@ pub(crate) mod tests {
                                 }
                                 continue;
                             }
+                        } else if line == "LIST OUTPUT_MODULES" && refusals.try_update(SeqCst, SeqCst, |n| n.checked_sub(1)).is_ok() {
+                            "300 ERR INTERNAL\r\n".into()
                         } else if line == "LIST OUTPUT_MODULES" {
                             "250-pico\r\n250-dummy\r\n250-espeak-ng\r\n250 OK MODULE LIST SENT\r\n".into()
                         } else if let Some(m) = line.strip_prefix("SET SELF OUTPUT_MODULE ") {

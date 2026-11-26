@@ -113,13 +113,9 @@ fn disk_status(models: &Path) -> VoiceStatus {
 }
 
 #[cfg(unix)]
-fn speechd_voices() -> Vec<VoiceOption> {
-    let listed = crate::speechd::connect().and_then(|mut c| c.voices());
-    listed
-        .unwrap_or_else(|e| {
-            eprintln!("duragon: no Speech Dispatcher voices: {e:#}");
-            Vec::new()
-        })
+fn speechd_voices() -> Result<Vec<VoiceOption>> {
+    let listed = crate::speechd::connect().and_then(|mut c| c.voices())?;
+    Ok(listed
         .into_iter()
         .map(|v| VoiceOption {
             id: VoiceId::Speechd { module: v.module.clone(), name: v.name.clone() }.id(),
@@ -130,12 +126,12 @@ fn speechd_voices() -> Vec<VoiceOption> {
             source: "Speech Dispatcher".into(),
             language: Some(v.language),
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(not(unix))]
-fn speechd_voices() -> Vec<VoiceOption> {
-    Vec::new()
+fn speechd_voices() -> Result<Vec<VoiceOption>> {
+    Ok(Vec::new())
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -358,7 +354,8 @@ impl VoiceClient {
         Ok(v.as_str().unwrap_or_default().to_string())
     }
 
-    /// Kokoro's voices when it is installed, then Speech Dispatcher's, listed once and again on `refresh`.
+    /// Kokoro's voices when it is installed, then Speech Dispatcher's, listed until a listing works and again
+    /// on `refresh`.
     pub fn voices(&self, refresh: bool) -> Vec<VoiceOption> {
         let mut list: Vec<VoiceOption> = Vec::new();
         if disk_status(&self.shared.models).tts == ModelState::Ready {
@@ -373,7 +370,7 @@ impl VoiceClient {
         }
         let mut cached = lock(&self.shared.speechd_voices);
         if refresh || cached.is_none() {
-            *cached = Some(speechd_voices());
+            *cached = speechd_voices().inspect_err(|e| eprintln!("duragon: no Speech Dispatcher voices: {e:#}")).ok();
         }
         list.extend(cached.iter().flatten().cloned());
         list
@@ -473,13 +470,33 @@ done
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// Tests that point `SPEECHD_ADDRESS` at their own fake take turns.
+    static SPEECHD_ADDRESS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    fn speechd_at(socket: &Path) {
+        std::env::set_var("SPEECHD_ADDRESS", format!("unix_socket:{}", socket.display()));
+    }
+
+    #[test]
+    fn a_failed_listing_is_tried_again() {
+        let _env = SPEECHD_ADDRESS.blocking_lock();
+        let dir = std::env::temp_dir().join(format!("duragon-listing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        speechd_at(&crate::speechd::tests::fake_refusing(&dir, 1).0);
+        let voice = VoiceClient::new(dir.clone(), Arc::new(|_, _| {}));
+        assert_eq!(voice.voices(false).len(), 0, "the first listing fails");
+        assert_eq!(voice.voices(false).len(), 3, "the next one asks again");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn one_voice_speaks_at_a_time_and_stop_ends_a_speech_still_starting() {
+        let _env = SPEECHD_ADDRESS.lock().await;
         let dir = std::env::temp_dir().join(format!("duragon-speaking-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let (socket, _) = crate::speechd::tests::fake(&dir);
-        std::env::set_var("SPEECHD_ADDRESS", format!("unix_socket:{}", socket.display()));
+        speechd_at(&crate::speechd::tests::fake(&dir).0);
         let heard: Arc<Mutex<Vec<(String, bool)>>> = Arc::default();
         let sink = heard.clone();
         let voice = VoiceClient::new(
