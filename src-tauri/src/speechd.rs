@@ -223,7 +223,8 @@ pub(crate) mod tests {
     use std::sync::{Arc, Mutex};
 
     /// A Speech Dispatcher that answers like the real one and records what it was sent. A line of the text
-    /// steers it: `END NOW` ends the speech at once, `SLOW` answers it late, `DEAF` stops reading.
+    /// steers it: `END NOW` ends the speech at once, `DEAF` stops reading. It takes a while to start speaking,
+    /// as when a module loads.
     pub(crate) fn fake(dir: &std::path::Path) -> (PathBuf, Arc<Mutex<Vec<String>>>) {
         let path = dir.join("speechd.sock");
         let listener = UnixListener::bind(&path).unwrap();
@@ -236,7 +237,7 @@ pub(crate) mod tests {
                     let mut w = stream.try_clone().unwrap();
                     let mut module = String::new();
                     let mut body = false;
-                    let (mut ends, mut slow) = (false, false);
+                    let mut ends = false;
                     for line in BufReader::new(stream).lines() {
                         let Ok(line) = line else { break };
                         let line = line.trim_end_matches('\r').to_string();
@@ -244,14 +245,10 @@ pub(crate) mod tests {
                         let reply = if body {
                             if line == "." {
                                 body = false;
-                                if slow {
-                                    thread::sleep(Duration::from_millis(150));
-                                }
                                 let end = if ends { "702-1\r\n702-7\r\n702 END\r\n" } else { "" };
                                 format!("225-1\r\n225 OK MESSAGE QUEUED\r\n701-1\r\n701-7\r\n701 BEGIN\r\n{end}")
                             } else {
                                 ends |= line == "END NOW";
-                                slow |= line == "SLOW";
                                 if line == "DEAF" {
                                     thread::sleep(Duration::from_secs(30));
                                 }
@@ -270,6 +267,7 @@ pub(crate) mod tests {
                             }
                         } else if line == "SPEAK" {
                             body = true;
+                            thread::sleep(Duration::from_millis(100));
                             "230 OK RECEIVING DATA\r\n".into()
                         } else if line == "STOP SELF" {
                             "210 OK STOPPED\r\n703-1\r\n703-7\r\n703 CANCELED\r\n".into()

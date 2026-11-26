@@ -181,8 +181,22 @@ struct Shared {
     worker: Mutex<Option<Worker>>,
     last_status: Mutex<Option<VoiceStatus>>,
     speechd_voices: Mutex<Option<Vec<VoiceOption>>>,
-    #[cfg(unix)]
-    speech: Mutex<Option<crate::speechd::Speech>>,
+    /// Held from stopping the last speech until the next one is stored, so no speech goes unstopped.
+    speaking: tokio::sync::Mutex<Option<Speech>>,
+    /// Counts speak and stop requests: a speak that a newer speak or stop overtook while it waited says nothing.
+    asked: AtomicU64,
+}
+
+#[cfg(unix)]
+use crate::speechd::Speech;
+/// Nothing speaks through Speech Dispatcher off Unix.
+#[cfg(not(unix))]
+enum Speech {}
+#[cfg(not(unix))]
+impl Speech {
+    fn stop(self) {
+        match self {}
+    }
 }
 
 #[derive(Clone)]
@@ -200,8 +214,8 @@ impl VoiceClient {
                 worker: Mutex::new(None),
                 last_status: Mutex::new(None),
                 speechd_voices: Mutex::new(None),
-                #[cfg(unix)]
-                speech: Mutex::new(None),
+                speaking: tokio::sync::Mutex::new(None),
+                asked: AtomicU64::new(0),
             }),
         }
     }
@@ -367,6 +381,7 @@ impl VoiceClient {
 
     /// Speaks with `voice`, or the first voice there is when that one is gone.
     pub async fn speak(&self, message_id: Option<String>, text: &str, voice: &str, speed: f32) -> Result<()> {
+        let ticket = self.shared.asked.fetch_add(1, Ordering::SeqCst) + 1;
         let voices = tokio::task::spawn_blocking({
             let me = self.clone();
             move || me.voices(false)
@@ -378,7 +393,11 @@ impl VoiceClient {
             .find(|v| v.id == wanted)
             .or(voices.first())
             .ok_or_else(|| anyhow!("Speaking needs a voice. Get one in Customize → Voice models."))?;
-        self.stop_speaking().await?;
+        let mut speaking = self.shared.speaking.lock().await;
+        if self.shared.asked.load(Ordering::SeqCst) != ticket {
+            return Ok(());
+        }
+        self.hush(&mut speaking).await?;
         match VoiceId::parse(&chosen.id) {
             VoiceId::Kokoro(name) => {
                 self.call(json!({ "cmd": "speak", "messageId": message_id, "text": text, "voice": name, "speed": speed }))
@@ -386,17 +405,12 @@ impl VoiceClient {
             }
             #[cfg(unix)]
             VoiceId::Speechd { module, name } => {
-                let (me, text) = (self.clone(), text.to_string());
-                let language = chosen.language.clone().unwrap_or_default();
-                tokio::task::spawn_blocking(move || -> Result<()> {
-                    let emit = me.shared.emit.clone();
-                    let voice = crate::speechd::SdVoice { module, name, language };
-                    let on_playing = move |playing: bool| emit("voice:speaking", json!({ "messageId": message_id, "playing": playing }));
-                    let speech = crate::speechd::connect()?.speak(&voice, crate::speechd::rate(speed as f64), None, &text, on_playing)?;
-                    *lock(&me.shared.speech) = Some(speech);
-                    Ok(())
-                })
-                .await??;
+                let (emit, text) = (self.shared.emit.clone(), text.to_string());
+                let voice = crate::speechd::SdVoice { module, name, language: chosen.language.clone().unwrap_or_default() };
+                let on_playing = move |playing: bool| emit("voice:speaking", json!({ "messageId": message_id, "playing": playing }));
+                let rate = crate::speechd::rate(speed as f64);
+                let speech = tokio::task::spawn_blocking(move || crate::speechd::connect()?.speak(&voice, rate, None, &text, on_playing));
+                *speaking = Some(speech.await??);
             }
             #[cfg(not(unix))]
             VoiceId::Speechd { .. } => bail!("Speech Dispatcher is not available here"),
@@ -404,14 +418,16 @@ impl VoiceClient {
         Ok(())
     }
 
-    /// Stops whichever voice is speaking.
+    /// Stops whichever voice is speaking, or is about to.
     pub async fn stop_speaking(&self) -> Result<()> {
-        #[cfg(unix)]
-        {
-            let speech = lock(&self.shared.speech).take();
-            if let Some(speech) = speech {
-                tokio::task::spawn_blocking(move || speech.stop()).await?;
-            }
+        self.shared.asked.fetch_add(1, Ordering::SeqCst);
+        let mut speaking = self.shared.speaking.lock().await;
+        self.hush(&mut speaking).await
+    }
+
+    async fn hush(&self, speaking: &mut Option<Speech>) -> Result<()> {
+        if let Some(speech) = speaking.take() {
+            tokio::task::spawn_blocking(move || speech.stop()).await?;
         }
         if !self.is_running() {
             return Ok(());
@@ -454,6 +470,52 @@ done
         std::thread::sleep(Duration::from_millis(1500));
         assert_eq!(voice.listen_stop().await.unwrap(), "run 2");
         assert_eq!(std::fs::read_to_string(dir.join("starts")).unwrap().lines().count(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn one_voice_speaks_at_a_time_and_stop_ends_a_speech_still_starting() {
+        let dir = std::env::temp_dir().join(format!("duragon-speaking-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (socket, _) = crate::speechd::tests::fake(&dir);
+        std::env::set_var("SPEECHD_ADDRESS", format!("unix_socket:{}", socket.display()));
+        let heard: Arc<Mutex<Vec<(String, bool)>>> = Arc::default();
+        let sink = heard.clone();
+        let voice = VoiceClient::new(
+            dir.clone(),
+            Arc::new(move |event, p| {
+                if event == "voice:speaking" {
+                    sink.lock().unwrap().push((p["messageId"].as_str().unwrap().into(), p["playing"].as_bool().unwrap()));
+                }
+            }),
+        );
+        let playing = || {
+            let heard = heard.lock().unwrap();
+            let mut ids: Vec<String> = heard.iter().map(|e| e.0.clone()).collect();
+            ids.dedup();
+            ids.retain(|id| heard.iter().rev().find(|e| &e.0 == id).is_some_and(|e| e.1));
+            ids
+        };
+        let pico = "speechd/pico/samantha";
+
+        let starting = tokio::spawn({
+            let voice = voice.clone();
+            async move { voice.speak(Some("a".into()), "Hello.", pico, 1.0).await }
+        });
+        tokio::task::spawn_blocking(|| std::thread::sleep(Duration::from_millis(50))).await.unwrap();
+        voice.stop_speaking().await.unwrap();
+        starting.await.unwrap().unwrap();
+        assert_eq!(playing(), Vec::<String>::new(), "a stop while it starts ends it: {:?}", heard.lock().unwrap());
+
+        let (b, c) = tokio::join!(
+            voice.speak(Some("b".into()), "Hello.", pico, 1.0),
+            voice.speak(Some("c".into()), "Hello.", pico, 1.0)
+        );
+        b.unwrap();
+        c.unwrap();
+        voice.stop_speaking().await.unwrap();
+        assert_eq!(playing(), Vec::<String>::new(), "two speeches at once leave none behind: {:?}", heard.lock().unwrap());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
