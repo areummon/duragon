@@ -45,6 +45,8 @@ export async function refreshVoices(system: boolean) {
 
 let started = false;
 const spoken = new Set<string>();
+/** A speech was asked for and has not begun yet. */
+let starting = false;
 
 /** Speech Dispatcher's voices are listed when first needed: by Customize, or by the first thing spoken. */
 export async function initVoice() {
@@ -60,6 +62,7 @@ export async function initVoice() {
     voice.levels = [...voice.levels.slice(1), l];
   });
   be.on('voice:speaking', (p) => {
+    if (p.playing) starting = false;
     voice.playing = p.playing;
     voice.speakingId = p.playing ? p.messageId : null;
   });
@@ -81,16 +84,23 @@ export async function initVoice() {
 }
 
 export async function readAloud(messageId: string | null, text: string, voiceId?: string) {
+  starting = true;
   const voices = voice.voices.length ? voice.voices : await loadVoices(false);
-  if (!voices.length) return needModel('Speaking needs a voice. Get one in Customize → Voice models.');
+  if (!starting) return; // Stopped while the voices were listed.
+  if (!voices.length) {
+    starting = false;
+    return needModel('Speaking needs a voice. Get one in Customize → Voice models.');
+  }
   try {
     await (await getBackend()).speak(messageId, text, voiceId);
   } catch (e) {
+    starting = false;
     showToast(String(e));
   }
 }
 
 export async function stopSpeaking() {
+  starting = false;
   await (await getBackend()).stopSpeaking();
 }
 
@@ -103,9 +113,9 @@ export function toggleSample(id: string) {
   else void readAloud(sampleId(id), 'Does this still hold?', id);
 }
 
-/** Typing stops playback. */
+/** Typing stops playback, and a speech about to begin. */
 export function interruptSpeech() {
-  if (voice.playing) void stopSpeaking();
+  if (voice.playing || starting) void stopSpeaking();
 }
 
 function caretReady() {

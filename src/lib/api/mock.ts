@@ -679,8 +679,11 @@ export class MockBackend implements Backend {
   }
   async speak(messageId: string | null, _text: string, _voice?: string) {
     clearTimeout(this.speakTimer);
-    this.emit('voice:speaking', { messageId, playing: true });
-    this.speakTimer = window.setTimeout(() => this.emit('voice:speaking', { messageId, playing: false }), 3000);
+    // A real voice takes a moment to begin.
+    this.speakTimer = window.setTimeout(() => {
+      this.emit('voice:speaking', { messageId, playing: true });
+      this.speakTimer = window.setTimeout(() => this.emit('voice:speaking', { messageId, playing: false }), 3000);
+    }, 300);
   }
   async stopSpeaking() {
     clearTimeout(this.speakTimer);
