@@ -1,6 +1,6 @@
 import type {
   BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
-  ProviderCredentialStatus, Riddler, Settings, Thread, ThreadKind, ThreadStatus, TrashList, VoiceOption, VoiceStatus,
+  ProviderCredentialStatus, Riddler, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
 } from './types';
 
 export type Unsubscribe = () => void;
@@ -63,14 +63,17 @@ export interface Backend {
   aiCancelRead(noteId: string): Promise<void>;
 
   voiceStatus(): Promise<VoiceStatus>;
-  /** Download the Parakeet and Kokoro models into the app data dir. Progress via voice:status. */
-  voiceInstall(): Promise<void>;
-  listVoices(): Promise<VoiceOption[]>;
+  /** Download one model into the app data dir. Progress via voice:status. */
+  voiceInstall(kind: ModelKind): Promise<void>;
+  /** Kokoro's voices when installed, then Speech Dispatcher's; `refresh` lists the system's again. */
+  listVoices(refresh: boolean): Promise<VoiceOption[]>;
+  listListenModels(): Promise<VoiceOption[]>;
   /** Start capturing the microphone; transcripts arrive as voice:transcript events. */
   listenStart(handsFree: boolean): Promise<void>;
   /** Stop capturing and return the final transcript of the utterance. */
   listenStop(): Promise<string>;
-  speak(messageId: string | null, text: string): Promise<void>;
+  /** With the chosen voice, or `voice` for a sample. */
+  speak(messageId: string | null, text: string, voice?: string): Promise<void>;
   stopSpeaking(): Promise<void>;
 
   exportNote(id: string, format: ExportFormat, path: string): Promise<void>;

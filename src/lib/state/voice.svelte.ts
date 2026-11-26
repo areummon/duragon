@@ -2,14 +2,16 @@ import { getBackend } from '../api/backend';
 import type { VoiceOption, VoiceStatus } from '../api/types';
 import { current } from '../editor/current';
 import { app, openCustomize } from './app.svelte';
+import { settings } from './settings.svelte';
 import { showToast } from './toast.svelte';
 
 const DOUBLE_TAP_MS = 350;
 const BARS = 5;
 
 export const voice = $state({
-  status: { stt: 'missing', tts: 'missing', progress: 0, error: null, listening: false } as VoiceStatus,
+  status: { stt: 'missing', vad: 'missing', tts: 'missing', progress: 0, error: null, listening: false } as VoiceStatus,
   voices: [] as VoiceOption[],
+  listenModels: [] as VoiceOption[],
   /** Last few microphone levels, newest last. */
   levels: Array<number>(BARS).fill(0),
   mode: 'off' as 'off' | 'hold' | 'hands',
@@ -17,7 +19,19 @@ export const voice = $state({
   playing: false,
 });
 
-export const modelsReady = () => voice.status.stt === 'ready' && voice.status.tts === 'ready';
+/** A bare name from before Speech Dispatcher, such as `bm_george`, is a Kokoro voice. */
+const voiceId = (name: string) => (name.includes('/') ? name : `kokoro/${name}`);
+/** The voice in use: the chosen one, or the first there is when that one is gone. */
+export const chosenVoice = (): VoiceOption | undefined =>
+  voice.voices.find((v) => v.id === voiceId(settings.value.voiceName)) ?? voice.voices[0];
+export const chosenListenModel = (): VoiceOption | undefined =>
+  voice.listenModels.find((m) => m.id === settings.value.listenModel) ?? voice.listenModels[0];
+
+/** `system` lists Speech Dispatcher's voices again. */
+export async function refreshVoices(system: boolean) {
+  const be = await getBackend();
+  [voice.voices, voice.listenModels] = await Promise.all([be.listVoices(system), be.listListenModels()]);
+}
 
 let started = false;
 const spoken = new Set<string>();
@@ -27,8 +41,12 @@ export async function initVoice() {
   started = true;
   const be = await getBackend();
   voice.status = await be.voiceStatus();
-  voice.voices = await be.listVoices();
-  be.on('voice:status', (s) => (voice.status = s));
+  await refreshVoices(false);
+  be.on('voice:status', (s) => {
+    const was = voice.status;
+    voice.status = s;
+    if (s.stt !== was.stt || s.tts !== was.tts) void refreshVoices(false);
+  });
   be.on('voice:level', (l) => {
     voice.levels = [...voice.levels.slice(1), l];
   });
@@ -50,9 +68,10 @@ export async function initVoice() {
   be.on('ai:message', (m) => autoSpeak(m.noteId, m.id, m.author, m.text));
 }
 
-export async function readAloud(messageId: string | null, text: string) {
+export async function readAloud(messageId: string | null, text: string, voiceId?: string) {
+  if (!voice.voices.length) return needModel('Speaking needs a voice. Get one in Customize → Voice models.');
   try {
-    await (await getBackend()).speak(messageId, text);
+    await (await getBackend()).speak(messageId, text, voiceId);
   } catch (e) {
     showToast(String(e));
   }
@@ -60,6 +79,15 @@ export async function readAloud(messageId: string | null, text: string) {
 
 export async function stopSpeaking() {
   await (await getBackend()).stopSpeaking();
+}
+
+const sampleId = (id: string) => `sample:${id}`;
+export const samplePlaying = (id: string) => voice.playing && voice.speakingId === sampleId(id);
+
+/** Plays a few words in a voice without choosing it, or stops them. */
+export function toggleSample(id: string) {
+  if (samplePlaying(id)) void stopSpeaking();
+  else void readAloud(sampleId(id), 'Does this still hold?', id);
 }
 
 /** Typing stops playback. */
@@ -118,8 +146,8 @@ let swallow = false;
 let holdSince = 0;
 const MIN_HOLD_MS = 400;
 
-function needModels() {
-  showToast('Voice needs its models. Install them in Customize → Voice models.', {
+function needModel(text: string) {
+  showToast(text, {
     label: 'Open',
     run: () => openCustomize('voice'),
   });
@@ -146,9 +174,15 @@ export function voiceKeydown(e: KeyboardEvent) {
     end(false);
     return;
   }
-  if (!modelsReady()) {
+  if (!chosenListenModel()) {
     swallow = true;
-    needModels();
+    needModel('Speech to text needs a model. Get one in Customize → Voice models.');
+    return;
+  }
+  if (double && voice.status.vad !== 'ready') {
+    if (voice.mode === 'hold') end(false);
+    swallow = true;
+    needModel('Hands-free listening needs Silero VAD. Install it in Customize → Voice models.');
     return;
   }
   if (double) {

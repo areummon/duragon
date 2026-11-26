@@ -123,8 +123,11 @@ export interface Settings {
   questionPlacement: 'both' | 'right' | 'marks';
   webInNewNotes: boolean;
   voiceInNewNotes: boolean;
+  /** `kokoro/<voice>` or `speechd/<module>/<name>`; a bare name is a Kokoro voice. */
   voiceName: string;
   speakingSpeed: number;
+  /** `parakeet` or `whisper/<model path>`. */
+  listenModel: string;
   appearance: 'system' | 'light' | 'dark';
   textSize: 'small' | 'default' | 'large';
   pageWidth: number | null;
@@ -196,12 +199,25 @@ export interface BackendEvents {
 }
 
 export type ModelState = 'missing' | 'downloading' | 'ready' | 'error';
+export type ModelKind = 'stt' | 'vad' | 'tts';
 export interface VoiceStatus {
   stt: ModelState;
+  vad: ModelState;
   tts: ModelState;
   /** 0..1 while downloading. */
   progress: number;
   error: string | null;
   listening: boolean;
 }
-export interface VoiceOption { id: string; name: string; description: string }
+/** A voice to speak with, or a model to listen with. */
+export interface VoiceOption {
+  id: string;
+  name: string;
+  description: string;
+  /** Kokoro, Pico, eSpeak NG, Parakeet, whisper.cpp… */
+  engine: string;
+  /** Duragon, Speech Dispatcher, on this computer. */
+  source: string;
+  /** Speech Dispatcher's language code. */
+  language: string | null;
+}

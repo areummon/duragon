@@ -6,7 +6,7 @@ import {
   BUILTIN_RIDDLER_ID,
   type AiTask, type BackendEvents, type DeleteMode, type MathSymbol, type ExportFormat, type Folder, type Message,
   type Note, type NoteMeta, type NoteMetaPatch, type ProviderConfig, type ProviderCredentialStatus, type Riddler,
-  type Settings, type Thread, type ThreadKind, type ThreadStatus, type TrashList, type VoiceOption, type VoiceStatus,
+  type Settings, type Thread, type ThreadKind, type ThreadStatus, type TrashList, type ModelKind, type VoiceOption, type VoiceStatus,
 } from './types';
 
 const QUOTE = 'Photosynthesis happens in the mitochondria.';
@@ -17,8 +17,9 @@ const DEFAULT_SETTINGS: Settings = {
   questionPlacement: 'both',
   webInNewNotes: false,
   voiceInNewNotes: false,
-  voiceName: 'bm_george',
+  voiceName: 'kokoro/bm_george',
   speakingSpeed: 1,
+  listenModel: 'parakeet',
   appearance: 'system',
   textSize: 'default',
   pageWidth: null,
@@ -138,12 +139,28 @@ const SOURCES = [
   { url: 'https://www.khanacademy.org/science/biology', title: 'Biology, Khan Academy' },
 ];
 
-const VOICES: VoiceOption[] = [
-  { id: 'bm_george', name: 'George', description: 'Warm, British' },
-  { id: 'bf_emma', name: 'Emma', description: 'Clear, British' },
-  { id: 'am_michael', name: 'Michael', description: 'Deep, steady' },
-  { id: 'af_heart', name: 'Heart', description: 'Warm, friendly' },
-];
+const KOKORO: VoiceOption[] = [
+  ['bm_george', 'George', 'Warm, British'],
+  ['bf_emma', 'Emma', 'Clear, British'],
+  ['am_michael', 'Michael', 'Deep, steady'],
+  ['af_heart', 'Heart', 'Warm, friendly'],
+].map(([id, name, description]) => ({ id: `kokoro/${id}`, name, description, engine: 'Kokoro', source: 'Duragon', language: null }));
+
+const SPEECHD: VoiceOption[] = [
+  ['pico', 'Pico', 'samantha', 'en-US'],
+  ['pico', 'Pico', 'serena', 'en-GB'],
+  ['pico', 'Pico', 'sabrina', 'de-DE'],
+  ['espeak-ng', 'eSpeak NG', 'English (America)', 'en-us'],
+  ['espeak-ng', 'eSpeak NG', 'English (Great Britain)', 'en-gb'],
+  ['espeak-ng', 'eSpeak NG', 'French (France)', 'fr-fr'],
+].map(([module, engine, name, language]) => ({ id: `speechd/${module}/${name}`, name: name[0].toUpperCase() + name.slice(1), description: '', engine, source: 'Speech Dispatcher', language }));
+
+const PARAKEET: VoiceOption = { id: 'parakeet', name: 'Parakeet', description: 'English', engine: 'Parakeet', source: 'Duragon', language: null };
+const WHISPER: VoiceOption[] = [
+  ['base.en', 'English'],
+  ['small', 'Many languages'],
+].map(([name, description]) => ({ id: `whisper/home/you/.local/share/whisper.cpp/ggml-${name}.bin`, name, description, engine: 'whisper.cpp', source: 'on this computer', language: null }));
+
 
 /** What one trash file holds. */
 interface Trashed {
@@ -612,7 +629,7 @@ export class MockBackend implements Backend {
     this.timers.delete(key);
   }
 
-  private voice: VoiceStatus = { stt: 'missing', tts: 'missing', progress: 0, error: null, listening: false };
+  private voice: VoiceStatus = { stt: 'missing', vad: 'missing', tts: 'missing', progress: 0, error: null, listening: false };
   private levelTimer = 0;
   private transcriptTimer = 0;
   private speakTimer = 0;
@@ -624,22 +641,28 @@ export class MockBackend implements Backend {
   async voiceStatus() {
     return { ...this.voice };
   }
-  async voiceInstall() {
-    if (this.voice.stt === 'downloading') return;
-    this.setVoice({ stt: 'downloading', tts: 'downloading', progress: 0, error: null });
+  async voiceInstall(kind: ModelKind) {
+    const v = this.voice;
+    if (v.stt === 'downloading' || v.vad === 'downloading' || v.tts === 'downloading') return;
+    this.setVoice({ [kind]: 'downloading', progress: 0, error: null });
     const start = performance.now();
+    const ms = { stt: 3000, vad: 600, tts: 2000 }[kind];
     const tick = window.setInterval(() => {
-      const p = Math.min(1, (performance.now() - start) / 3000);
+      const p = Math.min(1, (performance.now() - start) / ms);
       if (p >= 1) {
         clearInterval(tick);
-        this.setVoice({ stt: 'ready', tts: 'ready', progress: 1 });
+        this.setVoice({ [kind]: 'ready', progress: 1 });
       } else this.setVoice({ progress: p });
     }, 100);
   }
-  async listVoices() {
-    return VOICES.map((v) => ({ ...v }));
+  async listVoices(_refresh: boolean) {
+    return [...(this.voice.tts === 'ready' ? KOKORO : []), ...SPEECHD].map((v) => ({ ...v }));
+  }
+  async listListenModels() {
+    return [...(this.voice.stt === 'ready' ? [PARAKEET] : []), ...WHISPER].map((m) => ({ ...m }));
   }
   async listenStart(handsFree: boolean) {
+    if (handsFree && this.voice.vad !== 'ready') throw new Error('Hands-free listening needs Silero VAD. Install it in Customize → Voice models.');
     this.setVoice({ listening: true });
     this.levelTimer = window.setInterval(() => this.emit('voice:level', Math.random() * 0.8 + 0.1), 50);
     this.transcriptTimer = window.setTimeout(() => {
@@ -654,7 +677,7 @@ export class MockBackend implements Backend {
     this.setVoice({ listening: false });
     return 'This is what I said out loud.';
   }
-  async speak(messageId: string | null, _text: string) {
+  async speak(messageId: string | null, _text: string, _voice?: string) {
     clearTimeout(this.speakTimer);
     this.emit('voice:speaking', { messageId, playing: true });
     this.speakTimer = window.setTimeout(() => this.emit('voice:speaking', { messageId, playing: false }), 3000);

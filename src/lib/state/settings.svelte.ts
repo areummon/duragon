@@ -5,7 +5,7 @@ import { showToast } from './toast.svelte';
 
 const DEFAULTS: Settings = {
   newNoteMode: 'thinks', readingPace: 'regular', questionPlacement: 'both',
-  webInNewNotes: false, voiceInNewNotes: false, voiceName: 'bm_george', speakingSpeed: 1,
+  webInNewNotes: false, voiceInNewNotes: false, voiceName: 'kokoro/bm_george', speakingSpeed: 1, listenModel: 'parakeet',
   appearance: 'system', textSize: 'default', pageWidth: null, lettering: 'own',
   inkColour: 'ink', justMyWords: false, aboutYou: '',
   learnAboutYou: true, searchMyNotes: false, explainSymbols: false,

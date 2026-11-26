@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import type { Backend, Unsubscribe } from './backend';
 import type {
   BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
-  ProviderCredentialStatus, Riddler, Settings, Thread, ThreadKind, ThreadStatus, TrashList, VoiceOption, VoiceStatus,
+  ProviderCredentialStatus, Riddler, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
 } from './types';
 
 export class TauriBackend implements Backend {
@@ -61,11 +61,12 @@ export class TauriBackend implements Backend {
   aiCancelRead = (noteId: string) => invoke<void>('ai_cancel_read', { noteId });
 
   voiceStatus = () => invoke<VoiceStatus>('voice_status');
-  voiceInstall = () => invoke<void>('voice_install');
-  listVoices = () => invoke<VoiceOption[]>('list_voices');
+  voiceInstall = (kind: ModelKind) => invoke<void>('voice_install', { kind });
+  listVoices = (refresh: boolean) => invoke<VoiceOption[]>('list_voices', { refresh });
+  listListenModels = () => invoke<VoiceOption[]>('list_listen_models');
   listenStart = (handsFree: boolean) => invoke<void>('listen_start', { handsFree });
   listenStop = () => invoke<string>('listen_stop');
-  speak = (messageId: string | null, text: string) => invoke<void>('speak', { messageId, text });
+  speak = (messageId: string | null, text: string, voice?: string) => invoke<void>('speak', { messageId, text, voice });
   stopSpeaking = () => invoke<void>('stop_speaking');
   exportNote = (id: string, format: ExportFormat, path: string) =>
     invoke<void>('export_note', { id, format, path });
