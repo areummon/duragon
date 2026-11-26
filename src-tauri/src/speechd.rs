@@ -63,6 +63,9 @@ pub fn connect() -> Result<Conn> {
     }
 }
 
+/// A local socket takes a line at once, so a Speech Dispatcher that has stopped reading is stuck.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
+
 struct Reply {
     code: u16,
     lines: Vec<String>,
@@ -78,6 +81,7 @@ impl Conn {
     pub fn at(path: &std::path::Path) -> Result<Self> {
         let stream = UnixStream::connect(path).with_context(|| format!("connecting to Speech Dispatcher at {}", path.display()))?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_write_timeout(Some(WRITE_TIMEOUT))?;
         let writer = stream.try_clone()?;
         let mut c = Self { reader: BufReader::new(stream), writer };
         c.ok("SET SELF CLIENT_NAME user:duragon:main")?;
@@ -204,8 +208,8 @@ pub struct Speech {
 impl Speech {
     /// Stops only Duragon's own speech: a screen reader may be speaking too.
     pub fn stop(mut self) {
-        let _ = self.writer.write_all(b"STOP SELF\r\n");
-        if self.ended.recv_timeout(Duration::from_secs(1)).is_err() {
+        let sent = self.writer.write_all(b"STOP SELF\r\n").is_ok();
+        if !sent || self.ended.recv_timeout(Duration::from_secs(1)).is_err() {
             let _ = self.writer.shutdown(std::net::Shutdown::Both);
         }
         let _ = self.join.join();
@@ -213,13 +217,14 @@ impl Speech {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::os::unix::net::UnixListener;
     use std::sync::{Arc, Mutex};
 
-    /// A Speech Dispatcher that answers like the real one and records what it was sent.
-    fn fake(dir: &std::path::Path) -> (PathBuf, Arc<Mutex<Vec<String>>>) {
+    /// A Speech Dispatcher that answers like the real one and records what it was sent. A line of the text
+    /// steers it: `END NOW` ends the speech at once, `SLOW` answers it late, `DEAF` stops reading.
+    pub(crate) fn fake(dir: &std::path::Path) -> (PathBuf, Arc<Mutex<Vec<String>>>) {
         let path = dir.join("speechd.sock");
         let listener = UnixListener::bind(&path).unwrap();
         let seen: Arc<Mutex<Vec<String>>> = Arc::default();
@@ -231,7 +236,7 @@ mod tests {
                     let mut w = stream.try_clone().unwrap();
                     let mut module = String::new();
                     let mut body = false;
-                    let mut ends = false;
+                    let (mut ends, mut slow) = (false, false);
                     for line in BufReader::new(stream).lines() {
                         let Ok(line) = line else { break };
                         let line = line.trim_end_matches('\r').to_string();
@@ -239,10 +244,17 @@ mod tests {
                         let reply = if body {
                             if line == "." {
                                 body = false;
+                                if slow {
+                                    thread::sleep(Duration::from_millis(150));
+                                }
                                 let end = if ends { "702-1\r\n702-7\r\n702 END\r\n" } else { "" };
                                 format!("225-1\r\n225 OK MESSAGE QUEUED\r\n701-1\r\n701-7\r\n701 BEGIN\r\n{end}")
                             } else {
                                 ends |= line == "END NOW";
+                                slow |= line == "SLOW";
+                                if line == "DEAF" {
+                                    thread::sleep(Duration::from_secs(30));
+                                }
                                 continue;
                             }
                         } else if line == "LIST OUTPUT_MODULES" {
@@ -331,6 +343,19 @@ mod tests {
         let log = seen.lock().unwrap().clone();
         assert!(log.contains(&"STOP SELF".to_string()), "{log:?}");
         assert!(!log.iter().any(|l| l.contains("STOP ALL")));
+    }
+
+    #[test]
+    fn a_speech_dispatcher_that_stops_reading_fails_the_speech_instead_of_hanging() {
+        let dir = tempfile_dir();
+        let (path, _) = fake(&dir);
+        let text = format!("DEAF\n{}", "words ".repeat(1 << 20));
+        let (done, finished) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = done.send(Conn::at(&path).unwrap().speak(&samantha(), 0, None, &text, |_| {}).is_err());
+        });
+        // A write that sent part of it waits once more before it fails.
+        assert_eq!(finished.recv_timeout(WRITE_TIMEOUT * 3), Ok(true));
     }
 
     #[test]
