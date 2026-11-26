@@ -22,7 +22,7 @@
   import { settings } from '../state/settings.svelte';
   import { showToast } from '../state/toast.svelte';
   import { createEditor } from './create';
-  import { attachFindEditor, find } from './find.svelte';
+  import { find, resetFind } from './find.svelte';
   import NoteLinkMenu from './NoteLinkMenu.svelte';
   import { changedBlocks, docBlocks, normalizeDoc, withoutLastLine } from './plain';
   import { findQuote } from './quote';
@@ -83,13 +83,13 @@
     });
     let lastBlocks = docBlocks(ed.state.doc);
     editor = ed;
-    attachFindEditor(ed);
+    resetFind();
     registerFlush(save);
     onReady?.({ editor: ed, findQuote: (quote) => findQuote(ed.state.doc, quote) });
 
     return () => {
       window.clearTimeout(changeTimer);
-      attachFindEditor(null);
+      resetFind();
       registerFlush(null);
       onReady?.(null);
       saveSoon();
@@ -111,7 +111,8 @@
   });
 
   function openLinkTarget(target: EventTarget | null): boolean {
-    const link = (target as HTMLElement | null)?.closest<HTMLElement>('.note-link[data-note-link]');
+    if (!(target instanceof Element)) return false;
+    const link = target.closest<HTMLElement>('.note-link[data-note-link]');
     const id = link?.dataset.noteLink;
     if (!id) return false;
     void openNote(id).catch(() => showToast('That note no longer exists.'));

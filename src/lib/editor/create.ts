@@ -54,7 +54,9 @@ const TabKey = Extension.create({
   },
 });
 
-const isEmptyLine = (node: PMNode) => node.type.name === 'paragraph' && node.content.size === 0;
+export function isEmptyLine(node: PMNode): boolean {
+  return node.type.name === 'paragraph' && node.content.size === 0;
+}
 
 // The note always ends with an empty line to go on writing in. Backspace on it goes up to the text and Delete before it
 // does nothing, both without an edit to undo. Whatever else takes it away, such as a cut, it comes back. Empty lines

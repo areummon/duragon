@@ -6,15 +6,14 @@
   import { closeOnEscape } from '../escape';
   import {
     closeFind,
-    confirmFind,
     find,
     findFocus,
     nextMatch,
     prevMatch,
     setFindQuery,
+    submitFind,
   } from '../editor/find.svelte';
   import { rise } from '../motion/transitions';
-  import { settings } from '../state/settings.svelte';
 
   let input = $state<HTMLInputElement>();
 
@@ -24,7 +23,7 @@
   );
 
   // Register before focusing the input so Escape returns focus to the editor.
-  $effect(() => closeOnEscape(() => closeFind()));
+  $effect(() => closeOnEscape(() => closeFind({ focusEditor: true })));
 
   $effect(() => {
     void findFocus.seq;
@@ -36,13 +35,7 @@
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (e.shiftKey) {
-        prevMatch();
-      } else if (settings.value.vimMode) {
-        confirmFind();
-      } else {
-        nextMatch();
-      }
+      submitFind({ backwards: e.shiftKey });
       return;
     }
     if (e.key === 'Escape') {

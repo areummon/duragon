@@ -1,3 +1,4 @@
+import { exposeDebug } from '../debug';
 import {
   KEYBOARD_ACTIONS,
   eventBinding,
@@ -9,6 +10,11 @@ import {
 const STORAGE_KEY = 'duragon:keymap';
 
 const DEFAULTS = new Map<KeyAction, string>(KEYBOARD_ACTIONS.map((a) => [a.id, a.binding]));
+const ACTION_IDS = new Set<string>(KEYBOARD_ACTIONS.map((a) => a.id));
+
+function isKeyAction(key: string): key is KeyAction {
+  return ACTION_IDS.has(key);
+}
 
 function loadOverrides(): Partial<Record<KeyAction, string>> {
   if (typeof window === 'undefined') return {};
@@ -19,9 +25,10 @@ function loadOverrides(): Partial<Record<KeyAction, string>> {
     if (!parsed || typeof parsed !== 'object') return {};
     const out: Partial<Record<KeyAction, string>> = {};
     for (const [k, v] of Object.entries(parsed)) {
-      const def = DEFAULTS.get(k as KeyAction);
+      if (!isKeyAction(k)) continue;
+      const def = DEFAULTS.get(k);
       if (!def || typeof v !== 'string' || !v || isReservedBinding(v) || v === def) continue;
-      out[k as KeyAction] = v;
+      out[k] = v;
     }
     return out;
   } catch {
@@ -97,7 +104,4 @@ export function hasAnyOverride(): boolean {
   return Object.keys(keymap.overrides).length > 0;
 }
 
-if (import.meta.env.DEV) {
-  const w = window as unknown as { __duragon?: Record<string, unknown> };
-  w.__duragon = { ...(w.__duragon ?? {}), keymap };
-}
+exposeDebug('keymap', keymap);

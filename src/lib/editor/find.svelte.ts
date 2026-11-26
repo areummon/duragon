@@ -2,32 +2,61 @@ import { Extension, type Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { exposeDebug } from '../debug';
+import { settings } from '../state/settings.svelte';
+import { current } from './current';
 
 export interface FindMatch {
   from: number;
   to: number;
 }
 
+interface FindPluginState {
+  decos: DecorationSet;
+  matches: FindMatch[];
+  index: number;
+}
+
+interface FindMetaPayload {
+  matches: FindMatch[];
+  index: number;
+}
+
 export const FIND_META = 'duragon-find';
+const EMPTY_MATCHES: FindMatch[] = [];
 
 export const find = $state({
   open: false,
   query: '',
-  matches: [] as FindMatch[],
+  matches: EMPTY_MATCHES as FindMatch[],
   index: 0,
 });
 
 /** Incremented whenever the find input should grab focus and select its contents. */
 export const findFocus = $state({ seq: 0 });
 
-const findPluginKey = new PluginKey<DecorationSet>('findHighlight');
+const findPluginKey = new PluginKey<FindPluginState>('findHighlight');
 
-let activeEditor: Editor | null = null;
 let lastQuery = '';
+
+function activeEditor(): Editor | null {
+  const ed = current.editor;
+  return ed && !ed.isDestroyed ? ed : null;
+}
 
 interface TextSegment {
   text: string;
   pos: number;
+}
+
+function mapOffset(run: TextSegment[], starts: number[], idx: number, isEnd: boolean): number | null {
+  for (let i = run.length - 1; i >= 0; i--) {
+    if (isEnd ? idx > starts[i] : idx >= starts[i]) {
+      const local = Math.min(idx - starts[i], run[i].text.length);
+      return run[i].pos + local;
+    }
+  }
+  return null;
 }
 
 function searchRun(run: TextSegment[], needle: string, out: FindMatch[]) {
@@ -46,8 +75,8 @@ function searchRun(run: TextSegment[], needle: string, out: FindMatch[]) {
   while (offset <= lower.length - len) {
     const hit = lower.indexOf(needle, offset);
     if (hit === -1) break;
-    const from = mapStart(run, starts, hit);
-    const to = mapEnd(run, starts, hit + len);
+    const from = mapOffset(run, starts, hit, false);
+    const to = mapOffset(run, starts, hit + len, true);
     if (from !== null && to !== null && to > from) {
       out.push({ from, to });
     }
@@ -55,28 +84,8 @@ function searchRun(run: TextSegment[], needle: string, out: FindMatch[]) {
   }
 }
 
-function mapStart(run: TextSegment[], starts: number[], idx: number): number | null {
-  for (let i = run.length - 1; i >= 0; i--) {
-    if (idx >= starts[i]) {
-      const local = Math.min(idx - starts[i], run[i].text.length);
-      return run[i].pos + local;
-    }
-  }
-  return null;
-}
-
-function mapEnd(run: TextSegment[], starts: number[], idx: number): number | null {
-  for (let i = run.length - 1; i >= 0; i--) {
-    if (idx > starts[i]) {
-      const local = Math.min(idx - starts[i], run[i].text.length);
-      return run[i].pos + local;
-    }
-  }
-  return null;
-}
-
 function computeMatches(doc: PMNode, query: string): FindMatch[] {
-  if (!query) return [];
+  if (!query) return EMPTY_MATCHES;
   const needle = query.toLowerCase();
   const out: FindMatch[] = [];
 
@@ -96,28 +105,19 @@ function computeMatches(doc: PMNode, query: string): FindMatch[] {
     return false;
   });
 
-  return out;
+  return out.length > 0 ? out : EMPTY_MATCHES;
 }
 
-function buildDecorations(doc: PMNode): DecorationSet {
-  if (!find.query) {
-    if (find.matches.length > 0) find.matches = [];
-    find.index = 0;
-    return DecorationSet.empty;
-  }
+function clampIndex(length: number, index: number): number {
+  if (length === 0) return 0;
+  return Math.max(0, Math.min(index, length - 1));
+}
 
-  const matches = computeMatches(doc, find.query);
-  find.matches = matches;
-  if (matches.length === 0) {
-    find.index = 0;
-    return DecorationSet.empty;
-  }
-  if (find.index >= matches.length) find.index = matches.length - 1;
-  if (find.index < 0) find.index = 0;
-
+function makeDecorations(doc: PMNode, matches: FindMatch[], index: number): DecorationSet {
+  if (matches.length === 0) return DecorationSet.empty;
   const decos = matches.map((m, i) =>
     Decoration.inline(m.from, m.to, {
-      class: i === find.index ? 'find-match find-match-current' : 'find-match',
+      class: i === index ? 'find-match find-match-current' : 'find-match',
     }),
   );
   return DecorationSet.create(doc, decos);
@@ -132,12 +132,13 @@ function scrollCurrentIntoView(editor: Editor) {
   el.scrollIntoView({ block: 'center', behavior });
 }
 
-function refreshEditor(opts: { scroll?: boolean; moveCursor?: boolean; focus?: boolean } = {}) {
-  const ed = activeEditor;
-  if (!ed || ed.isDestroyed) return;
+function dispatchFind(opts: { scroll?: boolean; moveCursor?: boolean; focus?: boolean } = {}) {
+  const ed = activeEditor();
+  if (!ed) return;
 
   const { state, view } = ed;
-  let tr = state.tr.setMeta(FIND_META, true);
+  const payload: FindMetaPayload = { matches: find.matches, index: find.index };
+  let tr = state.tr.setMeta(FIND_META, payload);
 
   if (opts.moveCursor && find.matches.length > 0) {
     const match = find.matches[find.index];
@@ -149,36 +150,43 @@ function refreshEditor(opts: { scroll?: boolean; moveCursor?: boolean; focus?: b
 
   view.dispatch(tr);
 
-  if (opts.focus) {
-    view.focus();
-  }
-  if (opts.scroll && !opts.moveCursor) {
-    scrollCurrentIntoView(ed);
-  }
+  if (opts.focus) view.focus();
+  if (opts.scroll && !opts.moveCursor) scrollCurrentIntoView(ed);
 }
 
-function firstIndexNearSelection(matches: FindMatch[], editor: Editor | null): number {
-  if (matches.length === 0 || !editor || editor.isDestroyed) return 0;
+function firstIndexNearSelection(matches: FindMatch[], editor: Editor): number {
+  if (matches.length === 0) return 0;
   const pos = editor.state.selection.from;
   const after = matches.findIndex((m) => m.from >= pos);
   return after >= 0 ? after : 0;
 }
 
-export function attachFindEditor(editor: Editor | null) {
-  activeEditor = editor;
+function findInitialStepIndex(matches: FindMatch[], pos: number, dir: 1 | -1): number {
+  if (dir > 0) {
+    const after = matches.findIndex((m) => m.from > pos);
+    return after >= 0 ? after : 0;
+  }
+  for (let i = matches.length - 1; i >= 0; i--) {
+    if (matches[i].from < pos) return i;
+  }
+  return matches.length - 1;
+}
+
+export function resetFind() {
   find.open = false;
   find.query = '';
-  find.matches = [];
+  find.matches = EMPTY_MATCHES;
   find.index = 0;
   lastQuery = '';
 }
 
 export function openFind(initialQuery?: string) {
+  const ed = activeEditor();
   if (initialQuery !== undefined) {
     find.query = initialQuery;
     if (initialQuery) lastQuery = initialQuery;
-  } else if (!find.open && !find.query && activeEditor && !activeEditor.isDestroyed) {
-    const { state } = activeEditor;
+  } else if (!find.open && !find.query && ed) {
+    const { state } = ed;
     const { from, to, empty } = state.selection;
     if (!empty && to - from <= 120) {
       const selected = state.doc.textBetween(from, to, '\n');
@@ -192,11 +200,11 @@ export function openFind(initialQuery?: string) {
   find.open = true;
   findFocus.seq += 1;
 
-  if (activeEditor && !activeEditor.isDestroyed) {
-    const matches = computeMatches(activeEditor.state.doc, find.query);
+  if (ed) {
+    const matches = computeMatches(ed.state.doc, find.query);
     find.matches = matches;
-    find.index = firstIndexNearSelection(matches, activeEditor);
-    refreshEditor({ scroll: matches.length > 0 });
+    find.index = firstIndexNearSelection(matches, ed);
+    dispatchFind({ scroll: matches.length > 0 });
   }
 }
 
@@ -204,104 +212,75 @@ export function setFindQuery(q: string) {
   find.query = q;
   if (q) lastQuery = q;
 
-  if (activeEditor && !activeEditor.isDestroyed) {
-    const matches = computeMatches(activeEditor.state.doc, q);
+  const ed = activeEditor();
+  if (ed) {
+    const matches = computeMatches(ed.state.doc, q);
     find.matches = matches;
-    find.index = firstIndexNearSelection(matches, activeEditor);
-    refreshEditor({ scroll: matches.length > 0 });
+    find.index = firstIndexNearSelection(matches, ed);
+    dispatchFind({ scroll: matches.length > 0 });
   } else {
-    find.matches = [];
+    find.matches = EMPTY_MATCHES;
     find.index = 0;
   }
 }
 
-export function nextMatch(opts: { moveCursor?: boolean } = {}) {
-  const ed = activeEditor;
-  if (!ed || ed.isDestroyed) return;
+export function stepMatch(dir: 1 | -1, opts: { moveCursor?: boolean } = {}) {
+  const ed = activeEditor();
+  if (!ed) return;
 
-  if (!find.query) {
+  const reviving = !find.query;
+  if (reviving) {
     if (!lastQuery) return;
     find.query = lastQuery;
-    const matches = computeMatches(ed.state.doc, find.query);
-    find.matches = matches;
-    if (matches.length === 0) return;
-    const pos = ed.state.selection.from;
-    const after = matches.findIndex((m) => m.from > pos);
-    find.index = after >= 0 ? after : 0;
-    refreshEditor({ scroll: true, moveCursor: opts.moveCursor });
-    return;
   }
 
   const matches = computeMatches(ed.state.doc, find.query);
   find.matches = matches;
   if (matches.length === 0) {
     find.index = 0;
-    refreshEditor();
+    if (!reviving) dispatchFind();
     return;
   }
 
-  find.index = (find.index + 1) % matches.length;
-  refreshEditor({ scroll: true, moveCursor: opts.moveCursor });
+  find.index = reviving
+    ? findInitialStepIndex(matches, ed.state.selection.from, dir)
+    : (find.index + dir + matches.length) % matches.length;
+  dispatchFind({ scroll: true, moveCursor: opts.moveCursor });
 }
 
-export function prevMatch(opts: { moveCursor?: boolean } = {}) {
-  const ed = activeEditor;
-  if (!ed || ed.isDestroyed) return;
-
-  if (!find.query) {
-    if (!lastQuery) return;
-    find.query = lastQuery;
-    const matches = computeMatches(ed.state.doc, find.query);
-    find.matches = matches;
-    if (matches.length === 0) return;
-    const pos = ed.state.selection.from;
-    let before = -1;
-    for (let i = matches.length - 1; i >= 0; i--) {
-      if (matches[i].from < pos) {
-        before = i;
-        break;
-      }
-    }
-    find.index = before >= 0 ? before : matches.length - 1;
-    refreshEditor({ scroll: true, moveCursor: opts.moveCursor });
-    return;
-  }
-
-  const matches = computeMatches(ed.state.doc, find.query);
-  find.matches = matches;
-  if (matches.length === 0) {
-    find.index = 0;
-    refreshEditor();
-    return;
-  }
-
-  find.index = (find.index - 1 + matches.length) % matches.length;
-  refreshEditor({ scroll: true, moveCursor: opts.moveCursor });
-}
+export const nextMatch = (opts?: { moveCursor?: boolean }) => stepMatch(1, opts);
+export const prevMatch = (opts?: { moveCursor?: boolean }) => stepMatch(-1, opts);
 
 /** Confirms the active search (used by Enter in Vim mode): closes the bar, focuses the editor at the current match. */
 export function confirmFind() {
   if (find.query) lastQuery = find.query;
   find.open = false;
-  refreshEditor({ moveCursor: find.matches.length > 0, focus: true });
+  dispatchFind({ moveCursor: find.matches.length > 0, focus: true });
+}
+
+/** Handles Enter / Shift+Enter inside the find bar, encapsulating Vim vs normal confirm semantics. */
+export function submitFind(opts: { backwards?: boolean } = {}) {
+  if (opts.backwards) prevMatch();
+  else if (settings.value.vimMode) confirmFind();
+  else nextMatch();
 }
 
 /** Clears active highlights while keeping `lastQuery` for Vim `n` / `N`. */
 export function clearFindHighlights() {
   if (find.query) lastQuery = find.query;
   find.query = '';
-  find.matches = [];
+  find.matches = EMPTY_MATCHES;
   find.index = 0;
-  refreshEditor();
+  dispatchFind();
 }
 
 export function closeFind(opts: { focusEditor?: boolean } = {}) {
   if (find.query) lastQuery = find.query;
   find.open = false;
   find.query = '';
-  find.matches = [];
+  find.matches = EMPTY_MATCHES;
   find.index = 0;
-  refreshEditor({ focus: opts.focusEditor });
+  dispatchFind({ focus: opts.focusEditor });
 }
 
 export const FindHighlight = Extension.create({
@@ -309,20 +288,41 @@ export const FindHighlight = Extension.create({
 
   addProseMirrorPlugins() {
     return [
-      new Plugin<DecorationSet>({
+      new Plugin<FindPluginState>({
         key: findPluginKey,
         state: {
           init(_config, state) {
-            return buildDecorations(state.doc);
+            const matches = computeMatches(state.doc, find.query);
+            const index = clampIndex(matches.length, find.index);
+            return { decos: makeDecorations(state.doc, matches, index), matches, index };
           },
-          apply(tr, oldDecos, _oldState, newState) {
-            if (!tr.docChanged && !tr.getMeta(FIND_META)) return oldDecos;
-            return buildDecorations(newState.doc);
+          apply(tr, prev, _oldState, newState) {
+            const meta = tr.getMeta(FIND_META) as FindMetaPayload | undefined;
+            if (meta) {
+              const index = clampIndex(meta.matches.length, meta.index);
+              return {
+                decos: makeDecorations(newState.doc, meta.matches, index),
+                matches: meta.matches,
+                index,
+              };
+            }
+            if (!tr.docChanged) return prev;
+            const matches = computeMatches(newState.doc, find.query);
+            const index = clampIndex(matches.length, prev.index);
+            return { decos: makeDecorations(newState.doc, matches, index), matches, index };
           },
         },
+        view: () => ({
+          update(view) {
+            const ps = findPluginKey.getState(view.state);
+            if (!ps) return;
+            if (find.matches !== ps.matches) find.matches = ps.matches;
+            if (find.index !== ps.index) find.index = ps.index;
+          },
+        }),
         props: {
           decorations(state) {
-            return findPluginKey.getState(state);
+            return findPluginKey.getState(state)?.decos;
           },
         },
       }),
@@ -330,8 +330,4 @@ export const FindHighlight = Extension.create({
   },
 });
 
-if (import.meta.env.DEV) {
-  const win = window as unknown as { __duragon?: Record<string, unknown> };
-  win.__duragon ??= {};
-  win.__duragon.find = find;
-}
+exposeDebug('find', find);

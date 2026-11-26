@@ -1,5 +1,4 @@
 import { Extension, type Editor, type Range } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
 import Heading1 from 'lucide-svelte/icons/heading-1';
 import Heading2 from 'lucide-svelte/icons/heading-2';
 import Heading3 from 'lucide-svelte/icons/heading-3';
@@ -10,6 +9,7 @@ import Minus from 'lucide-svelte/icons/minus';
 import SquareCode from 'lucide-svelte/icons/square-code';
 import TextQuote from 'lucide-svelte/icons/text-quote';
 import Type from 'lucide-svelte/icons/type';
+import { createInlineMenu } from './inline-menu.svelte';
 
 export interface SlashItem {
   id: string;
@@ -33,85 +33,23 @@ export const SLASH_ITEMS: SlashItem[] = [
   { id: 'hr', label: 'Divider', icon: Minus, run: (e, r) => block(e, r).setHorizontalRule().run() },
 ];
 
-export const slash = $state({
-  open: false,
-  query: '',
-  from: 0,
-  to: 0,
-  index: 0,
-  x: 0,
-  y: 0,
+export const slashMenu = createInlineMenu<SlashItem>({
+  key: 'slash',
+  width: 220,
+  trigger: /(?:^|\s)\/([\w ]*)$/,
+  triggerLength: 1,
+  canOpen: (head) => head.parent.type.name === 'paragraph',
+  matches: (query) => {
+    const q = query.trim().toLowerCase();
+    return SLASH_ITEMS.filter((i) => i.label.toLowerCase().includes(q));
+  },
+  select: (editor, item, range) => item.run(editor, range),
 });
-
-let dismissedAt = -1;
-
-export function slashMatches(query = slash.query): SlashItem[] {
-  const q = query.trim().toLowerCase();
-  return SLASH_ITEMS.filter((i) => i.label.toLowerCase().includes(q));
-}
-
-function close() {
-  slash.open = false;
-  slash.index = 0;
-}
-
-/** Escape: closes the menu and keeps it closed while the caret stays after this slash. */
-export function dismissSlash() {
-  dismissedAt = slash.from;
-  close();
-}
-
-export function runSlash(editor: Editor, item: SlashItem) {
-  const range = { from: slash.from, to: slash.to };
-  close();
-  item.run(editor, range);
-}
-
-const key = new PluginKey('slash');
 
 export const SlashCommands = Extension.create({
   name: 'slashCommands',
 
   addProseMirrorPlugins() {
-    const editor = this.editor;
-    return [
-      new Plugin({
-        key,
-        view: () => ({
-          update(view) {
-            const { selection } = view.state;
-            const { $from: head } = selection;
-            if (!selection.empty || head.parent.type.name !== 'paragraph') return close();
-            const before = head.parent.textBetween(0, head.parentOffset, undefined, '￼');
-            const m = /(?:^|\s)\/([\w ]*)$/.exec(before);
-            if (!m) {
-              dismissedAt = -1;
-              return close();
-            }
-            const from = selection.from - m[1].length - 1;
-            if (dismissedAt === from) return close();
-            if (slashMatches(m[1]).length === 0) return close();
-            const coords = view.coordsAtPos(from);
-            if (slash.query !== m[1] || !slash.open) slash.index = 0;
-            Object.assign(slash, {
-              open: true, query: m[1], from, to: selection.from, x: coords.left, y: coords.bottom + 8,
-            });
-          },
-          destroy: close,
-        }),
-        props: {
-          handleKeyDown(_view, event) {
-            if (!slash.open) return false;
-            const items = slashMatches();
-            if (event.key === 'ArrowDown') slash.index = (slash.index + 1) % items.length;
-            else if (event.key === 'ArrowUp') slash.index = (slash.index - 1 + items.length) % items.length;
-            else if (event.key === 'Enter' || event.key === 'Tab') runSlash(editor, items[slash.index]);
-            else return false;
-            event.preventDefault();
-            return true;
-          },
-        },
-      }),
-    ];
+    return [slashMenu.createPlugin(this.editor)];
   },
 });

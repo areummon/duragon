@@ -6,7 +6,7 @@ export function kbd(key: string, shift = false): string {
   return `Ctrl ${shift ? 'Shift ' : ''}${key}`;
 }
 
-export const isMod = (e: KeyboardEvent) => (mac ? e.metaKey : e.ctrlKey);
+export const isMod = (e: KeyboardEvent) => e.metaKey || e.ctrlKey;
 
 /** By its place on the keyboard: WebKitGTK reports Shift+Tab's `key` as "Unidentified". */
 export const isTab = (e: KeyboardEvent) => e.code === 'Tab';
@@ -56,8 +56,6 @@ function normalizeKey(e: KeyboardEvent, hasModOrAlt: boolean): string {
     if (e.key.length === 1 && e.key > '\x7f') {
       const letter = /^Key([A-Z])$/.exec(e.code);
       if (letter?.[1]) return letter[1].toLowerCase();
-      if (e.code === 'Comma') return ',';
-      if (e.code === 'Period') return '.';
     }
   }
 
@@ -70,7 +68,7 @@ function normalizeKey(e: KeyboardEvent, hasModOrAlt: boolean): string {
  * `mod` matches both Meta (⌘) and Ctrl.
  */
 export function eventBinding(e: KeyboardEvent): string {
-  const mod = e.metaKey || e.ctrlKey;
+  const mod = isMod(e);
   const hasModOrAlt = mod || e.altKey;
   const key = normalizeKey(e, hasModOrAlt);
 
@@ -108,6 +106,12 @@ const KEY_GLYPH: Record<string, string> = {
   delete: 'Del',
 };
 
+const MOD_LABEL: Record<string, [mac: string, other: string]> = {
+  mod: ['⌘', 'Ctrl'],
+  alt: ['⌥', 'Alt'],
+  shift: ['⇧', 'Shift'],
+};
+
 /** Format a normalized binding for display: `'mod+k'` -> `'⌘K'` on macOS or `'Ctrl K'` elsewhere. */
 export function formatBinding(binding: string): string {
   if (!binding) return '';
@@ -118,21 +122,9 @@ export function formatBinding(binding: string): string {
     key = '+';
   }
   const keyGlyph = KEY_GLYPH[key] ?? key.toUpperCase();
-  if (mac) {
-    const glyphs: string[] = [];
-    for (const part of parts) {
-      if (part === 'mod') glyphs.push('⌘');
-      else if (part === 'alt') glyphs.push('⌥');
-      else if (part === 'shift') glyphs.push('⇧');
-    }
-    return glyphs.join('') + keyGlyph;
-  }
-  const tokens: string[] = [];
-  for (const part of parts) {
-    if (part === 'mod') tokens.push('Ctrl');
-    else if (part === 'alt') tokens.push('Alt');
-    else if (part === 'shift') tokens.push('Shift');
-  }
-  tokens.push(keyGlyph);
-  return tokens.join(' ');
+  const tokens = parts.flatMap((part) => {
+    const pair = MOD_LABEL[part];
+    return pair ? [pair[mac ? 0 : 1]] : [];
+  });
+  return [...tokens, keyGlyph].join(mac ? '' : ' ');
 }

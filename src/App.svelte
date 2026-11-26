@@ -21,6 +21,17 @@
     app, copyNote, exportNote, initApp, newNote, toggleChat, toggleJustMyWords,
   } from './lib/state/app.svelte';
 
+  const overlayOpen = $derived(
+    app.sidebarOpen
+      || app.customizeOpen
+      || app.paletteOpen
+      || app.trashOpen
+      || app.historyOpen
+      || app.mindEditor !== null
+      || threads.fullId !== null
+      || lightbox.svg !== null,
+  );
+
   onMount(() => {
     void initApp().then(() => {
       void initVoice();
@@ -68,7 +79,7 @@
     <div
       class="vim-pill"
       class:insert={vim.mode === 'insert'}
-      class:hidden={app.sidebarOpen || app.customizeOpen || app.paletteOpen || app.trashOpen || app.historyOpen || app.mindEditor !== null}
+      class:hidden={overlayOpen}
       role="status"
       aria-live="polite"
       data-testid="vim-mode-pill"

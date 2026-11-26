@@ -1,15 +1,28 @@
 import { Extension, type Editor } from '@tiptap/core';
-import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
-import { Plugin, PluginKey, Selection, TextSelection, type EditorState } from '@tiptap/pm/state';
+import type { ResolvedPos } from '@tiptap/pm/model';
+import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
+import { exposeDebug } from '../debug';
 import { app, openCustomize, toggleChat, toggleJustMyWords, updateMeta } from '../state/app.svelte';
 import { settings } from '../state/settings.svelte';
+import { isEmptyLine } from './create';
 import { clearFindHighlights, find, nextMatch, openFind, prevMatch } from './find.svelte';
-import { noteLinkMenu } from './notelink.svelte';
-import { slash } from './slash.svelte';
+import { anyInlineMenuOpen } from './inline-menu.svelte';
+import {
+  changeWordEnd,
+  firstNonSpacePos,
+  nextWordStart,
+  parentText,
+  resolveMotion,
+  topOfDoc,
+} from './vim-motions';
 
 export type VimMode = 'normal' | 'insert' | 'visual';
-export const vim = $state<{ mode: VimMode; pending: string }>({ mode: 'normal', pending: '' });
+export type PendingKey = '' | 'g' | 'd' | 'c' | 'y' | 'z';
+type NonEmptyPending = Exclude<PendingKey, ''>;
+type Operator = 'd' | 'c' | 'y';
+
+export const vim = $state<{ mode: VimMode; pending: PendingKey }>({ mode: 'normal', pending: '' });
 
 export function resetVimMode(mode: VimMode = 'normal') {
   vim.mode = mode;
@@ -24,217 +37,6 @@ function yank(text: string, linewise: boolean) {
   void navigator.clipboard?.writeText(text).catch(() => {});
 }
 
-interface TextblockSpan {
-  start: number;
-  end: number;
-  node: PMNode;
-}
-
-const isEmptyParagraph = (node: PMNode) => node.type.name === 'paragraph' && node.content.size === 0;
-
-function collectTextblocks(doc: PMNode): TextblockSpan[] {
-  const blocks: TextblockSpan[] = [];
-  doc.descendants((node, pos) => {
-    if (node.isTextblock) {
-      blocks.push({ start: pos + 1, end: pos + 1 + node.content.size, node });
-      return false;
-    }
-    return true;
-  });
-  return blocks;
-}
-
-function parentText(resolved: ResolvedPos): string {
-  return resolved.parent.textBetween(0, resolved.parent.content.size, '\n', '\ufffc');
-}
-
-function charClass(ch: string): 'space' | 'word' | 'punct' {
-  if (/\s/.test(ch)) return 'space';
-  if (/[A-Za-z0-9_]/.test(ch)) return 'word';
-  return 'punct';
-}
-
-function firstNonSpacePos(resolved: ResolvedPos): number {
-  const start = resolved.start(resolved.depth);
-  const idx = parentText(resolved).search(/\S/);
-  return idx === -1 ? start : start + idx;
-}
-
-function adjacentTextblock(doc: PMNode, pos: number, dir: 1 | -1): TextblockSpan | null {
-  const blocks = collectTextblocks(doc);
-  const idx = blocks.findIndex((b) => pos >= b.start && pos <= b.end);
-  if (idx === -1) return blocks[0] ?? null;
-  return blocks[idx + dir] ?? null;
-}
-
-function nextWordStart(doc: PMNode, pos: number, crossBlock: boolean): number {
-  const resolved = doc.resolve(pos);
-  const start = resolved.start(resolved.depth);
-  const end = resolved.end(resolved.depth);
-  const text = parentText(resolved);
-  let i = resolved.parentOffset;
-
-  if (i < text.length) {
-    const cls = charClass(text[i]);
-    if (cls !== 'space') {
-      while (i < text.length && charClass(text[i]) === cls) i++;
-    }
-    while (i < text.length && charClass(text[i]) === 'space') i++;
-    if (i < text.length) return start + i;
-  }
-
-  if (!crossBlock) return end;
-  const next = adjacentTextblock(doc, pos, 1);
-  if (!next) return end;
-  const nextText = next.node.textBetween(0, next.node.content.size, '\n', '\ufffc');
-  const first = nextText.search(/\S/);
-  return first === -1 ? next.start : next.start + first;
-}
-
-function changeWordEnd(doc: PMNode, pos: number): number {
-  const resolved = doc.resolve(pos);
-  const start = resolved.start(resolved.depth);
-  const end = resolved.end(resolved.depth);
-  const text = parentText(resolved);
-  let i = resolved.parentOffset;
-  if (i >= text.length) return end;
-
-  const cls = charClass(text[i]);
-  while (i < text.length && charClass(text[i]) === cls) i++;
-  return start + i;
-}
-
-function prevWordStart(doc: PMNode, pos: number): number {
-  const resolved = doc.resolve(pos);
-  const start = resolved.start(resolved.depth);
-  const text = parentText(resolved);
-  let i = resolved.parentOffset - 1;
-
-  while (i >= 0 && charClass(text[i]) === 'space') i--;
-  if (i >= 0) {
-    const cls = charClass(text[i]);
-    while (i > 0 && charClass(text[i - 1]) === cls) i--;
-    return start + i;
-  }
-
-  const prev = adjacentTextblock(doc, pos, -1);
-  if (!prev) return start;
-  const prevText = prev.node.textBetween(0, prev.node.content.size, '\n', '\ufffc');
-  let j = prevText.length - 1;
-  while (j >= 0 && charClass(prevText[j]) === 'space') j--;
-  if (j < 0) return prev.start;
-  const cls = charClass(prevText[j]);
-  while (j > 0 && charClass(prevText[j - 1]) === cls) j--;
-  return prev.start + j;
-}
-
-function nextWordEnd(doc: PMNode, pos: number): number {
-  const resolved = doc.resolve(pos);
-  const start = resolved.start(resolved.depth);
-  const end = resolved.end(resolved.depth);
-  const text = parentText(resolved);
-  let i = resolved.parentOffset + 1;
-
-  while (i < text.length && charClass(text[i]) === 'space') i++;
-  if (i < text.length) {
-    const cls = charClass(text[i]);
-    while (i + 1 < text.length && charClass(text[i + 1]) === cls) i++;
-    return start + i;
-  }
-
-  const next = adjacentTextblock(doc, pos, 1);
-  if (!next) return end;
-  const nextText = next.node.textBetween(0, next.node.content.size, '\n', '\ufffc');
-  let j = 0;
-  while (j < nextText.length && charClass(nextText[j]) === 'space') j++;
-  if (j >= nextText.length) return next.start;
-  const cls = charClass(nextText[j]);
-  while (j + 1 < nextText.length && charClass(nextText[j + 1]) === cls) j++;
-  return next.start + j;
-}
-
-function verticalMove(view: EditorView, pos: number, dir: 1 | -1): number {
-  const { doc } = view.state;
-  const resolved = doc.resolve(pos);
-  const blockStart = resolved.start(resolved.depth);
-  const blockEnd = resolved.end(resolved.depth);
-
-  // Try stepping one visual line inside a wrapped textblock first.
-  try {
-    const cur = view.coordsAtPos(pos);
-    const probeTop = dir > 0 ? cur.bottom + 4 : cur.top - 4;
-    const hit = view.posAtCoords({ left: cur.left, top: probeTop });
-    if (hit && hit.pos >= blockStart && hit.pos <= blockEnd && hit.pos !== pos) {
-      const target = view.coordsAtPos(hit.pos);
-      if (dir > 0 ? target.top > cur.top + 2 : target.bottom < cur.bottom - 2) {
-        return hit.pos;
-      }
-    }
-  } catch {
-    // Fall back to block-level movement if coordinates are unavailable.
-  }
-
-  const adj = adjacentTextblock(doc, pos, dir);
-  if (!adj) return pos;
-  return Math.min(adj.end, adj.start + resolved.parentOffset);
-}
-
-function topOfDoc(state: EditorState): number {
-  return Selection.atStart(state.doc).from;
-}
-
-function bottomOfDoc(state: EditorState): number {
-  const { doc } = state;
-  const blocks = collectTextblocks(doc);
-  if (blocks.length === 0) return Selection.atEnd(doc).from;
-
-  // Respect Duragon's trailing LastLine empty paragraph.
-  let lastIdx = blocks.length - 1;
-  if (lastIdx > 1 && isEmptyParagraph(blocks[lastIdx].node)) {
-    lastIdx--;
-  }
-  // Walk back to the last non-empty body block when possible.
-  for (let i = lastIdx; i >= 1; i--) {
-    if (blocks[i].node.content.size > 0) return blocks[i].start;
-  }
-  return blocks[lastIdx].start;
-}
-
-function resolveMotion(view: EditorView, pos: number, key: string): number | null {
-  const { state } = view;
-  const { doc } = state;
-  const resolved = doc.resolve(pos);
-  const start = resolved.start(resolved.depth);
-  const end = resolved.end(resolved.depth);
-
-  switch (key) {
-    case 'h':
-      return Math.max(start, pos - 1);
-    case 'l':
-      return Math.min(end, pos + 1);
-    case 'j':
-      return verticalMove(view, pos, 1);
-    case 'k':
-      return verticalMove(view, pos, -1);
-    case 'w':
-      return nextWordStart(doc, pos, true);
-    case 'b':
-      return prevWordStart(doc, pos);
-    case 'e':
-      return nextWordEnd(doc, pos);
-    case '0':
-      return start;
-    case '^':
-      return firstNonSpacePos(resolved);
-    case '$':
-      return end;
-    case 'G':
-      return bottomOfDoc(state);
-    default:
-      return null;
-  }
-}
-
 function moveCursor(view: EditorView, target: number) {
   const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, target)).scrollIntoView();
   view.dispatch(tr);
@@ -247,8 +49,7 @@ function extendVisual(view: EditorView, target: number) {
 }
 
 function exitToNormal(view: EditorView) {
-  const { state } = view;
-  const { selection } = state;
+  const { selection } = view.state;
   const prevMode = vim.mode;
   vim.mode = 'normal';
   vim.pending = '';
@@ -262,30 +63,24 @@ function exitToNormal(view: EditorView) {
   }
 }
 
-function openLineBelow(view: EditorView) {
-  const { state } = view;
-  const { doc, schema, selection } = state;
+function openLine(view: EditorView, below: boolean) {
+  const { doc, schema, selection } = view.state;
   const fromPos = selection.$from;
-  const insertPos = fromPos.parent.type.name === 'title' ? doc.firstChild!.nodeSize : fromPos.after(1);
-  const tr = state.tr.insert(insertPos, schema.nodes.paragraph.create());
-  tr.setSelection(TextSelection.create(tr.doc, insertPos + 1)).scrollIntoView();
-  view.dispatch(tr);
-  vim.mode = 'insert';
-  vim.pending = '';
-}
+  const inTitle = fromPos.parent.type.name === 'title';
 
-function openLineAbove(view: EditorView) {
-  const { state } = view;
-  const { schema, selection } = state;
-  const fromPos = selection.$from;
-  if (fromPos.parent.type.name === 'title') {
+  if (!below && inTitle) {
     moveCursor(view, fromPos.start(fromPos.depth));
     vim.mode = 'insert';
     vim.pending = '';
     return;
   }
-  const insertPos = fromPos.before(1);
-  const tr = state.tr.insert(insertPos, schema.nodes.paragraph.create());
+
+  const insertPos = below
+    ? inTitle
+      ? doc.firstChild!.nodeSize
+      : fromPos.after(1)
+    : fromPos.before(1);
+  const tr = view.state.tr.insert(insertPos, schema.nodes.paragraph.create());
   tr.setSelection(TextSelection.create(tr.doc, insertPos + 1)).scrollIntoView();
   view.dispatch(tr);
   vim.mode = 'insert';
@@ -307,7 +102,7 @@ function deleteCurrentBlock(view: EditorView) {
   }
 
   // Keep NoteDocument's `title block+` invariant and Duragon's trailing LastLine valid.
-  const isTrailingLastLine = fromPos.depth === 1 && fromPos.index(0) === doc.childCount - 1 && isEmptyParagraph(fromPos.parent);
+  const isTrailingLastLine = fromPos.depth === 1 && fromPos.index(0) === doc.childCount - 1 && isEmptyLine(fromPos.parent);
   if (isTrailingLastLine) return;
 
   if (doc.childCount <= 2) {
@@ -336,16 +131,20 @@ function changeCurrentBlock(view: EditorView) {
   vim.pending = '';
 }
 
-function deleteRangeAndYank(view: EditorView, from: number, to: number, enterInsert: boolean) {
+function applyOperator(view: EditorView, op: Operator, from: number, to: number) {
   const { state } = view;
   if (to > from) {
     yank(state.doc.textBetween(from, to, '\n'), false);
-    view.dispatch(state.tr.delete(from, to).scrollIntoView());
+    if (op !== 'y') {
+      view.dispatch(state.tr.delete(from, to).scrollIntoView());
+    } else {
+      moveCursor(view, from);
+    }
+  } else if (op === 'y') {
+    moveCursor(view, from);
   }
-  if (enterInsert) {
-    vim.mode = 'insert';
-    vim.pending = '';
-  }
+  vim.mode = op === 'c' ? 'insert' : 'normal';
+  vim.pending = '';
 }
 
 function pasteRegister(view: EditorView, before: boolean) {
@@ -393,230 +192,153 @@ const PASS_THROUGH_KEYS = new Set([
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Dead']);
 
+interface ActionContext {
+  editor: Editor;
+  view: EditorView;
+  pos: number;
+  fromPos: ResolvedPos;
+  end: number;
+}
+
+const PENDING_ACTIONS: Record<NonEmptyPending, Record<string, (ctx: ActionContext) => void>> = {
+  g: {
+    g: ({ view }) => moveCursor(view, topOfDoc(view.state)),
+    c: () => toggleChat(),
+    s: () => openCustomize(),
+    w: () => {
+      if (app.note) void updateMeta({ webOn: !app.note.webOn });
+    },
+    v: () => {
+      if (app.note) void updateMeta({ voiceOn: !app.note.voiceOn });
+    },
+    m: () => {
+      if (app.note) void updateMeta({ mode: app.note.mode === 'thinks' ? 'asks' : 'thinks' });
+    },
+  },
+  d: {
+    d: ({ view }) => deleteCurrentBlock(view),
+    w: ({ view, pos }) => applyOperator(view, 'd', pos, nextWordStart(view.state.doc, pos, false)),
+    $: ({ view, pos, end }) => applyOperator(view, 'd', pos, end),
+  },
+  c: {
+    c: ({ view }) => changeCurrentBlock(view),
+    w: ({ view, pos }) => applyOperator(view, 'c', pos, changeWordEnd(view.state.doc, pos)),
+    $: ({ view, pos, end }) => applyOperator(view, 'c', pos, end),
+  },
+  y: {
+    y: ({ fromPos }) => yank(parentText(fromPos), true),
+  },
+  z: {
+    a: () => void toggleJustMyWords(),
+  },
+};
+
+const NORMAL_ACTIONS: Record<string, (ctx: ActionContext) => void> = {
+  i: () => {
+    vim.mode = 'insert';
+  },
+  a: ({ view, pos, end }) => {
+    moveCursor(view, Math.min(end, pos + 1));
+    vim.mode = 'insert';
+  },
+  I: ({ view, fromPos }) => {
+    moveCursor(view, firstNonSpacePos(fromPos));
+    vim.mode = 'insert';
+  },
+  A: ({ view, end }) => {
+    moveCursor(view, end);
+    vim.mode = 'insert';
+  },
+  o: ({ view }) => openLine(view, true),
+  O: ({ view }) => openLine(view, false),
+  v: ({ view, pos }) => {
+    vim.mode = 'visual';
+    vim.pending = '';
+    moveCursor(view, pos);
+  },
+  x: ({ view, pos, end }) => {
+    if (pos < end) applyOperator(view, 'd', pos, pos + 1);
+  },
+  D: ({ view, pos, end }) => applyOperator(view, 'd', pos, end),
+  C: ({ view, pos, end }) => applyOperator(view, 'c', pos, end),
+  p: ({ view }) => pasteRegister(view, false),
+  P: ({ view }) => pasteRegister(view, true),
+  u: ({ editor }) => {
+    editor.commands.undo();
+  },
+  '/': () => openFind(''),
+  n: () => nextMatch({ moveCursor: true }),
+  N: () => prevMatch({ moveCursor: true }),
+};
+
+const VISUAL_OPERATORS: Record<string, Operator> = {
+  d: 'd',
+  x: 'd',
+  c: 'c',
+  y: 'y',
+};
+
+function isPendingKey(key: string): key is NonEmptyPending {
+  return key in PENDING_ACTIONS;
+}
+
+function consume(event: KeyboardEvent, run?: () => void): true {
+  event.preventDefault();
+  run?.();
+  return true;
+}
+
+function actionContext(editor: Editor, view: EditorView): ActionContext {
+  const { selection } = view.state;
+  const fromPos = selection.$from;
+  return { editor, view, pos: selection.from, fromPos, end: fromPos.end(fromPos.depth) };
+}
+
+function isSwallowedKey(key: string): boolean {
+  return key.length === 1 || key === 'Backspace' || key === 'Delete' || key === 'Enter';
+}
+
 function handleVisualKey(view: EditorView, key: string, event: KeyboardEvent): boolean {
   if (vim.pending === 'g') {
     vim.pending = '';
-    event.preventDefault();
-    if (key === 'g') extendVisual(view, topOfDoc(view.state));
-    return true;
+    return consume(event, () => {
+      if (key === 'g') extendVisual(view, topOfDoc(view.state));
+    });
   }
-
-  if (key === 'g') {
-    vim.pending = 'g';
-    event.preventDefault();
-    return true;
-  }
-
-  if (key === 'v') {
-    event.preventDefault();
-    exitToNormal(view);
-    return true;
-  }
+  if (key === 'g') return consume(event, () => { vim.pending = 'g'; });
+  if (key === 'v') return consume(event, () => exitToNormal(view));
 
   const motionTarget = resolveMotion(view, view.state.selection.head, key);
-  if (motionTarget !== null) {
-    event.preventDefault();
-    extendVisual(view, motionTarget);
-    return true;
-  }
+  if (motionTarget !== null) return consume(event, () => extendVisual(view, motionTarget));
 
-  const { state } = view;
-  const { selection } = state;
-
-  if (key === 'd' || key === 'x') {
-    event.preventDefault();
-    if (!selection.empty) {
-      yank(state.doc.textBetween(selection.from, selection.to, '\n'), false);
-      view.dispatch(state.tr.deleteSelection().scrollIntoView());
-    }
-    vim.mode = 'normal';
-    vim.pending = '';
-    return true;
-  }
-
-  if (key === 'c') {
-    event.preventDefault();
-    if (!selection.empty) {
-      yank(state.doc.textBetween(selection.from, selection.to, '\n'), false);
-      view.dispatch(state.tr.deleteSelection().scrollIntoView());
-    }
-    vim.mode = 'insert';
-    vim.pending = '';
-    return true;
-  }
-
-  if (key === 'y') {
-    event.preventDefault();
-    if (!selection.empty) {
-      yank(state.doc.textBetween(selection.from, selection.to, '\n'), false);
-    }
-    vim.mode = 'normal';
-    vim.pending = '';
-    moveCursor(view, selection.from);
-    return true;
+  const op = VISUAL_OPERATORS[key];
+  if (op) {
+    const { from, to } = view.state.selection;
+    return consume(event, () => applyOperator(view, op, from, to));
   }
 
   if (PASS_THROUGH_KEYS.has(key)) return false;
-
-  if (key.length === 1 || key === 'Backspace' || key === 'Delete' || key === 'Enter') {
-    event.preventDefault();
-    return true;
-  }
-
+  if (isSwallowedKey(key)) return consume(event);
   return false;
-}
-
-function handlePendingNormal(view: EditorView, pending: string, key: string) {
-  const { state } = view;
-  const { doc, selection } = state;
-  const pos = selection.from;
-  const fromPos = selection.$from;
-  const end = fromPos.end(fromPos.depth);
-
-  if (pending === 'g') {
-    if (key === 'g') moveCursor(view, topOfDoc(state));
-    else if (key === 'c') toggleChat();
-    else if (key === 's') openCustomize();
-    else if (key === 'w' && app.note) void updateMeta({ webOn: !app.note.webOn });
-    else if (key === 'v' && app.note) void updateMeta({ voiceOn: !app.note.voiceOn });
-    else if (key === 'm' && app.note) void updateMeta({ mode: app.note.mode === 'thinks' ? 'asks' : 'thinks' });
-    return;
-  }
-
-  if (pending === 'd') {
-    if (key === 'd') deleteCurrentBlock(view);
-    else if (key === 'w') deleteRangeAndYank(view, pos, nextWordStart(doc, pos, false), false);
-    else if (key === '$') deleteRangeAndYank(view, pos, end, false);
-    return;
-  }
-
-  if (pending === 'c') {
-    if (key === 'c') changeCurrentBlock(view);
-    else if (key === 'w') deleteRangeAndYank(view, pos, changeWordEnd(doc, pos), true);
-    else if (key === '$') deleteRangeAndYank(view, pos, end, true);
-    return;
-  }
-
-  if (pending === 'y') {
-    if (key === 'y') yank(parentText(fromPos), true);
-    return;
-  }
-
-  if (pending === 'z') {
-    if (key === 'a') void toggleJustMyWords();
-  }
 }
 
 function handleNormalKey(editor: Editor, view: EditorView, key: string, event: KeyboardEvent): boolean {
   if (vim.pending) {
     const pending = vim.pending;
     vim.pending = '';
-    event.preventDefault();
-    handlePendingNormal(view, pending, key);
-    return true;
+    return consume(event, () => PENDING_ACTIONS[pending][key]?.(actionContext(editor, view)));
   }
 
-  if (key === 'g' || key === 'd' || key === 'c' || key === 'y' || key === 'z') {
-    vim.pending = key;
-    event.preventDefault();
-    return true;
-  }
+  if (isPendingKey(key)) return consume(event, () => { vim.pending = key; });
 
-  const { state } = view;
-  const { selection } = state;
-  const pos = selection.from;
-  const fromPos = selection.$from;
-  const end = fromPos.end(fromPos.depth);
+  const action = NORMAL_ACTIONS[key];
+  if (action) return consume(event, () => action(actionContext(editor, view)));
 
-  switch (key) {
-    case 'i':
-      event.preventDefault();
-      vim.mode = 'insert';
-      return true;
-    case 'a':
-      event.preventDefault();
-      moveCursor(view, Math.min(end, pos + 1));
-      vim.mode = 'insert';
-      return true;
-    case 'I':
-      event.preventDefault();
-      moveCursor(view, firstNonSpacePos(fromPos));
-      vim.mode = 'insert';
-      return true;
-    case 'A':
-      event.preventDefault();
-      moveCursor(view, end);
-      vim.mode = 'insert';
-      return true;
-    case 'o':
-      event.preventDefault();
-      openLineBelow(view);
-      return true;
-    case 'O':
-      event.preventDefault();
-      openLineAbove(view);
-      return true;
-    case 'v':
-      event.preventDefault();
-      vim.mode = 'visual';
-      vim.pending = '';
-      moveCursor(view, pos);
-      return true;
-    case 'x':
-      event.preventDefault();
-      if (pos < end) deleteRangeAndYank(view, pos, pos + 1, false);
-      return true;
-    case 'D':
-      event.preventDefault();
-      deleteRangeAndYank(view, pos, end, false);
-      return true;
-    case 'C':
-      event.preventDefault();
-      deleteRangeAndYank(view, pos, end, true);
-      return true;
-    case 'p':
-      event.preventDefault();
-      pasteRegister(view, false);
-      return true;
-    case 'P':
-      event.preventDefault();
-      pasteRegister(view, true);
-      return true;
-    case 'u':
-      event.preventDefault();
-      editor.commands.undo();
-      return true;
-    case '/':
-      event.preventDefault();
-      openFind('');
-      return true;
-    case 'n':
-      event.preventDefault();
-      nextMatch({ moveCursor: true });
-      return true;
-    case 'N':
-      event.preventDefault();
-      prevMatch({ moveCursor: true });
-      return true;
-    default:
-      break;
-  }
-
-  const motionTarget = resolveMotion(view, pos, key);
-  if (motionTarget !== null) {
-    event.preventDefault();
-    moveCursor(view, motionTarget);
-    return true;
-  }
+  const motionTarget = resolveMotion(view, view.state.selection.from, key);
+  if (motionTarget !== null) return consume(event, () => moveCursor(view, motionTarget));
 
   if (PASS_THROUGH_KEYS.has(key)) return false;
-
-  if (key.length === 1 || key === 'Backspace' || key === 'Delete' || key === 'Enter') {
-    vim.pending = '';
-    event.preventDefault();
-    return true;
-  }
-
+  if (isSwallowedKey(key)) return consume(event, () => { vim.pending = ''; });
   return false;
 }
 
@@ -635,7 +357,7 @@ export const VimMode = Extension.create({
           handleKeyDown(view, event) {
             if (!settings.value.vimMode) return false;
             if (event.isComposing) return false;
-            if (slash.open || noteLinkMenu.open) return false;
+            if (anyInlineMenuOpen()) return false;
 
             const key = event.key;
             if (MODIFIER_KEYS.has(key)) return false;
@@ -643,16 +365,14 @@ export const VimMode = Extension.create({
             if (event.metaKey || event.ctrlKey || event.altKey) {
               if (event.ctrlKey && !event.metaKey && !event.altKey) {
                 if (key === 'r' && vim.mode === 'normal') {
-                  event.preventDefault();
-                  vim.pending = '';
-                  editor.commands.redo();
-                  return true;
+                  return consume(event, () => {
+                    vim.pending = '';
+                    editor.commands.redo();
+                  });
                 }
                 if (key === '[' && (vim.mode === 'insert' || vim.mode === 'visual')) {
-                  event.preventDefault();
                   event.stopPropagation();
-                  exitToNormal(view);
-                  return true;
+                  return consume(event, () => exitToNormal(view));
                 }
               }
               return false;
@@ -660,22 +380,16 @@ export const VimMode = Extension.create({
 
             if (key === 'Escape') {
               if (vim.mode === 'insert' || vim.mode === 'visual') {
-                event.preventDefault();
                 event.stopPropagation();
-                exitToNormal(view);
-                return true;
+                return consume(event, () => exitToNormal(view));
               }
               if (vim.pending) {
-                event.preventDefault();
                 event.stopPropagation();
-                vim.pending = '';
-                return true;
+                return consume(event, () => { vim.pending = ''; });
               }
               if (!find.open && find.query) {
-                event.preventDefault();
                 event.stopPropagation();
-                clearFindHighlights();
-                return true;
+                return consume(event, () => clearFindHighlights());
               }
               return false;
             }
@@ -690,8 +404,4 @@ export const VimMode = Extension.create({
   },
 });
 
-if (import.meta.env.DEV) {
-  const win = window as unknown as { __duragon?: Record<string, unknown> };
-  win.__duragon ??= {};
-  win.__duragon.vim = vim;
-}
+exposeDebug('vim', vim);
