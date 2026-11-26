@@ -2,6 +2,7 @@
   import Check from 'lucide-svelte/icons/check';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import Globe from 'lucide-svelte/icons/globe';
+  import History from 'lucide-svelte/icons/history';
   import Lightbulb from 'lucide-svelte/icons/lightbulb';
   import MessageCircle from 'lucide-svelte/icons/message-circle';
   import Pencil from 'lucide-svelte/icons/pencil';
@@ -135,15 +136,20 @@
     <Globe size={15} strokeWidth={1.5} /><span>Web</span><Toggle on={note.webOn} />
   </button>
 
-  <div class="slot end">
-    <button class="item" aria-haspopup="menu" aria-expanded={menu === 'export'} onclick={toggle('export')}>
-      <Share size={15} strokeWidth={1.5} /><span>Export</span>
+  <div class="end">
+    <button class="item" aria-label="History" onclick={() => { close(); app.historyOpen = true; }}>
+      <History size={15} strokeWidth={1.5} /><span>History</span>
     </button>
-    <Popover open={menu === 'export'} onclose={close} align="right" width={150} label="Export">
-      <button class="menu-item" role="menuitem" onclick={() => { close(); void exportNote('md'); }}>Markdown</button>
-      <button class="menu-item" role="menuitem" onclick={() => { close(); void exportNote('docx'); }}>Word</button>
-      <button class="menu-item" role="menuitem" onclick={() => { close(); exportPdf(); }}>PDF</button>
-    </Popover>
+    <div class="slot">
+      <button class="item" aria-haspopup="menu" aria-expanded={menu === 'export'} onclick={toggle('export')}>
+        <Share size={15} strokeWidth={1.5} /><span>Export</span>
+      </button>
+      <Popover open={menu === 'export'} onclose={close} align="right" width={150} label="Export">
+        <button class="menu-item" role="menuitem" onclick={() => { close(); void exportNote('md'); }}>Markdown</button>
+        <button class="menu-item" role="menuitem" onclick={() => { close(); void exportNote('docx'); }}>Word</button>
+        <button class="menu-item" role="menuitem" onclick={() => { close(); exportPdf(); }}>PDF</button>
+      </Popover>
+    </div>
   </div>
 </div>
 {#if spill}<div class="spill" style:height="{spill}px" aria-hidden="true"></div>{/if}
@@ -183,7 +189,7 @@
     border-radius: 18px;
   }
   .slot { position: relative; }
-  .slot.end { margin-left: auto; }
+  .end { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
   .item {
     display: inline-flex;
     align-items: center;

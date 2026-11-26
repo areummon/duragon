@@ -2,6 +2,7 @@
 mod bundle;
 mod misc;
 mod notes;
+mod revisions;
 mod threads;
 
 pub(crate) use bundle::NoteBundle;
@@ -71,7 +72,16 @@ DROP TRIGGER IF EXISTS notes_au;
 CREATE TRIGGER notes_au AFTER UPDATE OF title, plain ON notes BEGIN
   INSERT INTO notes_fts(notes_fts, rowid, title, plain) VALUES ('delete', old.rowid, old.title, old.plain);
   INSERT INTO notes_fts(rowid, title, plain) VALUES (new.rowid, new.title, new.plain);
-END;"#];
+END;"#,
+r#"CREATE TABLE IF NOT EXISTS note_revisions(
+  id TEXT PRIMARY KEY,
+  note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  doc_json TEXT NOT NULL,
+  plain TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_note_revisions_note ON note_revisions(note_id, created_at DESC);"#];
 
 #[derive(Clone)]
 pub struct Db {

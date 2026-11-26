@@ -1,5 +1,5 @@
 import type {
-  BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
+  BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch, NoteRevision,
   ProviderCredentialStatus, Riddler, SearchEngine, SearchStatus, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
 } from './types';
 
@@ -11,6 +11,8 @@ export interface Backend {
   getNote(id: string): Promise<Note>;
   createNote(title?: string): Promise<Note>;
   saveNote(id: string, title: string, doc: unknown, plain: string): Promise<NoteMeta>;
+  listRevisions(noteId: string): Promise<NoteRevision[]>;
+  restoreRevision(noteId: string, revisionId: string): Promise<Note>;
   updateNoteMeta(id: string, patch: NoteMetaPatch): Promise<Note>;
   /** Where the note went: 'duragon' when the system trash refused it. */
   deleteNote(id: string, mode: DeleteMode): Promise<DeleteMode>;

@@ -154,14 +154,21 @@ impl Db {
 
     /// Saves a note whose `doc` is already serialized JSON, avoiding an unnecessary parse + re-serialize cycle.
     pub fn save_note_raw(&self, id: &str, title: &str, doc_json: &str, plain: &str) -> Result<NoteMeta> {
-        let conn = self.conn();
-        let n = conn.prepare_cached("UPDATE notes SET title=?2, doc=?3, plain=?4, updated_at=?5 WHERE id=?1")?.execute(
-            params![id, title, doc_json, plain, now_ms()],
-        )?;
-        if n == 0 {
-            return Err(anyhow!("note not found: {id}"));
+        let now = now_ms();
+        let meta = {
+            let conn = self.conn();
+            let n = conn.prepare_cached("UPDATE notes SET title=?2, doc=?3, plain=?4, updated_at=?5 WHERE id=?1")?.execute(
+                params![id, title, doc_json, plain, now],
+            )?;
+            if n == 0 {
+                return Err(anyhow!("note not found: {id}"));
+            }
+            read_note_meta(&conn, id)?.ok_or_else(|| anyhow!("note not found: {id}"))?
+        };
+        if !plain.trim().is_empty() {
+            self.maybe_snapshot(id, title, doc_json, plain, now)?;
         }
-        read_note_meta(&conn, id)?.ok_or_else(|| anyhow!("note not found: {id}"))
+        Ok(meta)
     }
 
     pub fn update_note_meta(&self, id: &str, patch: &NoteMetaPatch) -> Result<Note> {

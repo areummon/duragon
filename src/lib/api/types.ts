@@ -22,6 +22,14 @@ export interface Note extends NoteMeta {
   createdAt: number;
 }
 
+export interface NoteRevision {
+  id: string;
+  noteId: string;
+  title: string;
+  plain: string;
+  createdAt: number;
+}
+
 export interface Folder {
   id: string;
   name: string;

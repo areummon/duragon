@@ -52,6 +52,18 @@ pub async fn save_note(
 }
 
 #[tauri::command]
+pub async fn list_revisions(state: State<'_, AppState>, note_id: String) -> Res<Vec<NoteRevision>> {
+    let db = state.db.clone();
+    blocking(move || db.list_revisions(&note_id)).await
+}
+
+#[tauri::command]
+pub async fn restore_revision(state: State<'_, AppState>, note_id: String, revision_id: String) -> Res<Note> {
+    let db = state.db.clone();
+    blocking(move || db.restore_revision(&note_id, &revision_id)).await
+}
+
+#[tauri::command]
 pub async fn update_note_meta(state: State<'_, AppState>, id: String, patch: NoteMetaPatch) -> Res<Note> {
     s(state.db.update_note_meta(&id, &patch))
 }
@@ -411,6 +423,7 @@ pub async fn stop_speaking(state: State<'_, AppState>) -> Res<()> {
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         list_notes, search_notes, get_note, create_note, save_note, update_note_meta, delete_note,
+        list_revisions, restore_revision,
         list_trash, restore_note, delete_trashed,
         list_folders, create_folder, rename_folder, move_folder, delete_folder,
         list_threads, set_thread_status, set_thread_pinned, set_thread_kind, thread_to_note, list_chat,

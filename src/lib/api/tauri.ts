@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Backend, Unsubscribe } from './backend';
 import type {
-  BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch,
+  BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch, NoteRevision,
   ProviderCredentialStatus, Riddler, SearchEngine, SearchStatus, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
 } from './types';
 
@@ -13,6 +13,9 @@ export class TauriBackend implements Backend {
   createNote = (title?: string) => invoke<Note>('create_note', { title });
   saveNote = (id: string, title: string, doc: unknown, plain: string) =>
     invoke<NoteMeta>('save_note', { id, title, doc, plain });
+  listRevisions = (noteId: string) => invoke<NoteRevision[]>('list_revisions', { noteId });
+  restoreRevision = (noteId: string, revisionId: string) =>
+    invoke<Note>('restore_revision', { noteId, revisionId });
   updateNoteMeta = (id: string, patch: NoteMetaPatch) =>
     invoke<Note>('update_note_meta', { id, patch });
   deleteNote = (id: string, mode: DeleteMode) => invoke<DeleteMode>('delete_note', { id, mode });

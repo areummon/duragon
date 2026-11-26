@@ -5,7 +5,7 @@ import { CHAT_BUDGET, SUMMARIZE_AFTER, SUMMARIZE_FOLD, SUMMARY_MAX_CHARS, TASK_B
 import {
   BUILTIN_RIDDLER_ID,
   type AiTask, type BackendEvents, type DeleteMode, type MathSymbol, type ExportFormat, type Folder, type Message,
-  type Note, type NoteMeta, type NoteMetaPatch, type ProviderConfig, type ProviderCredentialStatus, type Riddler,
+  type Note, type NoteMeta, type NoteMetaPatch, type NoteRevision, type ProviderConfig, type ProviderCredentialStatus, type Riddler,
   type SearchEngine, type SearchEngineCredentialStatus, type SearchStatus,
   type Settings, type Thread, type ThreadKind, type ThreadStatus, type TrashList, type ModelKind, type VoiceOption, type VoiceStatus,
 } from './types';
@@ -189,8 +189,16 @@ interface Trashed {
   deletedAt: number;
 }
 
+interface StoredRevision extends NoteRevision {
+  doc: unknown;
+}
+
+const REVISION_INTERVAL_MS = 180_000;
+const MAX_REVISIONS_PER_NOTE = 20;
+
 export class MockBackend implements Backend {
   private notes = new Map<string, Note>();
+  private revisions = new Map<string, StoredRevision[]>();
   private folders = new Map<string, Folder>();
   private threads = new Map<string, Thread>();
   private chat = new Map<string, Message[]>();
@@ -260,6 +268,24 @@ export class MockBackend implements Backend {
     };
     this.notes.set(welcome.id, welcome);
     this.notes.set(scratch.id, scratch);
+    const earlierWelcomeDoc = {
+      type: 'doc',
+      content: [
+        title('Welcome to Duragon'),
+        para('Duragon is a quiet notebook. You write, and Claude reads along in the margin.'),
+        para('Your notes live on this machine. Open History whenever you want to look back at an earlier draft.'),
+      ],
+    };
+    this.revisions.set(welcome.id, [
+      {
+        id: uid(),
+        noteId: welcome.id,
+        title: 'Welcome to Duragon',
+        doc: earlierWelcomeDoc,
+        plain: plainOf(earlierWelcomeDoc),
+        createdAt: t - 25 * 60_000,
+      },
+    ]);
     const threadId = uid();
     this.threads.set(threadId, {
       id: threadId,
@@ -332,10 +358,48 @@ export class MockBackend implements Backend {
     this.notes.set(n.id, n);
     return structuredClone(n);
   }
-  async saveNote(id: string, titleText: string, doc: unknown, _plain: string) {
+  private recordRevision(noteId: string, titleText: string, doc: unknown, plain: string, ts: number, force = false) {
+    const list = this.revisions.get(noteId) ?? [];
+    const latest = list[0];
+    if (latest && latest.title === titleText && latest.plain === plain) return;
+    if (!force && latest && latest.createdAt > ts - REVISION_INTERVAL_MS) return;
+    list.unshift({
+      id: uid(),
+      noteId,
+      title: titleText,
+      doc: structuredClone(doc),
+      plain,
+      createdAt: ts,
+    });
+    if (list.length > MAX_REVISIONS_PER_NOTE) list.length = MAX_REVISIONS_PER_NOTE;
+    this.revisions.set(noteId, list);
+  }
+
+  async saveNote(id: string, titleText: string, doc: unknown, plain: string) {
     const n = this.requireNote(id);
-    Object.assign(n, { title: titleText, doc, updatedAt: now() });
+    const ts = now();
+    Object.assign(n, { title: titleText, doc, updatedAt: ts });
+    if (plain.trim()) this.recordRevision(id, titleText, doc, plain, ts);
     return this.meta(n);
+  }
+  async listRevisions(noteId: string): Promise<NoteRevision[]> {
+    return (this.revisions.get(noteId) ?? []).map(({ id, noteId: nid, title: t, plain, createdAt }) => ({
+      id,
+      noteId: nid,
+      title: t,
+      plain,
+      createdAt,
+    }));
+  }
+  async restoreRevision(noteId: string, revisionId: string): Promise<Note> {
+    const n = this.requireNote(noteId);
+    const list = this.revisions.get(noteId) ?? [];
+    const target = list.find((r) => r.id === revisionId);
+    if (!target) throw new Error(`revision not found: ${revisionId}`);
+    const currentPlain = plainOf(n.doc);
+    this.recordRevision(noteId, n.title, n.doc, currentPlain, now(), true);
+    Object.assign(n, { title: target.title, doc: structuredClone(target.doc), updatedAt: now() });
+    return this.getNote(noteId);
   }
   async updateNoteMeta(id: string, patch: NoteMetaPatch) {
     const n = this.requireNote(id);

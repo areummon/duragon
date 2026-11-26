@@ -40,6 +40,7 @@
   let element: HTMLDivElement;
   let editor = $state.raw<TipTapEditor>();
   const noteId = $derived(note.id);
+  const noteDoc = $derived(note.doc);
 
   function mount(n: OpenNote) {
     resetVimMode('normal');
@@ -99,6 +100,7 @@
   // editor fires blur during Svelte's teardown, and TipTap's listeners then write dying state.
   $effect(() => {
     void noteId;
+    void noteDoc;
     return untrack(() => mount(note));
   });
 

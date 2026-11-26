@@ -26,6 +26,7 @@ export const app = $state({
   paletteOpen: false,
   chatOpen: false,
   trashOpen: false,
+  historyOpen: false,
   customizeOpen: false,
   customizePage: 'general' as CustomizePage,
   mindEditor: null as MindEditor | null,
@@ -130,6 +131,21 @@ export async function restoreNote(id: string): Promise<boolean> {
   }
   if (app.trashOpen) await loadTrash();
   return back;
+}
+
+export async function restoreNoteRevision(revisionId: string) {
+  if (!app.note) return;
+  try {
+    await flushSave?.();
+    await storeNote(app.note.id);
+    const note = await (await getBackend()).restoreRevision(app.note.id, revisionId);
+    app.note = note;
+    upsertMeta(note);
+    app.historyOpen = false;
+    showToast('Restored earlier draft');
+  } catch {
+    showToast('That draft couldn’t be restored.');
+  }
 }
 
 export async function updateMeta(patch: NoteMetaPatch) {

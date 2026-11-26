@@ -68,7 +68,7 @@
     <div
       class="vim-pill"
       class:insert={vim.mode === 'insert'}
-      class:hidden={app.sidebarOpen || app.customizeOpen || app.paletteOpen || app.trashOpen || app.mindEditor !== null}
+      class:hidden={app.sidebarOpen || app.customizeOpen || app.paletteOpen || app.trashOpen || app.historyOpen || app.mindEditor !== null}
       role="status"
       aria-live="polite"
       data-testid="vim-mode-pill"
@@ -88,6 +88,7 @@
   <LazyDialog open={threads.fullId !== null} close={() => (threads.fullId = null)} load={() => import('./lib/components/ThreadDialog.svelte')} />
   <LazyDialog open={lightbox.svg !== null} close={() => enlarge(null)} load={() => import('./lib/components/DrawingDialog.svelte')} />
   <LazyDialog open={app.trashOpen} close={() => (app.trashOpen = false)} load={() => import('./lib/components/TrashDialog.svelte')} />
+  <LazyDialog open={app.historyOpen} close={() => (app.historyOpen = false)} load={() => import('./lib/components/HistoryDialog.svelte')} />
   <LazyDialog open={app.paletteOpen} close={() => (app.paletteOpen = false)} load={() => import('./lib/components/CommandPalette.svelte')} remount />
   <LazyDialog open={app.customizeOpen} close={() => (app.customizeOpen = false)} load={loadCustomizeDialog} />
   <LazyDialog open={app.mindEditor !== null} close={() => (app.mindEditor = null)} load={() => import('./lib/components/customize/MindDialog.svelte')} />

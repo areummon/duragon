@@ -449,6 +449,16 @@ pub struct Note {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct NoteRevision {
+    pub id: String,
+    pub note_id: String,
+    pub title: String,
+    pub plain: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Folder {
     pub id: String,
     pub name: String,
