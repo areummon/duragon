@@ -274,7 +274,7 @@ pub fn schema(task: AiTask, web: bool) -> Value {
     if web && task.spec().sources {
         props["sources"] = json!({
             "type": "array",
-            "description": "Pages actually used from WebSearch, WebFetch, or web_search results; never invented",
+            "description": "Pages actually used from WebSearch, WebFetch, web_search, or web_fetch results; never invented",
             "items": {
                 "type": "object",
                 "properties": { "url": s("Page URL"), "title": s("Page title") },

@@ -132,13 +132,8 @@ fn serve_notes_mcp(db_path: &str, exclude: &str, web_on: bool, notes_on: bool) -
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() >= 4 && args[1] == "--notes-mcp" {
-        let db = &args[2];
-        let exclude = &args[3];
-        let rest = &args[4..];
-        let web_on = rest.iter().any(|a| a == "--web");
-        let notes_on = !rest.iter().any(|a| a == "--no-notes");
-        if let Err(e) = serve_notes_mcp(db, exclude, web_on, notes_on) {
+    if let Some(mcp) = notes_mcp::parse_cli_args(&args) {
+        if let Err(e) = serve_notes_mcp(&mcp.db, &mcp.exclude, mcp.web, mcp.notes) {
             eprintln!("duragon: notes search failed: {e}");
             std::process::exit(1);
         }

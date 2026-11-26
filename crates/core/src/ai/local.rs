@@ -5,9 +5,10 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use super::budget::tokens;
-use super::http::{openai_tools, run_tool};
+use super::http::run_tool;
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, has_required, json_instruction, strict_schema};
+use super::tools::openai_tools;
 use crate::credentials::{self, CredentialsStore};
 use crate::db::Db;
 use crate::model::{ProviderConfig, ProviderKind, ThinkingLevel};
@@ -224,8 +225,8 @@ pub async fn run_local(req: &AiRequest) -> Result<Value, AiError> {
         Api::OpenAi(_) => 0,
     };
     let mut asks = Asks {
-        notes: req.notes.is_some() && req.db.is_some(),
-        web_search: req.web_search.is_some(),
+        notes: req.has_in_process_notes(),
+        web_search: req.web.custom().is_some(),
         thinking: req.thinking != ThinkingLevel::Default,
         schema: true,
     };

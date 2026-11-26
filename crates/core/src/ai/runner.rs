@@ -15,9 +15,7 @@ use super::acp::run_acp;
 use super::codex::run_codex;
 use super::http::{run_anthropic, run_gemini, run_openai};
 use super::local::run_local;
-use super::notes_mcp::{
-    NotesSearch, NotesTool, DURAGON_NOTES_TOOL_NAMES, TOOL_NAMES, WEB_TOOL_NAMES,
-};
+use super::notes_mcp::{McpLaunch, NotesSearch};
 use super::quiet::quiet;
 use super::search::SearchClient;
 use super::veil::Veil;
@@ -53,21 +51,48 @@ pub struct CancelKey {
     pub task: AiTask,
 }
 
+/// How a call may access the web.
+#[derive(Clone, Default)]
+pub enum WebAccess {
+    #[default]
+    Off,
+    /// Use the provider's own built-in web search/fetch capability.
+    Builtin,
+    /// Use Duragon's configured custom search provider (native tools on HTTP/local, MCP on CLI runners).
+    Custom(SearchClient),
+}
+
+impl WebAccess {
+    pub fn is_on(&self) -> bool {
+        !matches!(self, WebAccess::Off)
+    }
+
+    pub fn is_builtin(&self) -> bool {
+        matches!(self, WebAccess::Builtin)
+    }
+
+    pub fn custom(&self) -> Option<&SearchClient> {
+        match self {
+            WebAccess::Custom(client) => Some(client),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClaudeRequest {
     pub model: String,
     pub system_prompt: String,
     pub schema: Value,
     pub payload: String,
+    /// Enables Claude CLI's built-in `WebSearch,WebFetch` tools (ignored when `mcp` serves web tools).
     pub web: bool,
     pub timeout: Duration,
     pub cancel: Option<CancelKey>,
     /// Overrides `DURAGON_CLAUDE_BIN` / `claude`.
     pub bin: Option<PathBuf>,
-    /// Lets the call search the writer's other notes.
-    pub notes: Option<NotesTool>,
-    /// Configured MCP server for web_search/web_fetch when a search engine key is active.
-    pub web_mcp: Option<NotesSearch>,
+    /// Optional MCP server launch for notes and/or custom web tools.
+    pub mcp: Option<McpLaunch>,
 }
 
 /// Unified request dispatched across Claude CLI, ACP (`agy acp`), Codex CLI, and HTTP APIs.
@@ -80,19 +105,36 @@ pub struct AiRequest {
     pub system_prompt: String,
     pub schema: Value,
     pub payload: String,
-    pub web: bool,
+    pub web: WebAccess,
     pub timeout: Duration,
     pub cancel: Option<CancelKey>,
     /// Overrides `DURAGON_CLAUDE_BIN` / provider command (tests).
     pub bin: Option<PathBuf>,
-    /// Lets the call search the writer's other notes.
-    pub notes: Option<NotesTool>,
-    /// App binary + db info for spawning `--notes-mcp` even when notes search itself is off.
+    /// When `Some(open_note_id)`, notes search is enabled and excludes `open_note_id`.
+    pub notes_exclude: Option<String>,
+    /// App binary + db path for spawning `--notes-mcp` from CLI runners.
     pub mcp_server: Option<NotesSearch>,
-    /// Database handle for in-process notes search in HTTP providers.
+    /// Database handle for in-process notes search in HTTP/local providers.
     pub db: Option<Db>,
-    /// Configured web search client, when a search engine key is active and web is enabled.
-    pub web_search: Option<SearchClient>,
+}
+
+impl AiRequest {
+    pub(super) fn has_in_process_notes(&self) -> bool {
+        self.notes_exclude.is_some() && self.db.is_some()
+    }
+
+    pub(super) fn mcp_launch(&self) -> Option<McpLaunch> {
+        let web = self.web.custom().is_some();
+        if self.notes_exclude.is_none() && !web {
+            return None;
+        }
+        let server = self.mcp_server.clone()?;
+        Some(McpLaunch {
+            server,
+            notes_exclude: self.notes_exclude.clone(),
+            web,
+        })
+    }
 }
 
 static REGISTRY: LazyLock<Mutex<HashMap<CancelKey, Arc<Notify>>>> =
@@ -133,8 +175,8 @@ impl Drop for Registration {
 }
 
 fn args(req: &ClaudeRequest, thinking: ThinkingLevel) -> Vec<String> {
-    let use_mcp_web = req.web && req.web_mcp.is_some();
-    let tools = if req.web && !use_mcp_web { "WebSearch,WebFetch" } else { "" };
+    let use_builtin_web = req.web && !req.mcp.as_ref().is_some_and(|m| m.web);
+    let tools = if use_builtin_web { "WebSearch,WebFetch" } else { "" };
     let mut a: Vec<String> = [
         "-p",
         "--model",
@@ -160,24 +202,13 @@ fn args(req: &ClaudeRequest, thinking: ThinkingLevel) -> Vec<String> {
         a.push(thinking.as_str().into());
     }
     let mut allowed: Vec<&str> = Vec::new();
-    if req.web && !use_mcp_web {
+    if use_builtin_web {
         allowed.extend(["WebSearch", "WebFetch"]);
     }
-    if use_mcp_web {
-        let server = req.web_mcp.as_ref().expect("checked above").clone();
-        let open_note_id = req.notes.as_ref().map(|n| n.open_note_id.clone()).unwrap_or_default();
-        let notes_on = req.notes.is_some();
-        let mcp = NotesTool { server, open_note_id };
+    if let Some(mcp) = &req.mcp {
         a.push("--mcp-config".into());
-        a.push(mcp.mcp_config_with_options(notes_on, true));
-        if notes_on {
-            allowed.extend(DURAGON_NOTES_TOOL_NAMES);
-        }
-        allowed.extend(WEB_TOOL_NAMES);
-    } else if let Some(notes) = &req.notes {
-        a.push("--mcp-config".into());
-        a.push(notes.mcp_config());
-        allowed.extend(TOOL_NAMES);
+        a.push(mcp.claude_mcp_config());
+        allowed.extend(mcp.allowed_tools());
     }
     // Print mode has no one to ask, so a tool that is not pre-approved is denied.
     if !allowed.is_empty() {
@@ -294,7 +325,7 @@ pub(super) async fn cancellable<T>(key: Option<CancelKey>, call: impl Future<Out
 /// Emails and keys in what is sent are masked, and whole again in the answer.
 pub async fn run_ai(mut req: AiRequest) -> Result<Value, AiError> {
     let mut veil = Veil::new(
-        [req.api_key.as_deref(), req.web_search.as_ref().map(SearchClient::api_key)]
+        [req.api_key.as_deref(), req.web.custom().map(SearchClient::api_key)]
             .into_iter()
             .flatten(),
     );
@@ -311,23 +342,18 @@ async fn run_provider(req: AiRequest) -> Result<Value, AiError> {
             .clone()
             .or_else(|| std::env::var_os("DURAGON_CLAUDE_BIN").map(PathBuf::from))
             .or_else(|| req.provider.command.as_deref().filter(|s| !s.trim().is_empty()).map(PathBuf::from));
-        let web_mcp = if req.web && req.web_search.is_some() {
-            req.notes.as_ref().map(|n| n.server.clone()).or(req.mcp_server)
-        } else {
-            None
-        };
+        let mcp = req.mcp_launch();
         return run_claude_with_thinking(
             ClaudeRequest {
                 model: req.model,
                 system_prompt: req.system_prompt,
                 schema: req.schema,
                 payload: req.payload,
-                web: req.web,
+                web: req.web.is_builtin(),
                 timeout: req.timeout,
                 cancel: req.cancel,
                 bin,
-                notes: req.notes,
-                web_mcp,
+                mcp,
             },
             req.thinking,
         )

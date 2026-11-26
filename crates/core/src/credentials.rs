@@ -69,10 +69,7 @@ impl CredentialsStore {
         if let Some(k) = data.keys.get(provider_id).map(|s| s.trim()).filter(|s| !s.is_empty()) {
             return Ok(Some(k.to_string()));
         }
-        Ok(env_var
-            .and_then(|name| std::env::var(name).ok())
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty()))
+        Ok(env_var.and_then(env_key))
     }
 
     /// The key a call to `provider` carries. A server the writer runs works without one, so a damaged file can't stop it.
@@ -134,6 +131,13 @@ impl CredentialsStore {
         self.resolve(&engine.credential_key(), Some(engine.env_var()))
     }
 
+    /// Resolves all search engine keys under one lock and one `credentials.json` read.
+    pub fn resolve_search_keys(&self) -> Result<Vec<(SearchEngine, Option<String>)>> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let data = self.read_file()?;
+        Ok(search_keys_from_data(&data))
+    }
+
     pub fn search_statuses(&self) -> Vec<SearchEngineCredentialStatus> {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let data = self.read_file().map_err(|e| format!("{e:#}"));
@@ -141,6 +145,22 @@ impl CredentialsStore {
             .into_iter()
             .map(|engine| search_status_from_data(&data, engine))
             .collect()
+    }
+
+    fn search_statuses_and_keys(
+        &self,
+    ) -> (Vec<SearchEngineCredentialStatus>, Vec<(SearchEngine, Option<String>)>) {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let data = self.read_file().map_err(|e| format!("{e:#}"));
+        let engines = SearchEngine::ALL
+            .into_iter()
+            .map(|engine| search_status_from_data(&data, engine))
+            .collect();
+        let keys = match &data {
+            Ok(file) => search_keys_from_data(file),
+            Err(_) => SearchEngine::ALL.into_iter().map(|eng| (eng, None)).collect(),
+        };
+        (engines, keys)
     }
 
     pub fn set_search_key(&self, engine: SearchEngine, key: &str) -> Result<()> {
@@ -211,15 +231,39 @@ pub fn validate_search_key(engine: SearchEngine, raw: &str) -> Result<String> {
     Ok(trimmed.to_string())
 }
 
+pub(crate) fn env_key(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn search_keys_from_data(data: &FileData) -> Vec<(SearchEngine, Option<String>)> {
+    SearchEngine::ALL
+        .into_iter()
+        .map(|eng| {
+            let stored = data
+                .keys
+                .get(&eng.credential_key())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(String::from);
+            (eng, stored.or_else(|| env_key(eng.env_var())))
+        })
+        .collect()
+}
+
 pub fn search_status(db: &Db, store: &CredentialsStore) -> Result<SearchStatus> {
     let pinned = db.get_settings()?.web_search_engine;
-    let engines = store.search_statuses();
-    let keys: Vec<(SearchEngine, Option<String>)> = SearchEngine::ALL
-        .into_iter()
-        .map(|eng| (eng, store.resolve_search_key(eng).ok().flatten()))
-        .collect();
-    let (available, engine, reason, _) = resolve_search(pinned, &keys);
-    Ok(SearchStatus { available, engine, pinned, reason, engines })
+    let (engines, keys) = store.search_statuses_and_keys();
+    let res = resolve_search(pinned, &keys);
+    Ok(SearchStatus {
+        available: res.available,
+        engine: res.engine,
+        pinned,
+        reason: res.reason,
+        engines,
+    })
 }
 
 pub fn set_search_key(
@@ -249,10 +293,7 @@ fn search_status_from_data(data: &Result<FileData, String>, engine: SearchEngine
         .and_then(|d| d.keys.get(&engine.credential_key()))
         .map(|s| s.trim())
         .filter(|s| !s.is_empty());
-    let has_env_key = error.is_none()
-        && std::env::var(engine.env_var())
-            .ok()
-            .is_some_and(|v| !v.trim().is_empty());
+    let has_env_key = error.is_none() && env_key(engine.env_var()).is_some();
     SearchEngineCredentialStatus {
         engine,
         label: engine.label().to_string(),
@@ -327,12 +368,7 @@ fn status_from_data(data: &Result<FileData, String>, provider: &ProviderConfig) 
         .and_then(|d| d.keys.get(&provider.id))
         .map(|s| s.trim())
         .filter(|s| !s.is_empty());
-    let has_env_key = error.is_none()
-        && provider
-            .env_var
-            .as_deref()
-            .and_then(|v| std::env::var(v).ok())
-            .is_some_and(|v| !v.trim().is_empty());
+    let has_env_key = error.is_none() && provider.env_var.as_deref().and_then(env_key).is_some();
     ProviderCredentialStatus {
         provider_id: provider.id.clone(),
         has_stored_key: stored.is_some(),

@@ -1,9 +1,9 @@
 //! Nothing that says who the writer is leaves with what they write.
 mod common;
 use common::fixture;
-use duragon_core::ai::notes_mcp::{NotesSearch, NotesTool};
+use duragon_core::ai::notes_mcp::NotesSearch;
 use duragon_core::ai::search::SearchClient;
-use duragon_core::ai::{notes_mcp, run_ai, AiRequest};
+use duragon_core::ai::{notes_mcp, run_ai, AiRequest, WebAccess};
 use duragon_core::credentials::{self, CredentialsStore};
 use duragon_core::db::Db;
 use duragon_core::model::*;
@@ -34,14 +34,13 @@ fn request(kind: ProviderKind) -> AiRequest {
         system_prompt: "SYS".into(),
         schema: json!({"type":"object","properties":{"quote":{"type":"string"}},"required":["quote"]}),
         payload: "hello".into(),
-        web: false,
+        web: WebAccess::Off,
         timeout: Duration::from_secs(20),
         cancel: None,
         bin: None,
-        notes: None,
+        notes_exclude: None,
         mcp_server: None,
         db: None,
-        web_search: None,
     }
 }
 
@@ -168,7 +167,8 @@ async fn codex_and_antigravity_run_without_their_telemetry() {
     let agent = fixture("acp-agent.sh").to_string_lossy().into_owned();
     req.provider.command = Some(script(dir.path(), &format!("printf '%s\\n' \"$@\" > {out}/args; exec sh {agent} {out}")));
     req.provider.args = vec!["acp".into()];
-    req.notes = Some(NotesTool { server: NotesSearch { exe: "/x".into(), db: "/x".into() }, open_note_id: "open".into() });
+    req.notes_exclude = Some("open".into());
+    req.mcp_server = Some(NotesSearch { exe: "/x".into(), db: "/x".into() });
     let _ = run_ai(req).await;
     assert_eq!(std::fs::read_to_string(dir.path().join("args")).unwrap(), "acp\n--disable-telemetry\n");
     let sent = std::fs::read_to_string(dir.path().join("initialize")).unwrap();
@@ -183,7 +183,7 @@ async fn prefixless_active_search_key_is_masked_and_restored() {
     let mut req = request(ProviderKind::OpenAi);
     req.provider.base_url = Some(base);
     req.payload = payload.clone();
-    req.web_search = Some(SearchClient::new(SearchEngine::Exa, search_key.into()));
+    req.web = WebAccess::Custom(SearchClient::new(SearchEngine::Exa, search_key.into()));
 
     let out = run_ai(req).await.unwrap();
     assert_eq!(out["quote"], payload);

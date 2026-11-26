@@ -14,7 +14,9 @@ pub mod search;
 pub mod spec;
 pub mod svg;
 pub mod tasks;
+pub mod tools;
 mod veil;
+pub mod web_fetch;
 
-pub use runner::{cancel, run_ai, run_claude, AiError, AiRequest, CancelKey, ClaudeRequest};
+pub use runner::{cancel, run_ai, run_claude, AiError, AiRequest, CancelKey, ClaudeRequest, WebAccess};
 pub use tasks::{Ai, Events};

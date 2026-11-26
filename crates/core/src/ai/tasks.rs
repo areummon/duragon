@@ -10,13 +10,13 @@ use std::time::Duration;
 
 use super::budget::{fit, Section, Stage};
 use super::local::payload_budget;
-use super::notes_mcp::{NotesSearch, NotesTool};
+use super::notes_mcp::NotesSearch;
 use super::prompts;
-use super::runner::{cancel, cancellable, run_ai, AiError, AiRequest, CancelKey};
+use super::runner::{cancel, cancellable, run_ai, AiError, AiRequest, CancelKey, WebAccess};
 use super::search::SearchClient;
 use super::spec::TaskSpec;
 use super::svg;
-use crate::credentials::CredentialsStore;
+use crate::credentials::{env_key, CredentialsStore};
 use crate::db::{Db, NewMessage};
 use crate::doc;
 use crate::model::*;
@@ -222,12 +222,7 @@ impl Ai {
         } else if !provider.kind.needs_key() {
             Ok(None)
         } else {
-            Ok(provider
-                .env_var
-                .as_deref()
-                .and_then(|v| std::env::var(v).ok())
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()))
+            Ok(provider.env_var.as_deref().and_then(env_key))
         }
     }
 
@@ -262,22 +257,37 @@ impl Ai {
     fn request(&self, ctx: &Ctx, task: AiTask) -> Result<AiRequest, AiError> {
         let spec = task.spec();
         let provider = ctx.settings.provider(spec.model.provider_of(&ctx.settings));
-        let web_search = SearchClient::resolve(ctx.settings.web_search_engine, self.credentials.as_ref());
-        let web = ctx.note.web_on && spec.web && (provider.searches_web() || web_search.is_some());
-        let notes = match &self.notes_search {
-            Some(server) if spec.notes && ctx.settings.search_my_notes => {
-                Some(NotesTool { server: server.clone(), open_note_id: ctx.note.meta.id.clone() })
+        let web = if ctx.note.web_on && spec.web {
+            if let Some(client) = SearchClient::resolve(ctx.settings.web_search_engine, self.credentials.as_ref()) {
+                WebAccess::Custom(client)
+            } else if provider.searches_web() {
+                WebAccess::Builtin
+            } else {
+                WebAccess::Off
             }
-            _ => None,
+        } else {
+            WebAccess::Off
         };
+        let notes_capable = match provider.kind {
+            ProviderKind::OpenAi
+            | ProviderKind::Anthropic
+            | ProviderKind::Gemini
+            | ProviderKind::Ollama
+            | ProviderKind::Local => true,
+            ProviderKind::ClaudeCli | ProviderKind::AgyAcp | ProviderKind::Acp | ProviderKind::CodexCli => {
+                self.notes_search.is_some()
+            }
+        };
+        let notes_exclude = (notes_capable && spec.notes && ctx.settings.search_my_notes)
+            .then(|| ctx.note.meta.id.clone());
         let mut system_prompt = prompts::system_prompt(
             task,
             &ctx.riddler,
             &ctx.note.brief,
             &ctx.settings.about_you,
-            web,
+            web.is_on(),
         );
-        if notes.is_some() {
+        if notes_exclude.is_some() {
             system_prompt.push_str(prompts::NOTES_SEARCH);
             let links: Vec<(String, String)> = doc::linked_note_ids(&ctx.note.doc)
                 .into_iter()
@@ -295,7 +305,7 @@ impl Ai {
                 .collect();
             system_prompt.push_str(&prompts::linked_notes_hint(&links));
         }
-        let mut schema = prompts::schema(task, web);
+        let mut schema = prompts::schema(task, web.is_on());
         if ctx.settings.explain_symbols && spec.symbols {
             system_prompt.push_str(prompts::EXPLAIN_SYMBOLS);
             prompts::add_symbols(&mut schema);
@@ -313,10 +323,9 @@ impl Ai {
             provider,
             cancel: Some(CancelKey { note_id: ctx.note.meta.id.clone(), task }),
             bin: self.bin.clone(),
-            notes,
+            notes_exclude,
             mcp_server: self.notes_search.clone(),
             db: Some(self.db.clone()),
-            web_search: if web { web_search } else { None },
         })
     }
 
@@ -362,15 +371,14 @@ impl Ai {
             system_prompt: prompts::system_prompt(task, &fallback_riddler(), "", "", false),
             schema: prompts::schema(task, false),
             payload,
-            web: false,
+            web: WebAccess::Off,
             timeout: timeout_of(&provider, spec),
             provider,
             cancel: None,
             bin: self.bin.clone(),
-            notes: None,
+            notes_exclude: None,
             mcp_server: None,
             db: None,
-            web_search: None,
         };
         serde_json::from_value(run_ai(req).await.ok()?).ok()
     }

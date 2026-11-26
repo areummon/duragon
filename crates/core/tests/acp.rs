@@ -1,7 +1,7 @@
 mod common;
 use common::fixture;
-use duragon_core::ai::notes_mcp::{NotesSearch, NotesTool};
-use duragon_core::ai::{run_ai, AiError, AiRequest};
+use duragon_core::ai::notes_mcp::NotesSearch;
+use duragon_core::ai::{run_ai, AiError, AiRequest, WebAccess};
 use duragon_core::model::{ProviderConfig, ProviderKind, ThinkingLevel};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -28,27 +28,24 @@ fn request(dir: &Path) -> AiRequest {
         system_prompt: "SYS".into(),
         schema: json!({"type":"object"}),
         payload: "hello".into(),
-        web: false,
+        web: WebAccess::Off,
         timeout: Duration::from_secs(20),
         cancel: None,
         bin: None,
-        notes: None,
+        notes_exclude: None,
         mcp_server: None,
         db: None,
-        web_search: None,
     }
 }
 
 fn with_notes(mut req: AiRequest) -> AiRequest {
-    req.notes = Some(NotesTool {
-        server: NotesSearch { exe: "/opt/duragon".into(), db: "/data/duragon.db".into() },
-        open_note_id: "note-1".into(),
-    });
+    req.notes_exclude = Some("note-1".into());
+    req.mcp_server = Some(NotesSearch { exe: "/opt/duragon".into(), db: "/data/duragon.db".into() });
     req
 }
 
 fn with_web(mut req: AiRequest) -> AiRequest {
-    req.web = true;
+    req.web = WebAccess::Builtin;
     req
 }
 

@@ -1,6 +1,6 @@
 mod common;
 use common::fixture;
-use duragon_core::ai::{run_ai, AiError, AiRequest};
+use duragon_core::ai::{run_ai, AiError, AiRequest, WebAccess};
 use duragon_core::model::{ProviderConfig, ProviderKind, ThinkingLevel};
 use serde_json::{json, Value};
 use std::os::unix::fs::PermissionsExt;
@@ -26,14 +26,13 @@ fn request(dir: &Path) -> AiRequest {
         system_prompt: "SYS".into(),
         schema: json!({"type":"object","properties":{"said":{"type":"boolean"}}}),
         payload: "hello".into(),
-        web: false,
+        web: WebAccess::Off,
         timeout: Duration::from_secs(20),
         cancel: None,
         bin: None,
-        notes: None,
+        notes_exclude: None,
         mcp_server: None,
         db: None,
-        web_search: None,
     }
 }
 
@@ -100,7 +99,13 @@ async fn the_folder_is_removed_when_the_call_times_out() {
 /// Codex searches a cached web unless it is told not to.
 #[tokio::test]
 async fn codex_searches_only_when_the_note_allows_the_web() {
-    for (web, mode) in [(false, "web_search=disabled"), (true, "web_search=live")] {
+    use duragon_core::ai::search::SearchClient;
+    use duragon_core::model::SearchEngine;
+    for (web, mode) in [
+        (WebAccess::Off, "web_search=disabled"),
+        (WebAccess::Builtin, "web_search=live"),
+        (WebAccess::Custom(SearchClient::new(SearchEngine::Tavily, "tvly-12345678901234567890".into())), "web_search=live"),
+    ] {
         let dir = tempfile::tempdir().unwrap();
         let mut req = request(dir.path());
         req.web = web;

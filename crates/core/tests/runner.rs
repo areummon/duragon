@@ -16,8 +16,7 @@ fn req(bin: std::path::PathBuf) -> ClaudeRequest {
         timeout: Duration::from_secs(20),
         cancel: None,
         bin: Some(bin),
-        notes: None,
-        web_mcp: None,
+        mcp: None,
     }
 }
 
@@ -118,22 +117,23 @@ async fn web_enables_search_tools() {
 
 #[tokio::test]
 async fn notes_search_adds_its_server_and_tools_alongside_web() {
-    use duragon_core::ai::notes_mcp::{NotesSearch, NotesTool};
+    use duragon_core::ai::notes_mcp::{McpLaunch, NotesSearch};
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("claude");
     std::fs::write(&p, "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$0.args\"\ncat >/dev/null\necho '{\"structured_output\":{}}'\n").unwrap();
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
     let mut r = req(p);
     r.web = true;
-    r.notes = Some(NotesTool {
+    r.mcp = Some(McpLaunch {
         server: NotesSearch { exe: "/opt/duragon".into(), db: "/data/duragon.db".into() },
-        open_note_id: "note-1".into(),
+        notes_exclude: Some("note-1".into()),
+        web: false,
     });
     run_claude(r).await.unwrap();
     let args: Vec<String> = std::fs::read_to_string(dir.path().join("claude.args")).unwrap().lines().map(String::from).collect();
     let at = |flag: &str| &args[args.iter().position(|a| a == flag).unwrap() + 1];
     let config: serde_json::Value = serde_json::from_str(at("--mcp-config")).unwrap();
-    assert_eq!(config, json!({"mcpServers":{"notes":{"command":"/opt/duragon","args":["--notes-mcp","/data/duragon.db","note-1"]}}}));
-    assert_eq!(at("--allowedTools"), "WebSearch,WebFetch,mcp__notes__search_notes,mcp__notes__read_note");
+    assert_eq!(config, json!({"mcpServers":{"duragon_notes":{"command":"/opt/duragon","args":["--notes-mcp","/data/duragon.db","note-1"]}}}));
+    assert_eq!(at("--allowedTools"), "WebSearch,WebFetch,mcp__duragon_notes__search_notes,mcp__duragon_notes__read_note");
     assert!(args.contains(&"--strict-mcp-config".to_string()));
 }

@@ -1,4 +1,4 @@
-use duragon_core::ai::{run_ai, AiError, AiRequest};
+use duragon_core::ai::{run_ai, AiError, AiRequest, WebAccess};
 use duragon_core::model::{ProviderConfig, ProviderKind, ThinkingLevel};
 use serde_json::json;
 use serde_json::Value;
@@ -26,14 +26,13 @@ fn request(kind: ProviderKind, base_url: String) -> AiRequest {
         system_prompt: "SYS".into(),
         schema: json!({"type":"object"}),
         payload: "the writer's note".into(),
-        web: false,
+        web: WebAccess::Off,
         timeout: Duration::from_secs(5),
         cancel: None,
         bin: None,
-        notes: None,
+        notes_exclude: None,
         mcp_server: None,
         db: None,
-        web_search: None,
     }
 }
 
@@ -164,4 +163,73 @@ async fn claude_says_why_it_stopped() {
         let result = run_ai(request(ProviderKind::Anthropic, base)).await;
         assert!(matches!(&result, Err(AiError::Failed(m)) if m.contains(says)), "{result:?}");
     }
+}
+
+#[tokio::test]
+async fn openai_400_fallback_retries_do_not_burn_tool_rounds() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        let mut tool_calls = 0usize;
+        for socket in listener.incoming() {
+            let Ok(mut socket) = socket else { break };
+            let mut raw = vec![];
+            let body: Value = loop {
+                let mut chunk = [0; 65536];
+                let n = socket.read(&mut chunk).unwrap_or(0);
+                if n == 0 {
+                    return;
+                }
+                raw.extend_from_slice(&chunk[..n]);
+                let text = String::from_utf8_lossy(&raw).into_owned();
+                if let Some(body) = text.split_once("\r\n\r\n").and_then(|(_, b)| serde_json::from_str(b).ok()) {
+                    break body;
+                }
+            };
+            let (status, reply) = if body.get("reasoning_effort").is_some() {
+                (400, json!({"error": "reasoning_effort unsupported"}))
+            } else if body["response_format"]["type"] == "json_schema" {
+                (400, json!({"error": "json_schema unsupported"}))
+            } else if tool_calls < 5 {
+                tool_calls += 1;
+                (
+                    200,
+                    json!({
+                        "choices": [{
+                            "message": {
+                                "role": "assistant",
+                                "content": null,
+                                "tool_calls": [{
+                                    "id": format!("call_{tool_calls}"),
+                                    "type": "function",
+                                    "function": { "name": "search_notes", "arguments": "{\"query\":\"x\"}" }
+                                }]
+                            }
+                        }]
+                    }),
+                )
+            } else {
+                (
+                    200,
+                    json!({
+                        "choices": [{
+                            "message": { "role": "assistant", "content": "{\"ok\":true}" }
+                        }]
+                    }),
+                )
+            };
+            let reply = reply.to_string();
+            let _ = write!(
+                socket,
+                "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+        }
+    });
+
+    let mut req = request(ProviderKind::OpenAi, base);
+    req.thinking = ThinkingLevel::High;
+    // 2 fallback 400s + 5 tool-call rounds + 1 final answer = 6 successful rounds (would fail if 400s burned rounds)
+    let out = run_ai(req).await.unwrap();
+    assert_eq!(out, json!({"ok": true}));
 }

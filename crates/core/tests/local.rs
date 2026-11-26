@@ -1,8 +1,7 @@
 mod common;
 use common::Capture;
 use duragon_core::ai::local::local_models;
-use duragon_core::ai::notes_mcp::{NotesSearch, NotesTool};
-use duragon_core::ai::{run_ai, Ai, AiError, AiRequest};
+use duragon_core::ai::{run_ai, Ai, AiError, AiRequest, WebAccess};
 use duragon_core::credentials::CredentialsStore;
 use duragon_core::db::Db;
 use duragon_core::model::*;
@@ -85,14 +84,13 @@ fn request(kind: ProviderKind, url: &str) -> AiRequest {
         system_prompt: "SYS".into(),
         schema: json!({"type":"object","properties":{"said":{"type":"boolean"}},"required":["said"]}),
         payload: "the writer's note".into(),
-        web: false,
+        web: WebAccess::Off,
         timeout: Duration::from_secs(20),
         cancel: None,
         bin: None,
-        notes: None,
+        notes_exclude: None,
         mcp_server: None,
         db: None,
-        web_search: None,
     }
 }
 
@@ -101,7 +99,7 @@ fn with_notes(mut req: AiRequest) -> AiRequest {
     let note = db.create_note(Some("Hash maps")).unwrap();
     db.save_note(&note.meta.id, "Hash maps", &json!({"type":"doc"}), "Hash maps\nmarmalade probe").unwrap();
     req.db = Some(db);
-    req.notes = Some(NotesTool { server: NotesSearch { exe: "/x".into(), db: "/x".into() }, open_note_id: "open".into() });
+    req.notes_exclude = Some("open".into());
     req
 }
 

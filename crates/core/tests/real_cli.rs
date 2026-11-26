@@ -66,8 +66,7 @@ async fn real_draw() {
         timeout: Duration::from_secs(180),
         cancel: None,
         bin: None,
-        notes: None,
-        web_mcp: None,
+        mcp: None,
     })
     .await
     .unwrap();

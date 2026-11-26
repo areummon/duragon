@@ -390,7 +390,7 @@ async fn only_the_side_chat_searches_other_notes_and_only_when_turned_on() {
     let a = last_args(&args_file);
     let config = &a[a.iter().position(|x| x == "--mcp-config").unwrap() + 1];
     assert!(config.contains(&format!("\"{}\"", fx.note)), "the open note is excluded: {config}");
-    assert!(a[a.iter().position(|x| x == "--allowedTools").unwrap() + 1].contains("mcp__notes__search_notes"));
+    assert!(a[a.iter().position(|x| x == "--allowedTools").unwrap() + 1].contains("mcp__duragon_notes__search_notes"));
     assert!(a[a.iter().position(|x| x == "--system-prompt").unwrap() + 1].contains("read_note"));
 
     fx.ai.answer(&fx.note, TARGET, 0).await.unwrap();
