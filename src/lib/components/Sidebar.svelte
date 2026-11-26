@@ -12,7 +12,7 @@
   import SettingsIcon from 'lucide-svelte/icons/settings';
   import TrashIcon from 'lucide-svelte/icons/trash-2';
   import type { DeleteMode, Folder, NoteMeta } from '../api/types';
-  import { app, deleteNote, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
+  import { app, deleteNote, exportAllMarkdown, moveNote, newNote, openNote, peekSidebar, setSidebar, unpeekSidebar } from '../state/app.svelte';
   import { createFolder, deleteFolder, folderWithin, moveFolder, notes, renameFolder } from '../state/notes.svelte';
   import { layout } from '../state/layout.svelte';
   import { settings } from '../state/settings.svelte';
@@ -366,6 +366,7 @@
       <div class="view" in:veil={{ duration: 150 }}>
         {#if !folderMenu.confirm}
           <button class="menu-item" role="menuitem" onclick={() => { editing = { id, name: notes.folders.find((f) => f.id === id)?.name ?? '' }; folderMenu = null; }}>Rename</button>
+          <button class="menu-item" role="menuitem" onclick={() => { folderMenu = null; void exportAllMarkdown(id); }}>Export folder…</button>
           <button class="menu-item" role="menuitem" onclick={() => folderMenu && (folderMenu.confirm = true)}>Delete folder</button>
         {:else}
           <div class="empty">What's inside moves up a level.</div>

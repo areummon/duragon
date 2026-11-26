@@ -787,6 +787,33 @@ export class MockBackend implements Backend {
   }
 
   async exportNote(_id: string, _format: ExportFormat, _path: string) {}
+  async importMarkdown(path: string, folderId: string | null = null) {
+    const file = path.split(/[\\/]/).pop() ?? 'Imported note';
+    const stem = file.replace(/\.(md|markdown|txt)$/i, '').trim() || 'Imported note';
+    const note = await this.createNote(stem);
+    const stored = this.requireNote(note.id);
+    stored.doc = {
+      type: 'doc',
+      content: [title(stem), para(`Imported from ${file}.`)],
+    };
+    if (folderId && this.folders.has(folderId)) stored.folderId = folderId;
+    return structuredClone(stored);
+  }
+  async exportMarkdownDir(_dir: string, folderId: string | null = null) {
+    if (folderId === null) return this.notes.size;
+    const allowed = new Set<string>([folderId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of this.folders.values()) {
+        if (f.parentId && allowed.has(f.parentId) && !allowed.has(f.id)) {
+          allowed.add(f.id);
+          grew = true;
+        }
+      }
+    }
+    return [...this.notes.values()].filter((n) => n.folderId !== null && allowed.has(n.folderId)).length;
+  }
 
   on<K extends keyof BackendEvents>(event: K, handler: (payload: BackendEvents[K]) => void): Unsubscribe {
     const set = this.handlers.get(event) ?? new Set();

@@ -75,6 +75,10 @@ export class TauriBackend implements Backend {
   stopSpeaking = () => invoke<void>('stop_speaking');
   exportNote = (id: string, format: ExportFormat, path: string) =>
     invoke<void>('export_note', { id, format, path });
+  importMarkdown = (path: string, folderId: string | null = null) =>
+    invoke<Note>('import_markdown', { path, folderId });
+  exportMarkdownDir = (dir: string, folderId: string | null = null) =>
+    invoke<number>('export_markdown_dir', { dir, folderId });
 
   on<K extends keyof BackendEvents>(
     event: K,

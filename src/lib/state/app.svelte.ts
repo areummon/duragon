@@ -194,6 +194,45 @@ export async function exportNote(format: ExportFormat) {
   if (path) await (await getBackend()).exportNote(app.note.id, format, path);
 }
 
+export async function importMarkdownNote(folderId: string | null = null) {
+  await flushSave?.();
+  let path: string | null = 'Imported note.md';
+  if ('__TAURI_INTERNALS__' in window) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }],
+    });
+    path = typeof picked === 'string' ? picked : null;
+  }
+  if (!path) return;
+  try {
+    const note = await (await getBackend()).importMarkdown(path, folderId);
+    upsertMeta(note);
+    show(note);
+    showToast(`Imported “${note.title || 'Untitled'}”`);
+  } catch {
+    showToast('That file couldn’t be imported.');
+  }
+}
+
+export async function exportAllMarkdown(folderId: string | null = null) {
+  await flushSave?.();
+  let dir: string | null = '/mock/export';
+  if ('__TAURI_INTERNALS__' in window) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const picked = await open({ directory: true, multiple: false });
+    dir = typeof picked === 'string' ? picked : null;
+  }
+  if (!dir) return;
+  try {
+    const count = await (await getBackend()).exportMarkdownDir(dir, folderId);
+    showToast(count === 1 ? 'Exported 1 note' : `Exported ${count} notes`);
+  } catch {
+    showToast('Notes couldn’t be exported.');
+  }
+}
+
 export const exportPdf = () => window.print();
 
 if (import.meta.env.DEV) Object.assign((window as unknown as { __duragon: object }).__duragon, { app, notes });

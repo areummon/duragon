@@ -80,6 +80,8 @@ export interface Backend {
   stopSpeaking(): Promise<void>;
 
   exportNote(id: string, format: ExportFormat, path: string): Promise<void>;
+  importMarkdown(path: string, folderId?: string | null): Promise<Note>;
+  exportMarkdownDir(dir: string, folderId?: string | null): Promise<number>;
 
   on<K extends keyof BackendEvents>(
     event: K,

@@ -2,7 +2,7 @@
 use duragon_core::ai::local;
 use duragon_core::consent::Asks;
 use duragon_core::credentials;
-use duragon_core::export::{to_docx, to_markdown};
+use duragon_core::export::{export_notebook_markdown, from_markdown, to_docx, to_markdown};
 use duragon_core::model::*;
 use tauri::{State, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -317,6 +317,46 @@ pub async fn export_note(state: State<'_, AppState>, id: String, format: ExportF
     .await
 }
 
+const MAX_IMPORT_BYTES: u64 = 5 * 1024 * 1024;
+
+#[tauri::command]
+pub async fn import_markdown(state: State<'_, AppState>, path: String, folder_id: Option<String>) -> Res<Note> {
+    let db = state.db.clone();
+    blocking(move || {
+        use std::io::Read;
+        let file_path = std::path::Path::new(&path);
+        let meta = std::fs::metadata(file_path)?;
+        if meta.len() > MAX_IMPORT_BYTES {
+            anyhow::bail!("Markdown file is larger than 5 MB");
+        }
+        let file = std::fs::File::open(file_path)?;
+        let mut bytes = Vec::with_capacity(meta.len() as usize);
+        file.take(MAX_IMPORT_BYTES + 1).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > MAX_IMPORT_BYTES {
+            anyhow::bail!("Markdown file is larger than 5 MB");
+        }
+        let md = String::from_utf8(bytes).map_err(|_| anyhow::anyhow!("file is not valid UTF-8 text"))?;
+        let fallback = file_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Untitled");
+        let (title, document) = from_markdown(&md, fallback);
+        let note = db.create_note_with_doc(&title, document)?;
+        if let Some(fid) = folder_id {
+            db.update_note_meta(&note.meta.id, &NoteMetaPatch { folder_id: Some(Some(fid)), ..Default::default() })
+        } else {
+            Ok(note)
+        }
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn export_markdown_dir(state: State<'_, AppState>, dir: String, folder_id: Option<String>) -> Res<usize> {
+    let db = state.db.clone();
+    blocking(move || export_notebook_markdown(&db, std::path::Path::new(&dir), folder_id.as_deref())).await
+}
+
 #[tauri::command]
 pub async fn voice_status(state: State<'_, AppState>) -> Res<crate::voice_client::VoiceStatus> {
     Ok(state.voice.status())
@@ -378,7 +418,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         get_settings, save_settings, list_credential_statuses, set_provider_key, delete_provider_key,
         get_search_status, set_search_key, delete_search_key, local_models,
         list_riddlers, save_riddler, delete_riddler,
-        ai_read, ai_answer, ai_reply, ai_chat, ai_ask, ai_visualize, ai_cancel_read, export_note,
+        ai_read, ai_answer, ai_reply, ai_chat, ai_ask, ai_visualize, ai_cancel_read, export_note, import_markdown, export_markdown_dir,
         voice_status, voice_install, list_voices, list_listen_models, listen_start, listen_stop, speak, stop_speaking,
     ]
 }
