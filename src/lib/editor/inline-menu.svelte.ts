@@ -1,6 +1,8 @@
 import type { Editor, Range } from '@tiptap/core';
 import type { ResolvedPos } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { settings } from '../state/settings.svelte';
+import { vim } from './vim.svelte';
 
 export interface InlineMenuState {
   open: boolean;
@@ -31,10 +33,21 @@ export interface InlineMenu<T> {
   createPlugin: (editor: Editor) => Plugin;
 }
 
-const registeredMenus: InlineMenuState[] = [];
+interface RegisteredMenu {
+  state: InlineMenuState;
+  dismiss: () => void;
+}
+
+const registeredMenus: RegisteredMenu[] = [];
 
 export function anyInlineMenuOpen(): boolean {
-  return registeredMenus.some((m) => m.open);
+  return registeredMenus.some((m) => m.state.open);
+}
+
+export function dismissAllInlineMenus(): void {
+  for (const m of registeredMenus) {
+    if (m.state.open) m.dismiss();
+  }
 }
 
 export function createInlineMenu<T>(config: InlineMenuConfig<T>): InlineMenu<T> {
@@ -47,7 +60,6 @@ export function createInlineMenu<T>(config: InlineMenuConfig<T>): InlineMenu<T> 
     x: 0,
     y: 0,
   });
-  registeredMenus.push(state);
 
   const pluginKey = new PluginKey(config.key);
   let dismissedAt = -1;
@@ -62,6 +74,8 @@ export function createInlineMenu<T>(config: InlineMenuConfig<T>): InlineMenu<T> 
     dismissedAt = state.from;
     close();
   }
+
+  registeredMenus.push({ state, dismiss });
 
   function matches(query = state.query): T[] {
     return config.matches(query);
@@ -78,6 +92,7 @@ export function createInlineMenu<T>(config: InlineMenuConfig<T>): InlineMenu<T> 
       key: pluginKey,
       view: () => ({
         update(view) {
+          if (settings.value.vimMode && vim.mode !== 'insert') return close();
           const { selection } = view.state;
           const { $from: head } = selection;
           if (!selection.empty || !config.canOpen(head)) return close();

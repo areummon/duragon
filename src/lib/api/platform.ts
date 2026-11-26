@@ -35,6 +35,13 @@ export async function pickOpenPath(options: OpenFileOptions): Promise<string | n
 }
 
 export async function openExternalUrl(url: string): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
   if (!isTauri()) {
     window.open(url, '_blank', 'noopener,noreferrer');
     return;

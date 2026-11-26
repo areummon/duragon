@@ -14,6 +14,7 @@
     submitFind,
   } from '../editor/find.svelte';
   import { rise } from '../motion/transitions';
+  import { portal } from '../portal';
 
   let input = $state<HTMLInputElement>();
 
@@ -50,6 +51,7 @@
   role="search"
   aria-label="Find in this note"
   data-testid="find-bar"
+  use:portal
   transition:rise={{ y: -4, duration: 150 }}
 >
   <span class="icon" aria-hidden="true">

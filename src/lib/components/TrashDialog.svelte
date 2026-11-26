@@ -121,7 +121,7 @@
 </Modal>
 
 <style>
-  :global(.scrim.trash-scrim) {
+  :global(div.scrim.trash-scrim) {
     z-index: 55;
     background: color-mix(in srgb, var(--paper) 55%, transparent);
   }

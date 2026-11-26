@@ -24,9 +24,24 @@ function charClass(ch: string): 'space' | 'word' | 'punct' {
 }
 
 export function firstNonSpacePos(resolved: ResolvedPos): number {
+  if (resolved.depth === 0) return resolved.pos;
   const start = resolved.start(resolved.depth);
   const idx = parentText(resolved).search(/\S/);
   return idx === -1 ? start : start + idx;
+}
+
+export function nearestTextblockPos(doc: PMNode, pos: number, bias: 1 | -1 = 1): number | null {
+  const near = Selection.near(doc.resolve(pos), bias);
+  if (near.$from.depth > 0) return near.from;
+  const blocks = collectTextblocks(doc);
+  if (blocks.length === 0) return null;
+  if (bias > 0) {
+    return blocks.find((b) => b.start >= pos)?.start ?? blocks[blocks.length - 1].start;
+  }
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i].end <= pos) return blocks[i].end;
+  }
+  return blocks[0].start;
 }
 
 function collectTextblocks(doc: PMNode): TextblockSpan[] {
@@ -60,6 +75,7 @@ function scanWordInBlock(text: string, startIdx: number, dir: 1 | -1): number | 
 
 function scanWord(doc: PMNode, pos: number, dir: 1 | -1): number {
   const resolved = doc.resolve(pos);
+  if (resolved.depth === 0) return nearestTextblockPos(doc, pos, dir) ?? pos;
   const start = resolved.start(resolved.depth);
   const end = resolved.end(resolved.depth);
   const hit = scanWordInBlock(parentText(resolved), resolved.parentOffset + dir, dir);
@@ -74,6 +90,7 @@ function scanWord(doc: PMNode, pos: number, dir: 1 | -1): number {
 
 export function nextWordStart(doc: PMNode, pos: number, crossBlock: boolean): number {
   const resolved = doc.resolve(pos);
+  if (resolved.depth === 0) return crossBlock ? (nearestTextblockPos(doc, pos, 1) ?? pos) : pos;
   const start = resolved.start(resolved.depth);
   const end = resolved.end(resolved.depth);
   const text = parentText(resolved);
@@ -97,6 +114,7 @@ export function nextWordStart(doc: PMNode, pos: number, crossBlock: boolean): nu
 
 export function changeWordEnd(doc: PMNode, pos: number): number {
   const resolved = doc.resolve(pos);
+  if (resolved.depth === 0) return pos;
   const start = resolved.start(resolved.depth);
   const end = resolved.end(resolved.depth);
   const text = parentText(resolved);
@@ -111,6 +129,7 @@ export function changeWordEnd(doc: PMNode, pos: number): number {
 function verticalMove(view: EditorView, pos: number, dir: 1 | -1): number {
   const { doc } = view.state;
   const resolved = doc.resolve(pos);
+  if (resolved.depth === 0) return nearestTextblockPos(doc, pos, dir) ?? pos;
   const blockStart = resolved.start(resolved.depth);
   const blockEnd = resolved.end(resolved.depth);
 
@@ -181,6 +200,12 @@ export function resolveMotion(view: EditorView, pos: number, key: string): numbe
   const motion = MOTIONS[key];
   if (!motion) return null;
   const resolved = view.state.doc.resolve(pos);
+  if (resolved.depth === 0) {
+    if (key === 'G') return bottomOfDoc(view.state);
+    const backward = key === 'k' || key === 'h' || key === 'b' || key === '0' || key === '^';
+    const anchor = backward ? view.state.selection.from : view.state.selection.to;
+    return nearestTextblockPos(view.state.doc, anchor, backward ? -1 : 1);
+  }
   return motion({
     view,
     pos,

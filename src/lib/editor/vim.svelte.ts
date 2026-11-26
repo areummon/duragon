@@ -7,12 +7,13 @@ import { app, openCustomize, toggleChat, toggleJustMyWords, updateMeta } from '.
 import { settings } from '../state/settings.svelte';
 import { isEmptyLine } from './create';
 import { clearFindHighlights, find, nextMatch, openFind, prevMatch } from './find.svelte';
-import { anyInlineMenuOpen } from './inline-menu.svelte';
+import { anyInlineMenuOpen, dismissAllInlineMenus } from './inline-menu.svelte';
+import { blockText } from './plain';
 import {
   changeWordEnd,
   firstNonSpacePos,
+  nearestTextblockPos,
   nextWordStart,
-  parentText,
   resolveMotion,
   topOfDoc,
 } from './vim-motions';
@@ -27,6 +28,7 @@ export const vim = $state<{ mode: VimMode; pending: PendingKey }>({ mode: 'norma
 export function resetVimMode(mode: VimMode = 'normal') {
   vim.mode = mode;
   vim.pending = '';
+  if (mode !== 'insert') dismissAllInlineMenus();
 }
 
 const yankRegister: { text: string; linewise: boolean } = { text: '', linewise: false };
@@ -38,8 +40,12 @@ function yank(text: string, linewise: boolean) {
 }
 
 function moveCursor(view: EditorView, target: number) {
-  const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, target)).scrollIntoView();
-  view.dispatch(tr);
+  const { doc } = view.state;
+  const resolved = doc.resolve(target);
+  const sel = resolved.parent.inlineContent
+    ? TextSelection.create(doc, target)
+    : Selection.near(resolved);
+  view.dispatch(view.state.tr.setSelection(sel).scrollIntoView());
 }
 
 function extendVisual(view: EditorView, target: number) {
@@ -53,10 +59,11 @@ function exitToNormal(view: EditorView) {
   const prevMode = vim.mode;
   vim.mode = 'normal';
   vim.pending = '';
+  dismissAllInlineMenus();
 
   if (prevMode === 'insert') {
     const fromPos = selection.$from;
-    const pos = fromPos.parentOffset > 0 ? selection.from - 1 : selection.from;
+    const pos = fromPos.depth > 0 && fromPos.parentOffset > 0 ? selection.from - 1 : selection.from;
     moveCursor(view, pos);
   } else if (prevMode === 'visual') {
     moveCursor(view, selection.head);
@@ -66,7 +73,7 @@ function exitToNormal(view: EditorView) {
 function openLine(view: EditorView, below: boolean) {
   const { doc, schema, selection } = view.state;
   const fromPos = selection.$from;
-  const inTitle = fromPos.parent.type.name === 'title';
+  const inTitle = fromPos.depth > 0 && fromPos.parent.type.name === 'title';
 
   if (!below && inTitle) {
     moveCursor(view, fromPos.start(fromPos.depth));
@@ -75,11 +82,13 @@ function openLine(view: EditorView, below: boolean) {
     return;
   }
 
-  const insertPos = below
-    ? inTitle
-      ? doc.firstChild!.nodeSize
-      : fromPos.after(1)
-    : fromPos.before(1);
+  const insertPos = fromPos.depth === 0
+    ? Math.max(doc.firstChild!.nodeSize, below ? selection.to : selection.from)
+    : below
+      ? inTitle
+        ? doc.firstChild!.nodeSize
+        : fromPos.after(1)
+      : fromPos.before(1);
   const tr = view.state.tr.insert(insertPos, schema.nodes.paragraph.create());
   tr.setSelection(TextSelection.create(tr.doc, insertPos + 1)).scrollIntoView();
   view.dispatch(tr);
@@ -87,13 +96,47 @@ function openLine(view: EditorView, below: boolean) {
   vim.pending = '';
 }
 
+function deleteDepthZeroNode(view: EditorView) {
+  const { state } = view;
+  const { doc, schema, selection } = state;
+  if (selection.to <= selection.from) return;
+  yank(doc.textBetween(selection.from, selection.to, '\n'), true);
+  if (doc.childCount <= 2) {
+    const tr = state.tr.replaceWith(selection.from, selection.to, schema.nodes.paragraph.create());
+    tr.setSelection(TextSelection.create(tr.doc, selection.from + 1)).scrollIntoView();
+    view.dispatch(tr);
+    return;
+  }
+  const tr = state.tr.delete(selection.from, selection.to);
+  const target = Math.min(selection.from, tr.doc.content.size);
+  tr.setSelection(Selection.near(tr.doc.resolve(target))).scrollIntoView();
+  view.dispatch(tr);
+}
+
+function findDeleteDepth(fromPos: ResolvedPos): number {
+  for (let d = fromPos.depth; d >= 2; d--) {
+    const node = fromPos.node(d);
+    const parent = fromPos.node(d - 1);
+    if (node.type.name === 'listItem') {
+      if (parent.childCount > 1) return d;
+    } else if (parent.childCount > 1 && (parent.type.name !== 'listItem' || fromPos.index(d - 1) > 0)) {
+      return d;
+    }
+  }
+  return 1;
+}
+
 function deleteCurrentBlock(view: EditorView) {
   const { state } = view;
   const { doc, selection } = state;
   const fromPos = selection.$from;
+  if (fromPos.depth === 0) {
+    deleteDepthZeroNode(view);
+    return;
+  }
   const start = fromPos.start(fromPos.depth);
   const end = fromPos.end(fromPos.depth);
-  yank(parentText(fromPos), true);
+  yank(blockText(fromPos.parent), true);
 
   // Never delete the Title node; clear its text instead.
   if (fromPos.parent.type.name === 'title') {
@@ -105,13 +148,14 @@ function deleteCurrentBlock(view: EditorView) {
   const isTrailingLastLine = fromPos.depth === 1 && fromPos.index(0) === doc.childCount - 1 && isEmptyLine(fromPos.parent);
   if (isTrailingLastLine) return;
 
-  if (doc.childCount <= 2) {
+  const deleteDepth = findDeleteDepth(fromPos);
+  if (deleteDepth === 1 && doc.childCount <= 2) {
     if (end > start) view.dispatch(state.tr.delete(start, end).scrollIntoView());
     return;
   }
 
-  const from = fromPos.before(1);
-  const to = fromPos.after(1);
+  const from = fromPos.before(deleteDepth);
+  const to = fromPos.after(deleteDepth);
   const tr = state.tr.delete(from, to);
   const target = Math.min(from, tr.doc.content.size);
   tr.setSelection(Selection.near(tr.doc.resolve(target))).scrollIntoView();
@@ -121,9 +165,10 @@ function deleteCurrentBlock(view: EditorView) {
 function changeCurrentBlock(view: EditorView) {
   const { state } = view;
   const fromPos = state.selection.$from;
+  if (fromPos.depth === 0) return;
   const start = fromPos.start(fromPos.depth);
   const end = fromPos.end(fromPos.depth);
-  yank(parentText(fromPos), true);
+  yank(blockText(fromPos.parent), true);
   if (end > start) {
     view.dispatch(state.tr.delete(start, end).scrollIntoView());
   }
@@ -134,7 +179,10 @@ function changeCurrentBlock(view: EditorView) {
 function applyOperator(view: EditorView, op: Operator, from: number, to: number) {
   const { state } = view;
   if (to > from) {
-    yank(state.doc.textBetween(from, to, '\n'), false);
+    const text = state.doc.textBetween(from, to, '\n', (leaf) =>
+      leaf.type.name === 'noteLink' ? String(leaf.attrs.title ?? '') : '',
+    );
+    yank(text, false);
     if (op !== 'y') {
       view.dispatch(state.tr.delete(from, to).scrollIntoView());
     } else {
@@ -154,13 +202,15 @@ function pasteRegister(view: EditorView, before: boolean) {
   const fromPos = selection.$from;
 
   if (yankRegister.linewise) {
-    const inTitle = fromPos.parent.type.name === 'title';
+    const inTitle = fromPos.depth > 0 && fromPos.parent.type.name === 'title';
     if (before && inTitle) return;
-    const insertPos = before
-      ? fromPos.before(1)
-      : inTitle
-        ? doc.firstChild!.nodeSize
-        : fromPos.after(1);
+    const insertPos = fromPos.depth === 0
+      ? Math.max(doc.firstChild!.nodeSize, before ? selection.from : selection.to)
+      : before
+        ? fromPos.before(1)
+        : inTitle
+          ? doc.firstChild!.nodeSize
+          : fromPos.after(1);
     const para = yankRegister.text
       ? schema.nodes.paragraph.create(null, schema.text(yankRegister.text))
       : schema.nodes.paragraph.create();
@@ -169,6 +219,8 @@ function pasteRegister(view: EditorView, before: boolean) {
     view.dispatch(tr);
     return;
   }
+
+  if (fromPos.depth === 0) return;
 
   const end = fromPos.end(fromPos.depth);
   const at = before ? selection.from : Math.min(end, selection.from + 1);
@@ -217,16 +269,31 @@ const PENDING_ACTIONS: Record<NonEmptyPending, Record<string, (ctx: ActionContex
   },
   d: {
     d: ({ view }) => deleteCurrentBlock(view),
-    w: ({ view, pos }) => applyOperator(view, 'd', pos, nextWordStart(view.state.doc, pos, false)),
-    $: ({ view, pos, end }) => applyOperator(view, 'd', pos, end),
+    w: ({ view, pos, fromPos }) => {
+      if (fromPos.depth === 0) return;
+      applyOperator(view, 'd', pos, nextWordStart(view.state.doc, pos, false));
+    },
+    $: ({ view, pos, end, fromPos }) => {
+      if (fromPos.depth === 0) return;
+      applyOperator(view, 'd', pos, end);
+    },
   },
   c: {
     c: ({ view }) => changeCurrentBlock(view),
-    w: ({ view, pos }) => applyOperator(view, 'c', pos, changeWordEnd(view.state.doc, pos)),
-    $: ({ view, pos, end }) => applyOperator(view, 'c', pos, end),
+    w: ({ view, pos, fromPos }) => {
+      if (fromPos.depth === 0) return;
+      applyOperator(view, 'c', pos, changeWordEnd(view.state.doc, pos));
+    },
+    $: ({ view, pos, end, fromPos }) => {
+      if (fromPos.depth === 0) return;
+      applyOperator(view, 'c', pos, end);
+    },
   },
   y: {
-    y: ({ fromPos }) => yank(parentText(fromPos), true),
+    y: ({ fromPos }) => {
+      if (fromPos.depth === 0) return;
+      yank(blockText(fromPos.parent), true);
+    },
   },
   z: {
     a: () => void toggleJustMyWords(),
@@ -234,33 +301,69 @@ const PENDING_ACTIONS: Record<NonEmptyPending, Record<string, (ctx: ActionContex
 };
 
 const NORMAL_ACTIONS: Record<string, (ctx: ActionContext) => void> = {
-  i: () => {
+  i: ({ view, fromPos }) => {
+    if (fromPos.depth === 0) {
+      const target = nearestTextblockPos(view.state.doc, view.state.selection.from, -1);
+      if (target === null) return;
+      moveCursor(view, target);
+    }
     vim.mode = 'insert';
   },
-  a: ({ view, pos, end }) => {
-    moveCursor(view, Math.min(end, pos + 1));
+  a: ({ view, pos, end, fromPos }) => {
+    if (fromPos.depth === 0) {
+      const target = nearestTextblockPos(view.state.doc, view.state.selection.to, 1);
+      if (target === null) return;
+      moveCursor(view, target);
+    } else {
+      moveCursor(view, Math.min(end, pos + 1));
+    }
     vim.mode = 'insert';
   },
   I: ({ view, fromPos }) => {
-    moveCursor(view, firstNonSpacePos(fromPos));
+    if (fromPos.depth === 0) {
+      const target = nearestTextblockPos(view.state.doc, view.state.selection.from, -1);
+      if (target === null) return;
+      moveCursor(view, firstNonSpacePos(view.state.doc.resolve(target)));
+    } else {
+      moveCursor(view, firstNonSpacePos(fromPos));
+    }
     vim.mode = 'insert';
   },
-  A: ({ view, end }) => {
-    moveCursor(view, end);
+  A: ({ view, end, fromPos }) => {
+    if (fromPos.depth === 0) {
+      const target = nearestTextblockPos(view.state.doc, view.state.selection.to, 1);
+      if (target === null) return;
+      const resolved = view.state.doc.resolve(target);
+      moveCursor(view, resolved.end(resolved.depth));
+    } else {
+      moveCursor(view, end);
+    }
     vim.mode = 'insert';
   },
   o: ({ view }) => openLine(view, true),
   O: ({ view }) => openLine(view, false),
-  v: ({ view, pos }) => {
+  v: ({ view, pos, fromPos }) => {
+    const target = fromPos.depth === 0 ? nearestTextblockPos(view.state.doc, pos, 1) : pos;
+    if (target === null) return;
     vim.mode = 'visual';
     vim.pending = '';
-    moveCursor(view, pos);
+    moveCursor(view, target);
   },
-  x: ({ view, pos, end }) => {
+  x: ({ view, pos, end, fromPos }) => {
+    if (fromPos.depth === 0) {
+      deleteDepthZeroNode(view);
+      return;
+    }
     if (pos < end) applyOperator(view, 'd', pos, pos + 1);
   },
-  D: ({ view, pos, end }) => applyOperator(view, 'd', pos, end),
-  C: ({ view, pos, end }) => applyOperator(view, 'c', pos, end),
+  D: ({ view, pos, end, fromPos }) => {
+    if (fromPos.depth === 0) return;
+    applyOperator(view, 'd', pos, end);
+  },
+  C: ({ view, pos, end, fromPos }) => {
+    if (fromPos.depth === 0) return;
+    applyOperator(view, 'c', pos, end);
+  },
   p: ({ view }) => pasteRegister(view, false),
   P: ({ view }) => pasteRegister(view, true),
   u: ({ editor }) => {

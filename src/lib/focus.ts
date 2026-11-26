@@ -36,7 +36,7 @@ export function cycleTab(e: KeyboardEvent) {
  * from what opened it.
  */
 export function menuKeys(node: HTMLElement, onclose: () => void) {
-  const items = () => [...node.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
+  const items = () => [...node.querySelectorAll<HTMLElement>('[role^="menuitem"], [role="option"]')];
   const opener = document.activeElement;
   // After the menu's layer has noted what had focus.
   if (opener instanceof HTMLButtonElement && opener.matches(':focus-visible')) void tick().then(() => items()[0]?.focus());
