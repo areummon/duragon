@@ -2,88 +2,89 @@
 
 A quiet, local-first notebook where an AI mind reads along. Based on [Riddled](https://www.riddled.ai/).
 
-You write; it asks questions in the margin when something deserves a second look, answers right under any line that starts with `Duragon,`, and sketches diagrams when a picture helps. It runs with local CLIs (`claude`, `agy`, `codex`), HTTP APIs (Anthropic, OpenAI, Gemini, OpenRouter, custom OpenAI-compatible), or local models (Ollama / llama.cpp), stores notes in a local SQLite database, and runs voice fully offline.
+Write in a calm, distraction-free page: Duragon reads along in the background, asks questions in the margin when something deserves a second look, answers inline when addressed by name (`Duragon, …`), and sketches step-by-step diagrams when a picture explains faster than prose. Everything stays on your machine in SQLite, works with local CLIs, HTTP APIs, or local models, and runs voice fully offline.
 
-Tauri 2 + Rust backend, Svelte 5 + TipTap frontend. Design notes live in `docs/`.
+> **Stack:** Tauri 2 + Rust (`duragon-core`, `duragon-voice`), Svelte 5 + TipTap, SQLite.
+> **Documentation:** Browse the **[Wiki](docs/wiki/Home.md)** for full guides on [Providers & Web Search](docs/wiki/Providers-and-Web-Search.md), [Editor, Links & History](docs/wiki/Editor-Links-and-History.md), [Keyboard & Vim](docs/wiki/Keyboard-and-Vim.md), [Minds & Reading](docs/wiki/Minds-and-Reading.md), [Offline Voice](docs/wiki/Voice.md), and [Architecture](docs/wiki/Architecture-and-Components.md).
 
 ---
 
-## How it works
+## See it in action
 
-### Margin questions & inline sketches
+### Margin questions & step-by-step sketches
 
-With **Thinks with you** on, Duragon reads each paragraph after you pause and speaks up in the margin only when it matters. Address it directly (`Duragon, …`) for an inline answer or a step-by-step sketch right under your line.
+With **Thinks with you** enabled, Duragon reads each paragraph after you pause and surfaces questions in the margin without interrupting. Address it directly (`Duragon, …`) for an inline answer or a hand-drawn diagram right under your line.
 
 ![Margin questions and inline sketches](docs/demos/writing-and-margin.gif)
 
 ### Note-to-note `[[links]]`, backlinks & in-note find
 
-Type `[[` to link another note inline. Linked notes display a quiet **Mentioned in** footer, and when cross-note search is enabled in chat, the AI receives a compact index of linked titles and reads them on demand. Press `Ctrl+F` (or `/` in Vim mode) to search inside the current note.
+Type `[[` to link another note inline. Linked notes display a quiet **Mentioned in** backlinks footer, and when cross-note search is enabled in chat, the AI receives a compact index of linked titles and reads them on demand. Press `Ctrl+F` (or `/` in Vim mode) to search inside the current note.
 
 ![Note-to-note links, backlinks, and in-note find](docs/demos/links-and-find.gif)
 
 ### Revision history, providers & keyboard / Vim mode
 
-Browse automatic per-note snapshots from the History icon and restore any earlier draft (your current draft is saved first). Configure models, thinking effort, web search providers, custom shortcuts, and optional Vim mode in **Customize**.
+Browse automatic per-note snapshots from the History icon and restore any earlier draft safely (your current draft is saved first). Configure models, thinking effort, web search providers, custom keybindings, and optional Vim mode in **Customize**.
 
 ![Revision history, providers, and keyboard settings](docs/demos/customize-and-history.gif)
 
 ---
 
-## Features
+## Highlights
 
-- **Margin reading & side chat:** Toggle per-note between *Thinks with you* and *When you ask*, open side chat (`Ctrl+J`), or select any text for formatting, *Riddle this* (`Ctrl+Enter`), *Ask Duragon*, or *Visualize*.
-- **Multiple AI backends:** Choose models and thinking effort per job (Reading, Chat, Drawing) across Claude CLI, Antigravity CLI, Codex CLI, HTTP APIs, or local Ollama / llama.cpp servers.
-- **Configurable web search & `web_fetch`:** Configure Tavily, Brave Search, Exa, Firecrawl, or Ollama search with SSRF-protected page fetching; when no search provider is configured, CLI runners fall back to their built-in web search.
-- **Note-to-note `[[links]]` & backlinks:** Inline note linking with automatic backlinks and token-efficient on-demand AI context.
-- **Per-note revision history:** Automatic throttled snapshots in SQLite with preview and reversible restore.
-- **Markdown import & export:** Export a single note (Markdown, Word, PDF), export a folder from the sidebar, or import Markdown files and export the full notebook from Settings.
-- **Customizable keybindings & Vim mode:** Rebind any shortcut or enable Duragon-tailored Vim mode (`hjkl`, `w`/`b`/`e`, `dd`/`cc`/`yy`, `p`/`P`, `/`, `n`/`N`, and `g` chords) in **Customize → Keyboard**.
-- **Custom Minds:** Create custom reviewers (Staff engineer, Editor, Skeptic, …) in **Customize → Minds**.
-- **Offline voice:** Local speech recognition (NVIDIA Parakeet TDT 0.6B v2) and speech synthesis (Kokoro) on CPU. Hold `Alt` to talk or tap `Alt` twice for hands-free.
+| Area | What Duragon does | Guide |
+| :--- | :--- | :--- |
+| **Minds & Reading** | Margin questions, inline answers (`Duragon, …`), side chat (`Ctrl+J`), per-note briefs (*Tell Duragon*), and custom Minds | [Minds & Reading](docs/wiki/Minds-and-Reading.md) |
+| **Providers & Web** | Per-job model & thinking effort across Claude CLI, Antigravity CLI, Codex CLI, HTTP APIs, and Ollama / llama.cpp; optional Tavily/Brave/Exa/Firecrawl/Ollama search + SSRF-safe `web_fetch` | [Providers & Web Search](docs/wiki/Providers-and-Web-Search.md) |
+| **Editor & Notes** | Rich text, KaTeX math, highlighted code blocks, `[[links]]` + indexed backlinks, in-note find, revision history, and Markdown import/export | [Editor, Links & History](docs/wiki/Editor-Links-and-History.md) |
+| **Keyboard & Vim** | Rebindable shortcuts and optional Duragon-tailored Vim mode (`hjkl`, `w`/`b`/`e`, `dd`/`cc`/`yy`, `p`/`P`, `/`, `n`/`N`, `g` chords) | [Keyboard & Vim](docs/wiki/Keyboard-and-Vim.md) |
+| **Offline Voice** | Local CPU speech-to-text (NVIDIA Parakeet TDT 0.6B v2 / Whisper) and text-to-speech (Kokoro / speech-dispatcher) | [Offline Voice](docs/wiki/Voice.md) |
+| **Architecture** | Local-first SQLite storage, privacy masking (`Veil`), atomic transactions, and modular Rust/Svelte layout | [Architecture](docs/wiki/Architecture-and-Components.md) |
 
 ---
 
-## Requirements
+## Quick start
 
-- Nix with flakes (provides Rust, `cargo-tauri`, Node, WebKitGTK, and audio libraries).
-- At least one AI backend: a logged-in CLI (`claude`, `agy`, or `codex` on your `PATH`), an HTTP API key in **Customize → Providers**, or a local Ollama / OpenAI-compatible server.
+### Requirements
 
-## Run it
+- **Nix with flakes** (the dev shell provides Rust, `cargo-tauri`, Node, WebKitGTK, and audio libraries).
+- **At least one AI backend:**
+  - a logged-in CLI on your `PATH` (`claude`, `agy`, or `codex`),
+  - an HTTP API key configured in **Customize → Providers**, or
+  - a local Ollama / llama.cpp OpenAI-compatible server.
 
-First time:
+### Run in development
 
 ```sh
 nix develop
 npm install
-```
-
-Day to day:
-
-```sh
 nix develop -c cargo tauri dev
 ```
 
-Build a standalone binary without the dev server:
+### Build a standalone binary
 
 ```sh
 nix develop -c cargo tauri build --no-bundle
 ./target/release/duragon
 ```
 
-Notes are stored in `~/.local/share/dev.duragon.app/duragon.db` (voice models in `models/` next to it). Set `XDG_DATA_HOME` to store data elsewhere.
+Notes live in `~/.local/share/dev.duragon.app/duragon.db` (voice models in `models/` next to it). Set `XDG_DATA_HOME` to store data elsewhere.
 
-## Develop
+---
+
+## Development & checks
 
 ```sh
 npm run dev                                # UI only, in a browser, against an in-memory mock backend
 npm run check                              # svelte-check
 npm run build                              # production frontend bundle
-nix develop -c cargo test --workspace      # Rust tests (no models or network needed)
+nix develop -c cargo test --workspace      # Rust unit & integration tests (offline)
 nix develop -c cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-`scripts/e2e/` drives the real desktop window through `tauri-driver` and makes real `claude` calls; see its README. `cargo test -p duragon-voice --test real_models -- --ignored` downloads the voice models and checks a speak-then-transcribe round trip.
+- `scripts/e2e/` drives the real desktop window via `tauri-driver` with real CLI calls (see `scripts/e2e/README.md`).
+- `cargo test -p duragon-voice --test real_models -- --ignored` downloads the voice models and tests a speak-then-transcribe round trip.
 
 ## License
 
