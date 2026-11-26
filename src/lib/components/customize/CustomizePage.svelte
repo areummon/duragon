@@ -1,16 +1,16 @@
 <script lang="ts">
-  import Check from 'lucide-svelte/icons/check';
-  import Play from 'lucide-svelte/icons/play';
   import { onMount, tick } from 'svelte';
   import { JOBS, providerViews } from '../../api/providers';
-  import type { Settings } from '../../api/types';
+  import type { Settings, VoiceOption } from '../../api/types';
+  import { openCustomize } from '../../state/app.svelte';
   import { checkServers, credentialStatuses, servers, settings, updateSettings } from '../../state/settings.svelte';
-  import { readAloud, voice } from '../../state/voice.svelte';
+  import { chosenListenModel, chosenVoice, refreshVoices, voice } from '../../state/voice.svelte';
   import Choice from './Choice.svelte';
   import JobRow from './JobRow.svelte';
   import PlacementPreview from './PlacementPreview.svelte';
   import ProvidersPanel from './ProvidersPanel.svelte';
   import SwitchRow from './SwitchRow.svelte';
+  import VoiceRow from './VoiceRow.svelte';
 
   let { query = $bindable('') }: { query?: string } = $props();
 
@@ -20,7 +20,7 @@
 
   const SECTIONS = {
     reading: 'reading when duragon reads along, and where its thoughts go',
-    voice: 'voice speak aloud speaking sound',
+    voice: 'voice speak aloud speaking sound listening speech to text',
     look: 'look appearance theme colour color lettering text size page width ink',
     notes: 'notes what happens to the notes you delete',
     models: 'models which model does each job',
@@ -33,7 +33,8 @@
     notes: 'search my other notes in chat recall past earlier',
     symbols: 'explain symbols in formulas math latex equation variable meaning',
     speak: 'new notes speak aloud voice',
-    pick: 'voice george emma michael heart sample',
+    pick: 'voice voices speaking reads thoughts aloud kokoro george emma michael heart pico espeak speech dispatcher sample',
+    listen: 'speech to text listening listen dictation hold alt parakeet whisper.cpp model',
     speed: 'speaking speed slower faster',
     appearance: 'appearance system light dark theme',
     size: 'text size small default large',
@@ -48,7 +49,7 @@
   });
   const GROUPS: Record<keyof typeof SECTIONS, string[]> = {
     reading: ['start', 'pace', 'place', 'web', 'notes', 'symbols'],
-    voice: ['speak', 'pick', 'speed'],
+    voice: ['speak', 'pick', 'listen', 'speed'],
     look: ['appearance', 'size', 'width', 'lettering', 'colour'],
     notes: ['deleted'],
     models: ['readModel', 'chatModel', 'drawModel', 'providers'],
@@ -61,7 +62,10 @@
   const jobs = $derived(JOBS.filter((job) => on('models', job.modelKey)));
   let panel = $state<ProvidersPanel>();
 
-  onMount(() => void checkServers());
+  onMount(() => {
+    void checkServers();
+    void refreshVoices(true);
+  });
 
   async function onsetup() {
     if (!panel) query = '';
@@ -79,10 +83,16 @@
     ['orange', 'Orange', 'var(--text-orange)'],
   ] as const;
 
-  const selectedVoice = $derived(voice.voices.some((v) => v.id === s.voiceName) ? s.voiceName : voice.voices[0]?.id);
-
-  async function sample(id: string) {
-    if (await updateSettings({ voiceName: id })) await readAloud(null, 'Does this still hold?');
+  const spoken = $derived(chosenVoice());
+  const heard = $derived(chosenListenModel());
+  const languages = new Intl.DisplayNames(undefined, { type: 'language' });
+  function describeVoice(o: VoiceOption) {
+    if (o.description || !o.language) return o.description;
+    try {
+      return languages.of(o.language) ?? o.language;
+    } catch {
+      return o.language;
+    }
   }
 </script>
 
@@ -145,20 +155,18 @@
     {#if on('voice', 'speak')}
       <div class="group"><SwitchRow title="New notes speak aloud" desc="Each new thought is read out once as it’s written. Typing stops it." on={s.voiceInNewNotes} onchange={(v) => set({ voiceInNewNotes: v })} /></div>
     {/if}
-    {#if on('voice', 'pick')}
-      <div class="group">
-        <h4 id="g-voice">Voice</h4>
-        <div class="voices" role="radiogroup" aria-labelledby="g-voice">
-          {#each voice.voices as v (v.id)}
-            <div class="vrow" class:selected={v.id === selectedVoice}>
-              <button class="pick" role="radio" aria-checked={v.id === selectedVoice} onclick={() => set({ voiceName: v.id })}>
-                <span class="tick">{#if v.id === selectedVoice}<Check size={14} strokeWidth={1.8} />{/if}</span>
-                <span class="vname">{v.name}</span><span class="vdesc">{v.description}</span>
-              </button>
-              <button class="play" aria-label="Play a sample of {v.name}" title="Play a sample" onclick={() => void sample(v.id)}><Play size={13} strokeWidth={1.6} /></button>
-            </div>
-          {/each}
-        </div>
+    {#if on('voice', 'pick') || on('voice', 'listen')}
+      <div class="jobs">
+        {#if on('voice', 'pick')}
+          <VoiceRow label="Voice" id="voice" desc="Reads Duragon’s thoughts aloud." value={spoken?.name ?? 'None installed'} by={spoken?.engine ?? 'Get one in Voice models'}
+            placeholder="Find a voice" options={voice.voices} current={spoken?.id} describe={describeVoice} samples empty="No voices are installed on this computer."
+            more="Get more voices" onpick={(id) => set({ voiceName: id })} onmore={() => openCustomize('voice')} />
+        {/if}
+        {#if on('voice', 'listen')}
+          <VoiceRow label="Speech to text" id="listen" desc="Turns what you say into words." value={heard?.name ?? 'None installed'} by={heard ? (heard.engine === 'Parakeet' ? 'Duragon' : heard.engine) : 'Get one in Voice models'}
+            placeholder="Find a model" options={voice.listenModels} current={heard?.id} describe={(o) => o.description} empty="No speech-to-text models are installed on this computer."
+            more="Get more models" onpick={(id) => set({ listenModel: id })} onmore={() => openCustomize('voice')} />
+        {/if}
       </div>
     {/if}
     {#if on('voice', 'speed')}
@@ -294,16 +302,6 @@
   .sample.sans { font-family: var(--font-sans); font-size: 15px; }
 
   .jobs { margin-top: 22px; border: 1px solid var(--rule); border-radius: 12px; }
-
-  .voices { border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; }
-  .vrow { display: flex; align-items: center; border-top: 1px solid var(--rule); }
-  .vrow:first-child { border-top: 0; }
-  .pick { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px 6px 11px 14px; text-align: left; font-size: 13.5px; }
-  .tick { display: grid; place-items: center; width: 16px; flex: none; color: var(--ink); }
-  .vname { font-weight: 500; }
-  .vdesc { color: var(--faint); }
-  .play { display: grid; place-items: center; width: 30px; height: 30px; margin-right: 10px; border-radius: 50%; color: var(--graphite); transition: background-color 150ms var(--ease-ui), color 150ms var(--ease-ui); }
-  .play:hover { background: var(--riddle-wash); color: var(--ink); }
 
   .speedhead { display: flex; justify-content: space-between; align-items: baseline; }
   .speedhead h4 { margin-bottom: 8px; }
