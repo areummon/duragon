@@ -21,6 +21,7 @@
   import { kbd } from '../keys';
   import { unfold, veil } from '../motion/transitions';
   import Blot from './Blot.svelte';
+  import { preloadCustomizeDialog } from './customize/preload';
   import Popover from './Popover.svelte';
   import SettingsMenu from './SettingsMenu.svelte';
 
@@ -309,7 +310,14 @@
       <TrashIcon size={15} strokeWidth={1.5} /><span>Trash</span>
     </button>
     <div class="host">
-      <button class="row settings" aria-haspopup="menu" aria-expanded={settingsOpen} onclick={() => (settingsOpen = !settingsOpen)}>
+      <button
+        class="row settings"
+        aria-haspopup="menu"
+        aria-expanded={settingsOpen}
+        onpointerenter={preloadCustomizeDialog}
+        onfocus={preloadCustomizeDialog}
+        onclick={() => { preloadCustomizeDialog(); settingsOpen = !settingsOpen; }}
+      >
         <SettingsIcon size={15} strokeWidth={1.5} /><span>Settings</span><ChevronDown size={15} strokeWidth={1.5} />
       </button>
       <Popover open={settingsOpen} onclose={() => (settingsOpen = false)} up width={248} label="Settings">

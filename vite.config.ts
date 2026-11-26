@@ -32,7 +32,7 @@ export default defineConfig({
     strictPort: true,
     headers: { 'Content-Security-Policy': csp },
     // Transforms the whole app while cargo builds, so the window's first load is not the slow cold one.
-    warmup: { clientFiles: ['./src/main.ts'] },
+    warmup: { clientFiles: ['./src/main.ts', './src/lib/components/customize/CustomizeDialog.svelte'] },
     // direnv's flake-inputs link into the Nix store; following them made every start crawl ~94k files.
     watch: { ignored: ['**/src-tauri/**', '**/target/**', '**/.direnv/**'] },
   },

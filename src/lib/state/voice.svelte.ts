@@ -89,7 +89,7 @@ export async function readAloud(messageId: string | null, text: string, voiceId?
   if (!starting) return; // Stopped while the voices were listed.
   if (!voices.length) {
     starting = false;
-    return needModel('Speaking needs a voice. Get one in Customize → Voice models.');
+    return needModel('Speaking needs a voice. Get one in Customize → Voice.');
   }
   try {
     await (await getBackend()).speak(messageId, text, voiceId);
@@ -199,13 +199,13 @@ export function voiceKeydown(e: KeyboardEvent) {
   }
   if (!chosenListenModel()) {
     swallow = true;
-    needModel('Speech to text needs a model. Get one in Customize → Voice models.');
+    needModel('Speech to text needs a model. Get one in Customize → Voice.');
     return;
   }
   if (double && voice.status.vad !== 'ready') {
     if (voice.mode === 'hold') end(false);
     swallow = true;
-    needModel('Hands-free listening needs Silero VAD. Install it in Customize → Voice models.');
+    needModel('Hands-free listening needs Silero VAD. Install it in Customize → Voice.');
     return;
   }
   if (double) {

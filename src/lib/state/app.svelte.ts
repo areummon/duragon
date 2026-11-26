@@ -8,7 +8,7 @@ import { loadSettings, settings, updateSettings } from './settings.svelte';
 import { showToast } from './toast.svelte';
 import { loadTrash } from './trash.svelte';
 
-export type CustomizePage = 'customize' | 'providers' | 'minds' | 'about' | 'voice' | 'help';
+export type CustomizePage = 'general' | 'appearance' | 'providers' | 'minds' | 'about' | 'voice' | 'help';
 /** `pinned` is the user's saved choice; `peek` came from hovering the left edge and is never saved. */
 export type SidebarState = 'closed' | 'pinned' | 'peek';
 /** The open note. Read its current title, folder and date from `notes.list`. */
@@ -27,7 +27,7 @@ export const app = $state({
   chatOpen: false,
   trashOpen: false,
   customizeOpen: false,
-  customizePage: 'customize' as CustomizePage,
+  customizePage: 'general' as CustomizePage,
   mindEditor: null as MindEditor | null,
   tellOpen: false,
   focusTitle: false,
@@ -159,7 +159,7 @@ export function unpeekSidebar() {
   if (app.sidebar === 'peek') app.sidebar = 'closed';
 }
 
-export function openCustomize(page: CustomizePage = 'customize') {
+export function openCustomize(page: CustomizePage = 'general') {
   app.customizePage = page;
   app.customizeOpen = true;
 }

@@ -1,5 +1,11 @@
 <script lang="ts">
-  import Search from 'lucide-svelte/icons/search';
+  import CircleHelp from 'lucide-svelte/icons/circle-help';
+  import KeyRound from 'lucide-svelte/icons/key-round';
+  import Palette from 'lucide-svelte/icons/palette';
+  import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
+  import User from 'lucide-svelte/icons/user';
+  import Users from 'lucide-svelte/icons/users';
+  import Volume2 from 'lucide-svelte/icons/volume-2';
   import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
   import { accessProblem, jobProvider, JOBS, providerViews } from '../../api/providers';
@@ -8,23 +14,27 @@
   import { app, type CustomizePage } from '../../state/app.svelte';
   import { credentialStatuses, searchStatus, servers, settings } from '../../state/settings.svelte';
   import AboutPage from './AboutPage.svelte';
-  import CustomizePageView from './CustomizePage.svelte';
+  import AppearancePage from './AppearancePage.svelte';
+  import GeneralPage from './GeneralPage.svelte';
   import HelpPage from './HelpPage.svelte';
   import MindsPage from './MindsPage.svelte';
   import ProvidersPage from './ProvidersPage.svelte';
-  import VoiceModelsPage from './VoiceModelsPage.svelte';
+  import VoicePage from './VoicePage.svelte';
 
-  const NAV: { id: CustomizePage; label: string; title: string }[] = [
-    { id: 'customize', label: 'Customize Duragon', title: 'Customize Duragon' },
-    { id: 'providers', label: 'Providers', title: 'Providers' },
-    { id: 'minds', label: 'Minds', title: 'Minds' },
-    { id: 'about', label: 'About you', title: 'About you' },
-    { id: 'voice', label: 'Voice models', title: 'Voice models' },
-    { id: 'help', label: 'Help', title: 'Help' },
+  type NavIcon = typeof SlidersHorizontal;
+
+  const NAV: { id: CustomizePage; label: string; title: string; icon: NavIcon }[] = [
+    { id: 'general', label: 'General', title: 'General', icon: SlidersHorizontal },
+    { id: 'appearance', label: 'Appearance', title: 'Appearance', icon: Palette },
+    { id: 'providers', label: 'Providers', title: 'Providers', icon: KeyRound },
+    { id: 'minds', label: 'Minds', title: 'Minds', icon: Users },
+    { id: 'about', label: 'About you', title: 'About you', icon: User },
+    { id: 'voice', label: 'Voice', title: 'Voice', icon: Volume2 },
+    { id: 'help', label: 'Help', title: 'Help', icon: CircleHelp },
   ];
 
-  let query = $state('');
   let card = $state<HTMLElement>();
+  let scrollEl = $state<HTMLElement>();
   const current = $derived(NAV.find((n) => n.id === app.customizePage) ?? NAV[0]);
   const views = $derived(providerViews(settings.value, credentialStatuses.value, credentialStatuses.error !== null, servers));
   const providersAttention = $derived(
@@ -36,7 +46,11 @@
 
   $effect(() => {
     if (app.customizeOpen) void tick().then(() => card?.focus());
-    else query = '';
+  });
+
+  $effect(() => {
+    void app.customizePage;
+    if (scrollEl) scrollEl.scrollTop = 0;
   });
 
   $effect(() => {
@@ -49,24 +63,24 @@
     <div class="card" bind:this={card} tabindex="-1" role="dialog" aria-modal="true" aria-label="Customize Duragon" in:pop|global out:pop={{ duration: 140 }}>
       <nav aria-label="Settings sections">
         {#each NAV as n (n.id)}
+          {@const Icon = n.icon}
           <button class:active={app.customizePage === n.id} aria-current={app.customizePage === n.id ? 'page' : undefined} onclick={() => (app.customizePage = n.id)}>
-            <span>{n.label}</span>
+            <span class="nav-icon" aria-hidden="true"><Icon size={15} strokeWidth={1.6} /></span>
+            <span class="nav-label">{n.label}</span>
             {#if n.id === 'providers' && providersAttention}<i class="nav-dot" aria-hidden="true"></i>{/if}
           </button>
         {/each}
       </nav>
       <div class="main">
         <button class="x" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
-        <div class="scroll">
+        <div class="scroll" bind:this={scrollEl}>
           <h2>{current.title}</h2>
           {#key app.customizePage}
             <div class="page" in:rise={{ y: 4, duration: 180 }}>
-              {#if app.customizePage === 'customize'}
-                <label class="search">
-                  <Search size={15} strokeWidth={1.5} />
-                  <input type="search" placeholder="Search settings" aria-label="Search settings" bind:value={query} />
-                </label>
-                <CustomizePageView bind:query />
+              {#if app.customizePage === 'general'}
+                <GeneralPage />
+              {:else if app.customizePage === 'appearance'}
+                <AppearancePage />
               {:else if app.customizePage === 'providers'}
                 <ProvidersPage />
               {:else if app.customizePage === 'minds'}
@@ -74,7 +88,7 @@
               {:else if app.customizePage === 'about'}
                 <AboutPage />
               {:else if app.customizePage === 'voice'}
-                <VoiceModelsPage />
+                <VoicePage />
               {:else}
                 <HelpPage />
               {/if}
@@ -120,16 +134,26 @@
   nav button {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    height: 38px;
-    padding: 0 13px;
+    gap: 10px;
+    height: 36px;
+    padding: 0 12px;
     border: 1px solid transparent;
     border-radius: 9px;
     text-align: left;
     font-size: 14px;
     color: var(--graphite);
     transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui), border-color 150ms var(--ease-ui);
+  }
+  .nav-icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    color: var(--faint);
+    transition: color 150ms var(--ease-ui);
+  }
+  .nav-label {
+    flex: 1;
+    text-align: left;
   }
   .nav-dot {
     flex: none;
@@ -139,27 +163,15 @@
     background: var(--bulb);
   }
   nav button:hover { color: var(--ink); }
+  nav button:hover .nav-icon { color: var(--ink); }
   nav button.active { color: var(--ink); background: var(--riddle-wash); border-color: var(--rule); }
+  nav button.active .nav-icon { color: var(--ink); }
   .main { position: relative; flex: 1; min-width: 0; }
   .x { position: absolute; top: 24px; right: 22px; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; color: var(--graphite); }
   .x:hover { color: var(--ink); }
   .scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 36px 52px 36px 36px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
   h2 { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; }
   .page { margin-top: 20px; }
-  .search {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 42px;
-    padding: 0 14px;
-    border: 1px solid var(--rule);
-    border-radius: 12px;
-    color: var(--faint);
-  }
-  .search:focus-within { border-color: var(--faint); }
-  .search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font: inherit; font-size: 14px; color: var(--ink); }
-  .search input::placeholder { color: var(--faint); }
-  .search input::-webkit-search-cancel-button { display: none; }
   @media (max-width: 700px) {
     nav { width: 150px; }
     .scroll { padding: 28px 20px; }

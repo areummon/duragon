@@ -7,6 +7,7 @@
   import TopBar from './lib/components/TopBar.svelte';
   import ListeningPill from './lib/components/ListeningPill.svelte';
   import Toast from './lib/components/Toast.svelte';
+  import { loadCustomizeDialog, preloadCustomizeDialog } from './lib/components/customize/preload';
   import { initVoice, stopHandsFree, voice, voiceBlur, voiceKeydown, voiceKeyup } from './lib/state/voice.svelte';
   import { closeTop } from './lib/escape';
   import { cycleTab, topDialog } from './lib/focus';
@@ -18,7 +19,11 @@
   } from './lib/state/app.svelte';
 
   onMount(() => {
-    void initApp().then(initVoice);
+    void initApp().then(() => {
+      void initVoice();
+      if ('requestIdleCallback' in window) window.requestIdleCallback(preloadCustomizeDialog);
+      else setTimeout(preloadCustomizeDialog, 400);
+    });
   });
 
   function onkeydown(e: KeyboardEvent) {
@@ -67,7 +72,7 @@
   <LazyDialog open={lightbox.svg !== null} close={() => enlarge(null)} load={() => import('./lib/components/DrawingDialog.svelte')} />
   <LazyDialog open={app.trashOpen} close={() => (app.trashOpen = false)} load={() => import('./lib/components/TrashDialog.svelte')} />
   <LazyDialog open={app.paletteOpen} close={() => (app.paletteOpen = false)} load={() => import('./lib/components/CommandPalette.svelte')} remount />
-  <LazyDialog open={app.customizeOpen} close={() => (app.customizeOpen = false)} load={() => import('./lib/components/customize/CustomizeDialog.svelte')} />
+  <LazyDialog open={app.customizeOpen} close={() => (app.customizeOpen = false)} load={loadCustomizeDialog} />
   <LazyDialog open={app.mindEditor !== null} close={() => (app.mindEditor = null)} load={() => import('./lib/components/customize/MindDialog.svelte')} />
   <Toast />
 {/if}
