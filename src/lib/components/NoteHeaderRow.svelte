@@ -44,8 +44,8 @@
 
   const LINE = 30;
   const ROW_GAP = 2;
-  const COLUMN_GAP = 4;
-  const BLEED = 16;
+  const COLUMN_GAP = 2;
+  const BLEED = 12;
 
   let row = $state<HTMLElement>();
   let spill = $state(0);
@@ -137,8 +137,14 @@
   </button>
 
   <div class="end">
-    <button class="item" aria-label="History" onclick={() => { close(); app.historyOpen = true; }}>
-      <History size={15} strokeWidth={1.5} /><span>History</span>
+    <button
+      class="item icon-only"
+      aria-label="History"
+      aria-expanded={app.historyOpen}
+      title="History"
+      onclick={() => { close(); app.historyOpen = true; }}
+    >
+      <History size={15} strokeWidth={1.5} />
     </button>
     <div class="slot">
       <button class="item" aria-haspopup="menu" aria-expanded={menu === 'export'} onclick={toggle('export')}>
@@ -159,11 +165,11 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    column-gap: 4px;
+    column-gap: 2px;
     row-gap: 2px;
     min-height: 30px;
-    margin-left: -8px;
-    margin-right: -8px;
+    margin-left: -6px;
+    margin-right: -6px;
     font-size: 14px;
     line-height: 1;
     color: var(--graphite);
@@ -189,18 +195,19 @@
     border-radius: 18px;
   }
   .slot { position: relative; }
-  .end { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+  .end { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
   .item {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     height: 30px;
-    padding: 0 8px;
+    padding: 0 6px;
     border-radius: 6px;
     white-space: nowrap;
     transition: color var(--dur-ui) var(--ease-ui), background-color var(--dur-ui) var(--ease-ui);
   }
   .item:hover, .item[aria-expanded='true'] { color: var(--ink); background: var(--shelf); }
+  .item.icon-only { width: 30px; padding: 0; justify-content: center; }
   .item :global(svg) { flex: none; }
   .item :global(.chev) { margin-left: -1px; color: var(--faint); }
   .item[role='switch'] { gap: 7px; }

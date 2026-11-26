@@ -15,6 +15,27 @@
 
   const close = () => (app.historyOpen = false);
   const selected = $derived(revisions.find((r) => r.id === selectedId) ?? revisions[0] ?? null);
+  const previewBody = $derived.by(() => {
+    if (!selected) return '';
+    const title = selected.title.trim();
+    const plain = selected.plain;
+    if (title && (plain === title || plain.startsWith(`${title}\n`))) {
+      return plain.slice(title.length).replace(/^\n+/, '');
+    }
+    return plain;
+  });
+
+  function onListKeydown(e: KeyboardEvent) {
+    if (revisions.length < 2) return;
+    const idx = revisions.findIndex((r) => r.id === selected?.id);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedId = revisions[Math.min(revisions.length - 1, Math.max(0, idx) + 1)].id;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedId = revisions[Math.max(0, idx - 1)].id;
+    }
+  }
 
   async function load(noteId: string) {
     loaded = false;
@@ -86,7 +107,7 @@
       {:else}
         <aside aria-label="Saved snapshots">
           <div class="aside-head">History</div>
-          <div class="list" role="listbox" aria-label="Revisions">
+          <div class="list" role="listbox" aria-label="Revisions" tabindex="0" onkeydown={onListKeydown}>
             {#each revisions as rev (rev.id)}
               {@const active = selected?.id === rev.id}
               <button
@@ -111,7 +132,11 @@
               <div class="head-time">{formatWhen(selected.createdAt)}</div>
             </div>
             <div class="preview">
-              <div class="plain">{selected.plain}</div>
+              {#if previewBody}
+                <div class="plain">{previewBody}</div>
+              {:else}
+                <p class="empty-body">Empty note.</p>
+              {/if}
             </div>
             <div class="foot">
               <span class="note">Your current draft is saved first.</span>
@@ -217,7 +242,8 @@
   }
   .rev.active {
     color: var(--ink);
-    background: var(--riddle-wash);
+    background: var(--paper);
+    box-shadow: inset 0 0 0 1px var(--rule);
   }
   .rev-time {
     font-size: 13.5px;
@@ -293,6 +319,12 @@
     line-height: 1.65;
     color: var(--ink);
   }
+  .empty-body {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--faint);
+  }
   .foot {
     display: flex;
     align-items: center;
@@ -317,13 +349,21 @@
     font-weight: 500;
     line-height: 1;
     text-box: trim-both cap alphabetic;
-    transition: opacity 150ms var(--ease-ui);
+    transition: background-color 150ms var(--ease-ui), transform 140ms var(--ease-step);
   }
   .restore:hover:not(:disabled) {
-    opacity: 0.88;
+    background: color-mix(in srgb, var(--ink) 86%, var(--paper));
+  }
+  .restore:active:not(:disabled) {
+    transform: scale(0.98);
   }
   .restore:disabled {
     opacity: 0.5;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .restore:active:not(:disabled) {
+      transform: none;
+    }
   }
   @media (max-width: 620px) {
     aside {

@@ -64,6 +64,9 @@
     width: 240px;
     max-height: 264px;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
     padding: 4px;
     background: var(--paper);
     border: 1px solid var(--rule);
@@ -78,12 +81,13 @@
     padding: 0 10px;
     border-radius: 8px;
     font-size: 14px;
-    line-height: 1;
+    line-height: 1.35;
     color: var(--ink);
     cursor: default;
   }
-  .item :global(svg) { color: var(--faint); flex: none; }
+  .item :global(svg) { color: var(--faint); flex: none; transition: color var(--dur-ui) var(--ease-ui); }
   .item.active { background: var(--riddle-wash); }
+  .item.active :global(svg) { color: var(--ink); }
   .label {
     min-width: 0;
     overflow: hidden;

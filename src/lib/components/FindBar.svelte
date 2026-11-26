@@ -119,17 +119,21 @@
   .find-bar {
     position: fixed;
     top: 64px;
-    right: 24px;
+    right: 23px;
     z-index: 35;
     display: flex;
     align-items: center;
     gap: 6px;
     height: 38px;
-    padding: 0 5px 0 11px;
+    padding: 0 6px 0 12px;
     border: 1px solid var(--rule);
-    border-radius: 11px;
+    border-radius: 12px;
     background: var(--paper);
     box-shadow: var(--lift);
+    transition: border-color var(--dur-ui) var(--ease-ui);
+  }
+  .find-bar:focus-within {
+    border-color: color-mix(in srgb, var(--ink) 22%, var(--rule));
   }
   .icon {
     display: inline-flex;
@@ -164,6 +168,7 @@
     padding: 0 4px;
     font-size: 12px;
     line-height: 1.3;
+    text-box: trim-both cap alphabetic;
     font-variant-numeric: tabular-nums;
     color: var(--graphite);
     user-select: none;
@@ -175,6 +180,9 @@
     display: inline-flex;
     align-items: center;
     gap: 2px;
+    margin-left: 2px;
+    padding-left: 4px;
+    border-left: 1px solid var(--rule);
     flex: none;
   }
   .nav {

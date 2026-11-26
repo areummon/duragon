@@ -298,10 +298,15 @@
   .backlink {
     color: var(--graphite);
     cursor: var(--cursor-pointer);
-    transition: color var(--dur-ui) var(--ease-ui);
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    transition: color var(--dur-ui) var(--ease-ui), text-decoration-color var(--dur-ui) var(--ease-ui);
   }
   .backlink:hover {
     color: var(--ink);
+    text-decoration-color: var(--rule);
   }
 
   @media (prefers-reduced-motion: reduce) {
