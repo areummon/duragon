@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde_json::Value;
 
+use super::revisions::maybe_snapshot_conn;
 use super::{new_id, now_ms, Db};
 use crate::doc;
 use crate::model::*;
@@ -11,6 +12,12 @@ const META_COLS: &str = "n.id, n.title, n.folder_id, n.updated_at,
 const NOTE_COLS: &str = "n.id, n.title, n.folder_id, n.updated_at,
   EXISTS(SELECT 1 FROM threads t WHERE t.note_id=n.id AND t.status='open'),
   n.doc, n.riddler_id, n.mode, n.voice_on, n.web_on, n.brief, n.created_at";
+
+pub struct ExportNote {
+    pub title: String,
+    pub folder_id: Option<String>,
+    pub doc: Value,
+}
 
 fn meta_row(r: &Row) -> rusqlite::Result<NoteMeta> {
     Ok(NoteMeta {
@@ -49,6 +56,53 @@ fn read_note_meta(conn: &Connection, id: &str) -> rusqlite::Result<Option<NoteMe
         .optional()
 }
 
+pub(super) fn sync_note_links(conn: &Connection, from_note_id: &str, doc_json: &str) -> rusqlite::Result<()> {
+    conn.prepare_cached("DELETE FROM note_links WHERE from_note_id=?1")?
+        .execute([from_note_id])?;
+    if !doc_json.contains("\"noteLink\"") {
+        return Ok(());
+    }
+    let Ok(doc) = serde_json::from_str::<Value>(doc_json) else {
+        return Ok(());
+    };
+    let mut insert = conn.prepare_cached(
+        "INSERT OR IGNORE INTO note_links(from_note_id, to_note_id) VALUES (?1, ?2)",
+    )?;
+    for target in doc::linked_note_ids(&doc) {
+        if target != from_note_id {
+            insert.execute(params![from_note_id, target])?;
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn backfill_note_links(conn: &Connection) -> rusqlite::Result<()> {
+    let rows: Vec<(String, String)> = {
+        let mut st = conn.prepare("SELECT id, doc FROM notes")?;
+        let out = st
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        out
+    };
+    let mut insert = conn.prepare(
+        "INSERT OR IGNORE INTO note_links(from_note_id, to_note_id) VALUES (?1, ?2)",
+    )?;
+    for (from_id, doc_json) in rows {
+        if !doc_json.contains("\"noteLink\"") {
+            continue;
+        }
+        let Ok(doc) = serde_json::from_str::<Value>(&doc_json) else {
+            continue;
+        };
+        for target in doc::linked_note_ids(&doc) {
+            if target != from_id {
+                insert.execute(params![from_id, target])?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Quote each token and append `*`, so user input can never be FTS5 syntax.
 fn fts_query(input: &str) -> Option<String> {
     let terms: Vec<String> = input
@@ -67,6 +121,24 @@ impl Db {
             "SELECT {META_COLS} FROM notes n ORDER BY n.updated_at DESC, n.rowid DESC"
         ))?;
         let rows = st.query_map([], meta_row)?.collect::<Result<_, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn list_notes_for_export(&self) -> Result<Vec<ExportNote>> {
+        let conn = self.conn();
+        let mut st = conn.prepare_cached(
+            "SELECT title, folder_id, doc FROM notes ORDER BY updated_at DESC, rowid DESC",
+        )?;
+        let rows = st
+            .query_map([], |r| {
+                let doc: String = r.get(2)?;
+                Ok(ExportNote {
+                    title: r.get(0)?,
+                    folder_id: r.get(1)?,
+                    doc: serde_json::from_str(&doc).unwrap_or(Value::Null),
+                })
+            })?
+            .collect::<Result<_, _>>()?;
         Ok(rows)
     }
 
@@ -111,27 +183,15 @@ impl Db {
 
     /// Notes other than `note_id` whose document contains a `noteLink` referencing `note_id`.
     pub fn list_backlinks(&self, note_id: &str) -> Result<Vec<NoteMeta>> {
-        let escaped = note_id.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
-        let pattern = format!("%{escaped}%");
         let conn = self.conn();
         let mut st = conn.prepare_cached(&format!(
-            "SELECT {META_COLS}, n.doc FROM notes n
-             WHERE n.id != ?1 AND n.doc LIKE ?2 ESCAPE '\\'
+            "SELECT {META_COLS} FROM note_links l
+             JOIN notes n ON n.id = l.from_note_id
+             WHERE l.to_note_id = ?1 AND n.id != ?1
              ORDER BY n.updated_at DESC, n.rowid DESC"
         ))?;
-        let candidates: Vec<(NoteMeta, String)> = st
-            .query_map(params![note_id, pattern], |r| Ok((meta_row(r)?, r.get(5)?)))?
-            .collect::<Result<_, _>>()?;
-        let out = candidates
-            .into_iter()
-            .filter(|(_, raw_doc)| {
-                serde_json::from_str::<Value>(raw_doc)
-                    .map(|doc| doc::linked_note_ids(&doc).iter().any(|id| id == note_id))
-                    .unwrap_or(false)
-            })
-            .map(|(meta, _)| meta)
-            .collect();
-        Ok(out)
+        let rows = st.query_map([note_id], meta_row)?.collect::<Result<_, _>>()?;
+        Ok(rows)
     }
 
     pub fn get_note(&self, id: &str) -> Result<Note> {
@@ -152,17 +212,27 @@ impl Db {
 
     /// Inserts a note, applying the new-note defaults from settings.
     pub fn create_note_with_doc(&self, title: &str, document: Value) -> Result<Note> {
+        self.create_note_in_folder(title, document, None)
+    }
+
+    /// Inserts a note into an optional folder in a single transaction, applying new-note defaults from settings.
+    pub fn create_note_in_folder(&self, title: &str, document: Value, folder_id: Option<&str>) -> Result<Note> {
         let s = self.get_settings()?;
         let id = new_id();
         let t = now_ms();
-        self.conn().execute(
+        let doc_json = document.to_string();
+        let plain = doc::plain_text(&document);
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        tx.execute(
             "INSERT INTO notes(id,title,doc,plain,folder_id,riddler_id,mode,voice_on,web_on,brief,created_at,updated_at)
-             VALUES (?1,?2,?3,?4,NULL,?5,?6,?7,?8,'',?9,?9)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'',?10,?10)",
             params![
                 id,
                 title,
-                document.to_string(),
-                doc::plain_text(&document),
+                doc_json,
+                plain,
+                folder_id,
                 BUILTIN_RIDDLER_ID,
                 s.new_note_mode.as_str(),
                 s.voice_in_new_notes,
@@ -170,7 +240,10 @@ impl Db {
                 t
             ],
         )?;
-        self.get_note(&id)
+        sync_note_links(&tx, &id, &doc_json)?;
+        let note = read_note(&tx, &id)?.ok_or_else(|| anyhow!("note not found: {id}"))?;
+        tx.commit()?;
+        Ok(note)
     }
 
     pub fn save_note(&self, id: &str, title: &str, document: &Value, plain: &str) -> Result<NoteMeta> {
@@ -180,19 +253,20 @@ impl Db {
     /// Saves a note whose `doc` is already serialized JSON, avoiding an unnecessary parse + re-serialize cycle.
     pub fn save_note_raw(&self, id: &str, title: &str, doc_json: &str, plain: &str) -> Result<NoteMeta> {
         let now = now_ms();
-        let meta = {
-            let conn = self.conn();
-            let n = conn.prepare_cached("UPDATE notes SET title=?2, doc=?3, plain=?4, updated_at=?5 WHERE id=?1")?.execute(
-                params![id, title, doc_json, plain, now],
-            )?;
-            if n == 0 {
-                return Err(anyhow!("note not found: {id}"));
-            }
-            read_note_meta(&conn, id)?.ok_or_else(|| anyhow!("note not found: {id}"))?
-        };
-        if !plain.trim().is_empty() {
-            self.maybe_snapshot(id, title, doc_json, plain, now)?;
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let n = tx
+            .prepare_cached("UPDATE notes SET title=?2, doc=?3, plain=?4, updated_at=?5 WHERE id=?1")?
+            .execute(params![id, title, doc_json, plain, now])?;
+        if n == 0 {
+            return Err(anyhow!("note not found: {id}"));
         }
+        sync_note_links(&tx, id, doc_json)?;
+        if !plain.trim().is_empty() {
+            maybe_snapshot_conn(&tx, id, title, doc_json, plain, now)?;
+        }
+        let meta = read_note_meta(&tx, id)?.ok_or_else(|| anyhow!("note not found: {id}"))?;
+        tx.commit()?;
         Ok(meta)
     }
 

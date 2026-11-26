@@ -117,3 +117,45 @@ fn linked_notes_hint_formats_compact_index() {
         "\n\nThis note links to: \"Hash maps\" (id: u1), \"Trees\" (id: u2). Call read_note with an id only when the question needs what is in that linked note."
     );
 }
+
+#[test]
+fn note_links_sync_on_update_restore_and_backfill_on_migration() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("links.db");
+    let db = Db::open(&path).unwrap();
+
+    let target = db.create_note(Some("Target")).unwrap();
+    let link_doc = json!({
+        "type": "doc",
+        "content": [
+            { "type": "title", "content": [{ "type": "text", "text": "Linker" }] },
+            { "type": "paragraph", "content": [{ "type": "noteLink", "attrs": { "id": target.meta.id, "title": "Target" } }] }
+        ]
+    });
+    let linker = db.create_note_with_doc("Linker", link_doc.clone()).unwrap();
+    assert_eq!(db.list_backlinks(&target.meta.id).unwrap().len(), 1);
+
+    // Save a revision with the link, then remove the link.
+    db.save_note(&linker.meta.id, "Linker", &link_doc, &doc::plain_text(&link_doc)).unwrap();
+    let rev_with_link = db.list_revisions(&linker.meta.id).unwrap()[0].id.clone();
+
+    let plain_doc = doc::doc(vec![doc::title("Linker"), doc::paragraph("No link anymore")]);
+    db.save_note(&linker.meta.id, "Linker", &plain_doc, "Linker\nNo link anymore").unwrap();
+    assert!(db.list_backlinks(&target.meta.id).unwrap().is_empty());
+
+    // Restoring the revision with the link must restore the note_links row.
+    db.restore_revision(&linker.meta.id, &rev_with_link).unwrap();
+    assert_eq!(db.list_backlinks(&target.meta.id).unwrap().len(), 1);
+
+    // Simulate an older DB before migration 10: drop note_links and rewind user_version to 9.
+    drop(db);
+    let old = rusqlite::Connection::open(&path).unwrap();
+    old.execute_batch("DROP TABLE note_links").unwrap();
+    old.pragma_update(None, "user_version", 9).unwrap();
+    drop(old);
+
+    let reopened = Db::open(&path).unwrap();
+    let backlinks = reopened.list_backlinks(&target.meta.id).unwrap();
+    assert_eq!(backlinks.len(), 1);
+    assert_eq!(backlinks[0].id, linker.meta.id);
+}

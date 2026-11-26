@@ -6,6 +6,7 @@ mod revisions;
 mod threads;
 
 pub(crate) use bundle::NoteBundle;
+pub use notes::ExportNote;
 pub use threads::NewMessage;
 
 use anyhow::Result;
@@ -81,7 +82,15 @@ r#"CREATE TABLE IF NOT EXISTS note_revisions(
   plain TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_note_revisions_note ON note_revisions(note_id, created_at DESC);"#];
+CREATE INDEX IF NOT EXISTS idx_note_revisions_note ON note_revisions(note_id, created_at DESC);"#,
+r#"CREATE TABLE IF NOT EXISTS note_links(
+  from_note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  to_note_id TEXT NOT NULL,
+  PRIMARY KEY (from_note_id, to_note_id)
+);
+CREATE INDEX IF NOT EXISTS idx_note_links_to ON note_links(to_note_id);"#];
+
+const NOTE_LINKS_MIGRATION_INDEX: usize = 9;
 
 #[derive(Clone)]
 pub struct Db {
@@ -156,6 +165,9 @@ impl Db {
         for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
             let tx = conn.transaction()?;
             tx.execute_batch(sql)?;
+            if i == NOTE_LINKS_MIGRATION_INDEX {
+                notes::backfill_note_links(&tx)?;
+            }
             tx.pragma_update(None, "user_version", i + 1)?;
             tx.commit()?;
         }

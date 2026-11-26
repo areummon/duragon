@@ -3,7 +3,8 @@ use anyhow::{anyhow, Result};
 use rusqlite::{params, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
-use super::notes::read_note;
+use super::notes::{read_note, sync_note_links};
+use super::revisions::{put_revisions, read_revisions_for_bundle, BundledRevision};
 use super::threads::{read_chat, read_summary, read_threads, write_summary};
 use super::Db;
 use crate::model::*;
@@ -15,6 +16,8 @@ pub(crate) struct NoteBundle {
     pub threads: Vec<Thread>,
     pub chat: Vec<Message>,
     pub summary: ChatSummary,
+    #[serde(default)]
+    pub revisions: Vec<BundledRevision>,
 }
 
 fn put_message(tx: &Transaction, note_id: &str, thread_id: Option<&str>, m: &Message) -> Result<()> {
@@ -57,6 +60,7 @@ impl Db {
                 threads: read_threads(tx, id)?,
                 chat: read_chat(tx, id)?,
                 summary: read_summary(tx, id)?,
+                revisions: read_revisions_for_bundle(tx, id)?,
             };
             keep(&bundle)?;
             tx.execute("DELETE FROM notes WHERE id=?1", [id])?;
@@ -70,15 +74,18 @@ impl Db {
         let id = b.note.meta.id.as_str();
         self.durably(|tx| {
             let n = &b.note;
+            let doc_json = n.doc.to_string();
             tx.execute(
                 "INSERT INTO notes(id,title,doc,plain,folder_id,riddler_id,mode,voice_on,web_on,brief,created_at,updated_at)
                  VALUES (?1,?2,?3,?4,(SELECT id FROM folders WHERE id=?5),
                    COALESCE((SELECT id FROM riddlers WHERE id=?6),?7),?8,?9,?10,?11,?12,?13)",
                 params![
-                    id, n.meta.title, n.doc.to_string(), b.plain, n.meta.folder_id, n.riddler_id, BUILTIN_RIDDLER_ID,
+                    id, n.meta.title, doc_json, b.plain, n.meta.folder_id, n.riddler_id, BUILTIN_RIDDLER_ID,
                     n.mode.as_str(), n.voice_on, n.web_on, n.brief, n.created_at, n.meta.updated_at
                 ],
             )?;
+            sync_note_links(tx, id, &doc_json)?;
+            put_revisions(tx, id, &b.revisions)?;
             for t in &b.threads {
                 tx.execute(
                     "INSERT INTO threads(id,note_id,kind,quote,status,pinned,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",

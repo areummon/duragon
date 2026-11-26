@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use duragon_core::db::Db;
 use duragon_core::doc;
-use duragon_core::export::{export_notebook_markdown, from_markdown, to_markdown};
+use duragon_core::export::{export_notebook_markdown, from_markdown, import_markdown_file, to_markdown, MAX_IMPORT_BYTES};
 use duragon_core::model::NoteMetaPatch;
 use serde_json::Value;
 use tempfile::tempdir;
@@ -46,11 +46,11 @@ fn main() {
     assert_eq!(blocks[0]["content"][0]["text"], "Imported Title");
 
     assert_eq!(blocks[1]["type"], "heading");
-    assert_eq!(blocks[1]["attrs"]["level"], 2);
+    assert_eq!(blocks[1]["attrs"]["level"], 1);
     assert_eq!(blocks[2]["type"], "heading");
-    assert_eq!(blocks[2]["attrs"]["level"], 3);
+    assert_eq!(blocks[2]["attrs"]["level"], 2);
     assert_eq!(blocks[3]["type"], "heading");
-    assert_eq!(blocks[3]["attrs"]["level"], 4);
+    assert_eq!(blocks[3]["attrs"]["level"], 3);
 
     // Inline formatting paragraph
     let inline = doc::children(&blocks[4]);
@@ -78,9 +78,12 @@ fn main() {
     // Horizontal rule
     assert_eq!(blocks[9]["type"], "horizontalRule");
 
-    // Round-trip via to_markdown preserves all content
+    // Round-trip via to_markdown preserves all content and heading levels
     let exported = to_markdown(&document);
     assert!(exported.starts_with("# Imported Title\n\n"));
+    assert!(exported.contains("## Section Two\n"));
+    assert!(exported.contains("### Subsection Three\n"));
+    assert!(exported.contains("#### Deep Heading\n"));
     assert!(exported.contains("**bold**"));
     assert!(exported.contains("*italic*"));
     assert!(exported.contains("`inline_code`"));
@@ -89,6 +92,95 @@ fn main() {
     assert!(exported.contains("> Quoted thought second line"));
     assert!(exported.contains("```rust\nfn main()"));
     assert!(exported.contains("\n---\n"));
+}
+
+#[test]
+fn from_markdown_round_trips_headings_hashes_marks_links_escapes_and_hard_breaks() {
+    let md = "\
+# C# Guide
+
+## C#
+
+### Closing Hashes ###
+
+#### Sub-subsection
+
+##### Level Four
+
+Text with ~~strike~~, [Duragon](https://duragon.dev), [Rust](https://en.wikipedia.org/wiki/Rust_(programming_language)), _under italic_, __under bold__, ***bold italic***, foo_bar_baz, and \\*escaped\\*.
+
+Line one  \nLine two
+";
+
+    let (title, doc1) = from_markdown(md, "fallback");
+    assert_eq!(title, "C# Guide");
+
+    let blocks = doc::children(&doc1);
+    assert_eq!(blocks[1]["type"], "heading");
+    assert_eq!(blocks[1]["attrs"]["level"], 1);
+    assert_eq!(blocks[1]["content"][0]["text"], "C#");
+
+    assert_eq!(blocks[2]["type"], "heading");
+    assert_eq!(blocks[2]["attrs"]["level"], 2);
+    assert_eq!(blocks[2]["content"][0]["text"], "Closing Hashes");
+
+    assert_eq!(blocks[3]["attrs"]["level"], 3);
+    assert_eq!(blocks[4]["attrs"]["level"], 4);
+
+    let inline = doc::children(&blocks[5]);
+    assert!(inline.iter().any(|n| n["text"] == "strike" && has_mark(n, "strike")));
+    assert!(inline.iter().any(|n| n["text"] == "Duragon"
+        && n["marks"].as_array().is_some_and(|m| m.iter().any(|mk| mk["type"] == "link" && mk["attrs"]["href"] == "https://duragon.dev"))));
+    assert!(inline.iter().any(|n| n["text"] == "Rust"
+        && n["marks"].as_array().is_some_and(|m| m.iter().any(|mk| mk["type"] == "link" && mk["attrs"]["href"] == "https://en.wikipedia.org/wiki/Rust_(programming_language)"))));
+    assert!(inline.iter().any(|n| n["text"] == "under italic" && has_mark(n, "italic")));
+    assert!(inline.iter().any(|n| n["text"] == "under bold" && has_mark(n, "bold")));
+    assert!(inline.iter().any(|n| n["text"] == "bold italic" && has_mark(n, "bold") && has_mark(n, "italic")));
+    assert!(inline.iter().any(|n| n["text"].as_str().is_some_and(|t| t.contains("foo_bar_baz") && t.contains("*escaped*"))));
+
+    let hb_para = doc::children(&blocks[6]);
+    assert_eq!(hb_para.len(), 3);
+    assert_eq!(hb_para[0]["text"], "Line one");
+    assert_eq!(hb_para[1]["type"], "hardBreak");
+    assert_eq!(hb_para[2]["text"], "Line two");
+
+    // Export -> import -> export must be stable (no heading drift, hard breaks & marks preserved)
+    let out1 = to_markdown(&doc1);
+    assert!(out1.contains("## C#\n"));
+    assert!(out1.contains("### Closing Hashes\n"));
+    assert!(out1.contains("#### Sub-subsection\n"));
+    assert!(out1.contains("##### Level Four\n"));
+    assert!(out1.contains("~~strike~~"));
+    assert!(out1.contains("[Duragon](https://duragon.dev)"));
+    assert!(out1.contains("Line one  \nLine two"));
+
+    let (_, doc2) = from_markdown(&out1, "fallback");
+    let out2 = to_markdown(&doc2);
+    assert_eq!(out1, out2);
+}
+
+#[test]
+fn import_markdown_file_enforces_size_utf8_fallback_title_and_folder() {
+    let db = Db::open_in_memory().unwrap();
+    let folder = db.create_folder("Imported").unwrap();
+    let dir = tempdir().unwrap();
+
+    // Valid file without H1 uses file_stem and atomically attaches folder_id
+    let good = dir.path().join("field-notes.md");
+    std::fs::write(&good, "Body paragraph only.\n").unwrap();
+    let note = import_markdown_file(&db, &good, Some(&folder.id)).unwrap();
+    assert_eq!(note.meta.title, "field-notes");
+    assert_eq!(note.meta.folder_id.as_deref(), Some(folder.id.as_str()));
+
+    // Invalid UTF-8 is rejected
+    let bad_utf8 = dir.path().join("bad.md");
+    std::fs::write(&bad_utf8, [0xff, 0xfe, 0x00]).unwrap();
+    assert!(import_markdown_file(&db, &bad_utf8, None).is_err());
+
+    // Oversized file (> 5 MB) is rejected
+    let huge = dir.path().join("huge.md");
+    std::fs::write(&huge, vec![b'a'; (MAX_IMPORT_BYTES + 1) as usize]).unwrap();
+    assert!(import_markdown_file(&db, &huge, None).is_err());
 }
 
 #[test]

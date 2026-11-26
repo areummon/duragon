@@ -641,11 +641,20 @@ impl Settings {
     }
 
     pub fn provider(&self, id: &str) -> ProviderConfig {
-        let list = self.resolved_providers();
-        list.iter()
-            .find(|p| p.id == id)
-            .cloned()
-            .or_else(|| list.into_iter().find(|p| p.id == DEFAULT_PROVIDER_ID))
+        let lookup = |target: &str| -> Option<ProviderConfig> {
+            if let Some(existing) = self.providers.iter().find(|p| p.id == target) {
+                let mut p = existing.clone();
+                if p.builtin {
+                    if let Some(preset) = default_providers().into_iter().find(|d| d.id == target) {
+                        p.models = preset.models;
+                    }
+                }
+                return Some(p);
+            }
+            default_providers().into_iter().find(|p| p.id == target)
+        };
+        lookup(id)
+            .or_else(|| lookup(DEFAULT_PROVIDER_ID))
             .unwrap_or_else(|| default_providers().into_iter().next().unwrap())
     }
 }
