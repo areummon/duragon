@@ -1,0 +1,43 @@
+id: dev.duragon.app
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: duragon
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=xdg-documents
+  - --talk-name=org.freedesktop.Notifications
+modules:
+  - name: duragon
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 duragon /app/bin/duragon
+      - install -Dm755 duragon-voice /app/bin/duragon-voice
+      - install -Dm644 dev.duragon.app.desktop /app/share/applications/dev.duragon.app.desktop
+      - install -Dm644 dev.duragon.app.metainfo.xml /app/share/metainfo/dev.duragon.app.metainfo.xml
+      - install -Dm644 icon-128.png /app/share/icons/hicolor/128x128/apps/dev.duragon.app.png
+      - install -Dm644 icon-256.png /app/share/icons/hicolor/256x256/apps/dev.duragon.app.png
+      - install -Dm644 icon-512.png /app/share/icons/hicolor/512x512/apps/dev.duragon.app.png
+    sources:
+      - type: file
+        path: ../../target/release/duragon
+      - type: file
+        path: ../../target/release/duragon-voice
+      - type: file
+        path: dev.duragon.app.desktop
+      - type: file
+        path: dev.duragon.app.metainfo.xml
+      - type: file
+        path: ../../src-tauri/icons/128x128.png
+        dest-filename: icon-128.png
+      - type: file
+        path: ../../src-tauri/icons/128x128@2x.png
+        dest-filename: icon-256.png
+      - type: file
+        path: ../../src-tauri/icons/icon.png
+        dest-filename: icon-512.png

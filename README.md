@@ -44,7 +44,24 @@ Browse automatic per-note snapshots from the History icon and restore any earlie
 
 ---
 
-## Quick start
+## Download (Linux)
+
+Prebuilt **AppImage**, **Flatpak**, and **`.deb`** packages are published on the [GitHub Releases](https://github.com/areummon/duragon/releases) page.
+
+- **AppImage:**
+  ```sh
+  chmod +x Duragon_*.AppImage
+  ./Duragon_*.AppImage
+  ```
+- **Flatpak:**
+  ```sh
+  flatpak install --user Duragon-*.flatpak
+  flatpak run dev.duragon.app
+  ```
+
+---
+
+## Quick start (from source)
 
 ### Requirements
 

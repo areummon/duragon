@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.duragon.app</id>
+  <name>Duragon</name>
+  <summary>A quiet local-first notebook where an AI mind reads along</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      Duragon is a local-first desktop notebook where an AI mind reads along,
+      asks questions in the margin, answers inline when addressed, and sketches
+      step-by-step diagrams. Notes are stored in SQLite, voice runs offline on CPU,
+      and AI works with local CLIs, HTTP APIs, or local Ollama servers.
+    </p>
+  </description>
+  <launchable type="desktop-id">dev.duragon.app.desktop</launchable>
+  <url type="homepage">https://github.com/areummon/duragon</url>
+  <releases>
+    <release version="0.1.0" date="2026-11-26"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

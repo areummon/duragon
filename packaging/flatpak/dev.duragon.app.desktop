@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Duragon
+Comment=A quiet local-first notebook where an AI mind reads along
+Exec=duragon
+Icon=dev.duragon.app
+Terminal=false
+Type=Application
+Categories=Office;Utility;
+Keywords=notes;notebook;writing;markdown;ai;
+StartupWMClass=duragon
