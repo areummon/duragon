@@ -1,6 +1,6 @@
 # Customize
 
-The Customize dialog holds the reading, voice, look and model settings, plus the Minds, About you, Voice models and Help pages. Settings save as they change. There is no Save button, except for an API key and for a mind. From Minds, the writer opens the mind editor to make or change a mind.
+The Customize dialog holds the reading, voice, look and notes settings, plus the Providers, Minds, About you, Voice models and Help pages. Models, Providers and Web search live on the `Providers` page. Settings save as they change. There is no Save button, except for an API key and for a mind. From Minds, the writer opens the mind editor to make or change a mind.
 
 ## Sub-features
 
@@ -9,10 +9,10 @@ The Customize dialog holds the reading, voice, look and model settings, plus the
 - `customize-switch` toggles a setting and stores it. On `Customize Duragon` the switches are `Web search in new notes` (`webInNewNotes`), `Search my other notes in chat` (`searchMyNotes`), `Explain symbols in formulas` (`explainSymbols`) and `New notes speak aloud` (`voiceInNewNotes`), all off by default. Under `Notes`, `Deleted notes` picks one of three radios (`deletedNotes`, `trash.md`). `About you` has `Duragon learns about you` (`learnAboutYou`, on by default).
 - `customize-choices` picks between the radios of `Customize Duragon`, and stores the pick at once. The defaults are marked with a star. `newNoteMode`: `Thinks with you`* (`thinks`) or `When you ask` (`asks`). `readingPace`: `Regular`* or `Slow`. `questionPlacement`: `Both margins`*, `Right margin` or `Marks only` (`marks`). `appearance`: `System`*, `Light` or `Dark`. `textSize`: `Small`, `Default`* or `Large`. `lettering`: `Duragon’s own`* or `Like your notes` (`notes`). `inkColour`: `Ink`*, `Blue`, `Green`, `Red`, `Purple`, `Brown` or `Orange`. The voice and speech-to-text pickers are `customize-voice`. `speakingSpeed` is a slider in steps of 0.05, at `1.00×`*. `Reset` by `Page width` is disabled until the width was dragged.
 - `customize-about` keeps the paragraph `About you` (`aboutYou`, at most 700 characters).
-- `customize-models` picks the model, its provider and the thinking level for `Reading`, `Chat` and `Drawing` (`readModel`, `readProvider`, `readThinking` and so on), at the end of `Customize Duragon`.
-- `customize-providers` lists the providers that are set up or in use, and adds, changes and removes them.
+- `customize-models` picks the model, its provider and the thinking level for `Reading`, `Chat` and `Drawing` (`readModel`, `readProvider`, `readThinking` and so on), on the `Providers` page.
+- `customize-providers` lists the providers that are set up or in use, adds, changes and removes them, and configures web search engines and keys on the `Providers` page.
 - `customize-voice` picks the voice (`voiceName`) and the speech-to-text model (`listenModel`) from two rows in the Voice section, `Voice` and `Speech to text`, each showing its pick over its engine. Each opens a dialog of the same name, like the Models rows: the combobox `Find a voice` or `Find a model`, a listbox grouped by engine and source (`Kokoro · Duragon`, `Pico · Speech Dispatcher`, `Parakeet · Duragon`, `whisper.cpp · on this computer`), a check `In use`, and `Get more voices` or `Get more models`, which opens `Voice models`. Arrows, Home, End and Enter pick from the keyboard; Escape and a click outside close it. The highlighted voice has a button `Play a sample of …`, which plays without picking and turns into `Stop the sample of …`. A pick that is gone falls back to the first in the list. With nothing installed the dialog says so.
-- `customize-pages` moves between `Customize Duragon`, `Minds`, `About you`, `Voice models` and `Help`. Help lists the shortcuts, including ```, `Esc`, `Tab` and `Shift Tab`.
+- `customize-pages` moves between `Customize Duragon`, `Providers`, `Minds`, `About you`, `Voice models` and `Help`. Help lists the shortcuts, including ```, `Esc`, `Tab` and `Shift Tab`.
 - `customize-minds` opens the mind editor from `New Mind` on the Minds page or from the mind picker in the note header.
 
 ## How to get to it (user POV)

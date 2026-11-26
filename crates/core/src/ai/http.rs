@@ -36,7 +36,7 @@ fn require_key(req: &AiRequest) -> Result<&str, AiError> {
                 .map(|v| format!(" (or set {v})"))
                 .unwrap_or_default();
             AiError::Failed(format!(
-                "No API key configured for {}{env_hint}. Add it in Customize → Models.",
+                "No API key configured for {}{env_hint}. Add it in Customize → Providers.",
                 req.provider.name
             ))
         })
@@ -48,7 +48,7 @@ fn base_url<'a>(req: &'a AiRequest, default: &'a str) -> Result<&'a str, AiError
     match set {
         Some(url) => Ok(url.trim_end_matches('/')),
         None if req.provider.builtin => Ok(default),
-        None => fail(format!("{} has no address. Add it in Customize → Models.", req.provider.name)),
+        None => fail(format!("{} has no address. Add it in Customize → Providers.", req.provider.name)),
     }
 }
 

@@ -56,7 +56,7 @@ Use `agent-browser` with `AGENT_BROWSER_SESSION=duragon-verify`, so this run's b
 - **Editor.** The textbox is `Note`, and the title is the level-1 heading.
 - **Side chat.** The input is `Ask about this note`, plus the buttons `Send`, `Copy`, `Clear`, `Pin open while you write` and `Close`.
 - **Sidebar.** The navigation is `Notes`, with `Find or start a note Ctrl K`, `New note`, `New folder`, `Trash`, `Settings`, one button per note title and `Note options` per row. Entries in popover menus are `menuitem` (or `menuitemradio`, `menuitemcheckbox`), not `button`.
-- **Customize.** Press `Control+,`. You get the navigation `Settings sections` (`Customize Duragon`, `Minds`, `About you`, `Voice models`, `Help`), the searchbox `Search settings` and `Close`.
+- **Customize.** Press `Control+,`. You get the navigation `Settings sections` (`Customize Duragon`, `Providers`, `Minds`, `About you`, `Voice models`, `Help`), the searchbox `Search settings` and `Close`.
 - **Command palette.** Press `Control+k`. It is the dialog `Find a note`, with the combobox `Find a note, or name a new one` and the listbox `Notes`.
 - **Editor menus.** Selected words show the toolbar `Selection`. A `/` shows the listbox `Commands`. A code block has the select `Code language` and the button `Copy code`.
 

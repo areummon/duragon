@@ -1,17 +1,13 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
-  import { JOBS, providerViews } from '../../api/providers';
+  import { onMount } from 'svelte';
   import type { Settings, VoiceOption } from '../../api/types';
   import { openCustomize } from '../../state/app.svelte';
-  import { checkServers, credentialStatuses, servers, settings, updateSettings } from '../../state/settings.svelte';
+  import { settings, updateSettings } from '../../state/settings.svelte';
   import { chosenListenModel, chosenVoice, refreshVoices, voice } from '../../state/voice.svelte';
   import Choice from './Choice.svelte';
-  import JobRow from './JobRow.svelte';
   import PlacementPreview from './PlacementPreview.svelte';
-  import ProvidersPanel from './ProvidersPanel.svelte';
   import SwitchRow from './SwitchRow.svelte';
   import VoiceRow from './VoiceRow.svelte';
-  import WebSearchPanel from './WebSearchPanel.svelte';
 
   let { query = $bindable('') }: { query?: string } = $props();
 
@@ -24,13 +20,12 @@
     voice: 'voice speak aloud speaking sound listening speech to text',
     look: 'look appearance theme colour color lettering text size page width ink',
     notes: 'notes what happens to the notes you delete',
-    models: 'models which model does each job',
   } as const;
-  const ROWS: Record<string, string> = $derived({
+  const ROWS: Record<string, string> = {
     start: 'new notes start in thinks with you when you ask reading mode',
     pace: 'reading pace regular slow',
     place: 'where questions appear both margins right margin marks only',
-    web: 'web search in new notes tavily brave exa firecrawl ollama search engine api key',
+    web: 'web search in new notes look things up',
     notes: 'search my other notes in chat recall past earlier',
     symbols: 'explain symbols in formulas math latex equation variable meaning',
     speak: 'new notes speak aloud voice',
@@ -43,36 +38,20 @@
     lettering: "lettering duragon's own like your notes font",
     colour: 'colour color ink blue green red purple brown orange',
     deleted: "deleted notes duragon’s trash duragon's trash system trash .trash bin delete for good permanently forever undo restore recover",
-    readModel: 'reading reads along and asks in the margin model provider thinking effort',
-    chatModel: 'chat answers in the side chat, and when you say its name model provider thinking effort',
-    drawModel: 'drawing sketches beside your notes model provider thinking effort',
-    providers: `providers where models come from api keys address command subscription custom local server ollama llama.cpp vllm claude antigravity agy acp codex openai oauth zlm ${s.providers.map((p) => p.name).join(' ').toLowerCase()}`,
-  });
+  };
   const GROUPS: Record<keyof typeof SECTIONS, string[]> = {
     reading: ['start', 'pace', 'place', 'web', 'notes', 'symbols'],
     voice: ['speak', 'pick', 'listen', 'speed'],
     look: ['appearance', 'size', 'width', 'lettering', 'colour'],
     notes: ['deleted'],
-    models: ['readModel', 'chatModel', 'drawModel', 'providers'],
   };
   const secOn = (k: keyof typeof SECTIONS) => !q || SECTIONS[k].includes(q) || GROUPS[k].some((r) => ROWS[r].includes(q));
   const on = (k: keyof typeof SECTIONS, row: string) => !q || SECTIONS[k].includes(q) || ROWS[row].includes(q);
   const empty = $derived(!!q && !(Object.keys(SECTIONS) as (keyof typeof SECTIONS)[]).some(secOn));
 
-  const views = $derived(providerViews(s, credentialStatuses.value, credentialStatuses.error !== null, servers));
-  const jobs = $derived(JOBS.filter((job) => on('models', job.modelKey)));
-  let panel = $state<ProvidersPanel>();
-
   onMount(() => {
-    void checkServers();
     void refreshVoices(true);
   });
-
-  async function onsetup() {
-    if (!panel) query = '';
-    await tick();
-    panel?.openAdd();
-  }
 
   const INKS = [
     ['ink', 'Ink', 'var(--ink)'],
@@ -139,7 +118,6 @@
     {/if}
     {#if on('reading', 'web')}
       <div class="group"><SwitchRow title="Web search in new notes" desc="Lets Duragon look things up, and shows where it looked." on={s.webInNewNotes} onchange={(v) => set({ webInNewNotes: v })} /></div>
-      <WebSearchPanel />
     {/if}
     {#if on('reading', 'notes')}
       <div class="group"><SwitchRow title="Search my other notes in chat" desc="In the side chat, Duragon can look through your other notes when it helps, and says which one it used. The notes it opens go to the model you picked for Chat, like the note you’re in." on={s.searchMyNotes} onchange={(v) => set({ searchMyNotes: v })} /></div>
@@ -268,19 +246,6 @@
         </div>
       </div>
     {/if}
-  </section>
-{/if}
-
-{#if secOn('models')}
-  <section>
-    <h3>Models</h3>
-    <p class="sub">Which model does each job.</p>
-    {#if jobs.length}
-      <div class="jobs">
-        {#each jobs as job (job.modelKey)}<JobRow {job} {views} {onsetup} />{/each}
-      </div>
-    {/if}
-    {#if on('models', 'providers')}<ProvidersPanel bind:this={panel} {views} />{/if}
   </section>
 {/if}
 

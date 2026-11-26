@@ -8,7 +8,7 @@ import { loadSettings, settings, updateSettings } from './settings.svelte';
 import { showToast } from './toast.svelte';
 import { loadTrash } from './trash.svelte';
 
-export type CustomizePage = 'customize' | 'minds' | 'about' | 'voice' | 'help';
+export type CustomizePage = 'customize' | 'providers' | 'minds' | 'about' | 'voice' | 'help';
 /** `pinned` is the user's saved choice; `peek` came from hovering the left edge and is never saved. */
 export type SidebarState = 'closed' | 'pinned' | 'peek';
 /** The open note. Read its current title, folder and date from `notes.list`. */

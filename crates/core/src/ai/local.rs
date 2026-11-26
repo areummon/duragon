@@ -68,7 +68,7 @@ fn fail<T>(msg: impl Into<String>) -> Result<T, AiError> {
 impl Api {
     fn of(provider: &ProviderConfig) -> Result<Self, AiError> {
         let Some(url) = provider.base_url.as_deref().map(|u| u.trim().trim_end_matches('/')).filter(|u| !u.is_empty()) else {
-            return fail(format!("{} has no address. Add it in Customize → Models.", provider.name));
+            return fail(format!("{} has no address. Add it in Customize → Providers.", provider.name));
         };
         let root = url.strip_suffix("/v1").unwrap_or(url);
         Ok(match provider.kind {

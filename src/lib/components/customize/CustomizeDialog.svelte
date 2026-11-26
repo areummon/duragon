@@ -2,17 +2,21 @@
   import Search from 'lucide-svelte/icons/search';
   import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
+  import { accessProblem, jobProvider, JOBS, providerViews } from '../../api/providers';
   import { closeOnEscape } from '../../escape';
   import { pop, rise, veil } from '../../motion/transitions';
   import { app, type CustomizePage } from '../../state/app.svelte';
+  import { credentialStatuses, searchStatus, servers, settings } from '../../state/settings.svelte';
   import AboutPage from './AboutPage.svelte';
   import CustomizePageView from './CustomizePage.svelte';
   import HelpPage from './HelpPage.svelte';
   import MindsPage from './MindsPage.svelte';
+  import ProvidersPage from './ProvidersPage.svelte';
   import VoiceModelsPage from './VoiceModelsPage.svelte';
 
   const NAV: { id: CustomizePage; label: string; title: string }[] = [
     { id: 'customize', label: 'Customize Duragon', title: 'Customize Duragon' },
+    { id: 'providers', label: 'Providers', title: 'Providers' },
     { id: 'minds', label: 'Minds', title: 'Minds' },
     { id: 'about', label: 'About you', title: 'About you' },
     { id: 'voice', label: 'Voice models', title: 'Voice models' },
@@ -22,6 +26,11 @@
   let query = $state('');
   let card = $state<HTMLElement>();
   const current = $derived(NAV.find((n) => n.id === app.customizePage) ?? NAV[0]);
+  const views = $derived(providerViews(settings.value, credentialStatuses.value, credentialStatuses.error !== null, servers));
+  const providersAttention = $derived(
+    JOBS.some((job) => accessProblem(jobProvider(views, settings.value, job)) !== null) ||
+      !!(searchStatus.value?.pinned && !searchStatus.value.available),
+  );
 
   const close = () => (app.customizeOpen = false);
 
@@ -40,7 +49,10 @@
     <div class="card" bind:this={card} tabindex="-1" role="dialog" aria-modal="true" aria-label="Customize Duragon" in:pop|global out:pop={{ duration: 140 }}>
       <nav aria-label="Settings sections">
         {#each NAV as n (n.id)}
-          <button class:active={app.customizePage === n.id} aria-current={app.customizePage === n.id ? 'page' : undefined} onclick={() => (app.customizePage = n.id)}>{n.label}</button>
+          <button class:active={app.customizePage === n.id} aria-current={app.customizePage === n.id ? 'page' : undefined} onclick={() => (app.customizePage = n.id)}>
+            <span>{n.label}</span>
+            {#if n.id === 'providers' && providersAttention}<i class="nav-dot" aria-hidden="true"></i>{/if}
+          </button>
         {/each}
       </nav>
       <div class="main">
@@ -55,6 +67,8 @@
                   <input type="search" placeholder="Search settings" aria-label="Search settings" bind:value={query} />
                 </label>
                 <CustomizePageView bind:query />
+              {:else if app.customizePage === 'providers'}
+                <ProvidersPage />
               {:else if app.customizePage === 'minds'}
                 <MindsPage />
               {:else if app.customizePage === 'about'}
@@ -104,6 +118,10 @@
     border-right: 1px solid var(--rule);
   }
   nav button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     height: 38px;
     padding: 0 13px;
     border: 1px solid transparent;
@@ -112,6 +130,13 @@
     font-size: 14px;
     color: var(--graphite);
     transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui), border-color 150ms var(--ease-ui);
+  }
+  .nav-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bulb);
   }
   nav button:hover { color: var(--ink); }
   nav button.active { color: var(--ink); background: var(--riddle-wash); border-color: var(--rule); }

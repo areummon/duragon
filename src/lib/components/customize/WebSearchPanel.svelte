@@ -118,7 +118,7 @@
 <div class="group">
   <div class="top">
     <div>
-      <h4>Web search engine</h4>
+      <h4>Search engine</h4>
       <p class="note">
         {#if missingPinned}<i class="dot shown"></i>{/if}{statusLine}
       </p>
