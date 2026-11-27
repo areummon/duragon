@@ -329,23 +329,59 @@ impl VoiceClient {
         Ok(())
     }
 
+    /// Removes a downloaded Duragon model from disk, stopping any idle worker first so file handles are released.
+    pub fn remove_model(&self, kind: ModelKind) -> Result<VoiceStatus> {
+        {
+            let mut slot = self.shared.worker.lock().unwrap_or_else(|e| e.into_inner());
+            *slot = None;
+            *self.shared.last_status.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
+        let target = match kind {
+            ModelKind::Stt => self.shared.models.join(STT_DIR),
+            ModelKind::Vad => self.shared.models.join(VAD_FILE),
+            ModelKind::Tts => self.shared.models.join(TTS_DIR),
+        };
+        if target.is_dir() {
+            std::fs::remove_dir_all(&target)?;
+        } else if target.is_file() {
+            std::fs::remove_file(&target)?;
+        }
+        let name = target.file_name().unwrap_or_default().to_string_lossy();
+        let _ = std::fs::remove_file(self.shared.models.join(format!("{name}.part")));
+        let _ = std::fs::remove_dir_all(self.shared.models.join(format!(".extract-{name}")));
+
+        let status = disk_status(&self.shared.models);
+        if let Ok(payload) = serde_json::to_value(&status) {
+            (self.shared.emit)("voice:status", payload);
+        }
+        Ok(status)
+    }
+
     /// What this computer can listen with, in the order to fall back in.
-    pub fn listen_models(&self) -> Vec<ListenModel> {
-        listen_models::available(&self.shared.models, disk_status(&self.shared.models).stt == ModelState::Ready)
+    pub fn listen_models(&self, custom_models: &[String], custom_bin: Option<&str>) -> Vec<ListenModel> {
+        listen_models::available_with_custom(
+            &self.shared.models,
+            disk_status(&self.shared.models).stt == ModelState::Ready,
+            custom_models,
+            custom_bin,
+            std::env::var_os("PATH"),
+        )
     }
 
     /// Listens with the model `chosen` names, or the first one there is.
-    pub async fn listen_start(&self, hands_free: bool, chosen: &str) -> Result<()> {
+    pub async fn listen_start(&self, hands_free: bool, chosen: &str, custom_models: &[String], custom_bin: Option<&str>) -> Result<()> {
+        let custom_models = custom_models.to_vec();
+        let custom_bin = custom_bin.map(str::to_string);
         let models = tokio::task::spawn_blocking({
             let me = self.clone();
-            move || me.listen_models()
+            move || me.listen_models(&custom_models, custom_bin.as_deref())
         })
         .await?;
         let model = models
             .iter()
             .find(|m| m.id() == chosen)
             .or(models.first())
-            .ok_or_else(|| anyhow!("Speech to text needs a model. Get one in Customize → Voice models."))?;
+            .ok_or_else(|| anyhow!("Speech to text needs a model. Get one in Customize → Voice."))?;
         self.call(json!({ "cmd": "listen_start", "handsFree": hands_free, "model": model.spec() })).await?;
         Ok(())
     }
@@ -562,5 +598,43 @@ done
         }
         assert_eq!(disk_status(&dir).stt, ModelState::Ready);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn removing_a_downloaded_model_deletes_files_and_updates_status() {
+        let dir = std::env::temp_dir().join(format!("duragon-remove-model-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(STT_DIR)).unwrap();
+        for f in STT_REQUIRED {
+            std::fs::write(dir.join(STT_DIR).join(f), b"x").unwrap();
+        }
+        std::fs::write(dir.join(VAD_FILE), b"x").unwrap();
+
+        let emitted: Arc<Mutex<Vec<VoiceStatus>>> = Arc::default();
+        let sink = emitted.clone();
+        let client = VoiceClient::new(
+            dir.clone(),
+            Arc::new(move |ev, payload| {
+                if ev == "voice:status" {
+                    if let Ok(st) = serde_json::from_value::<VoiceStatus>(payload) {
+                        sink.lock().unwrap().push(st);
+                    }
+                }
+            }),
+        );
+        assert_eq!(client.status().stt, ModelState::Ready);
+        assert_eq!(client.status().vad, ModelState::Ready);
+
+        let after_stt = client.remove_model(ModelKind::Stt).unwrap();
+        assert_eq!(after_stt.stt, ModelState::Missing);
+        assert_eq!(after_stt.vad, ModelState::Ready);
+        assert!(!dir.join(STT_DIR).exists());
+
+        let after_vad = client.remove_model(ModelKind::Vad).unwrap();
+        assert_eq!(after_vad.vad, ModelState::Missing);
+        assert!(!dir.join(VAD_FILE).exists());
+        assert_eq!(emitted.lock().unwrap().len(), 2);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

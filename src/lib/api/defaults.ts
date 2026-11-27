@@ -32,4 +32,6 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarOpen: false,
   deletedNotes: 'duragon',
   vimMode: false,
+  customWhisperModels: [],
+  whisperBin: null,
 };

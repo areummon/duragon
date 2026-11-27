@@ -181,6 +181,8 @@ export interface Settings {
   sidebarOpen: boolean;
   deletedNotes: DeleteMode;
   vimMode: boolean;
+  customWhisperModels?: string[];
+  whisperBin?: string | null;
 }
 
 /** Where a deleted note goes: Duragon's own trash, the system's, or nowhere. */
@@ -251,4 +253,15 @@ export interface VoiceOption {
   source: string;
   /** Speech Dispatcher's language code. */
   language: string | null;
+}
+export interface LocalWhisperModel {
+  path: string;
+  name: string;
+  missing: boolean;
+}
+export interface LocalWhisperState {
+  binPath: string | null;
+  binMissing: boolean;
+  binCustom: boolean;
+  models: LocalWhisperModel[];
 }

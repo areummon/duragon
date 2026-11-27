@@ -1,11 +1,42 @@
-//! The speech-to-text models this computer has: Duragon's Parakeet, and whisper.cpp models found on disk.
+//! The speech-to-text models this computer has: Duragon's Parakeet, and whisper.cpp models found on disk or added by the user.
+use anyhow::{anyhow, bail, Result};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::ffi::OsString;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::voice_client::VoiceOption;
 
 const WHISPER_BINARIES: [&str; 2] = ["whisper-cli", "whisper-cpp"];
+
+/// Known GGML / GGUF 4-byte file headers used by whisper.cpp models.
+const GGML_MAGICS: [[u8; 4]; 7] = [
+    *b"lmgg", // 0x67676d6c LE (ggml)
+    *b"fmgg", // 0x67676d66 LE (ggmf)
+    *b"tjgg", // 0x67676a74 LE (ggjt)
+    *b"GGUF", // GGUF v1+
+    *b"ggml", // BE
+    *b"ggmf", // BE
+    *b"ggjt", // BE
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalWhisperModel {
+    pub path: String,
+    pub name: String,
+    pub missing: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalWhisperState {
+    pub bin_path: Option<String>,
+    pub bin_missing: bool,
+    pub bin_custom: bool,
+    pub models: Vec<LocalWhisperModel>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ListenModel {
@@ -51,13 +82,70 @@ impl ListenModel {
 }
 
 /// `ggml-base.en.bin` is `base.en`.
-fn name(model: &Path) -> String {
+pub fn name(model: &Path) -> String {
     let stem = model.file_stem().unwrap_or_default().to_string_lossy();
     stem.strip_prefix("ggml-").unwrap_or(&stem).to_string()
 }
 
+/// Validates a user-selected whisper.cpp `.bin` model file (regular file + GGML/GGUF header).
+pub fn validate_whisper_model(path: &Path) -> Result<PathBuf> {
+    let mut file = std::fs::File::open(path).map_err(|_| anyhow!("Could not open model file: {}", path.display()))?;
+    let meta = file.metadata()?;
+    if !meta.is_file() {
+        bail!("Selected path is not a regular file.");
+    }
+    let mut header = [0u8; 4];
+    file.read_exact(&mut header)
+        .map_err(|_| anyhow!("File is too small to be a whisper.cpp model."))?;
+    if !GGML_MAGICS.contains(&header) {
+        bail!("Not a valid whisper.cpp GGML/GGUF model file.");
+    }
+    Ok(path.canonicalize().unwrap_or_else(|_| path.to_path_buf()))
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+/// Validates a user-selected `whisper-cli` / `whisper-cpp` executable file.
+pub fn validate_whisper_bin(path: &Path) -> Result<PathBuf> {
+    let meta = std::fs::metadata(path).map_err(|_| anyhow!("Binary not found: {}", path.display()))?;
+    if !meta.is_file() {
+        bail!("Selected path is not a regular file.");
+    }
+    if !is_executable_file(path) {
+        bail!("Selected file is not executable.");
+    }
+    Ok(path.canonicalize().unwrap_or_else(|_| path.to_path_buf()))
+}
+
 pub fn find_binary(path: Option<OsString>) -> Option<PathBuf> {
     std::env::split_paths(&path?).flat_map(|d| WHISPER_BINARIES.map(|b| d.join(b))).find(|p| p.is_file())
+}
+
+/// Resolves the whisper binary: prefers a valid custom path, falling back to `PATH`.
+pub fn resolve_binary(custom: Option<&str>, path_env: Option<OsString>) -> Option<PathBuf> {
+    if let Some(p) = custom.map(str::trim).filter(|s| !s.is_empty()) {
+        let candidate = Path::new(p);
+        if is_executable_file(candidate) {
+            return Some(candidate.to_path_buf());
+        }
+    }
+    find_binary(path_env)
 }
 
 /// Where whisper.cpp's models are usually kept, Duragon's own folder first.
@@ -95,14 +183,62 @@ pub fn find_models(dirs: &[PathBuf]) -> Vec<PathBuf> {
     found
 }
 
+/// Live status of user-registered custom whisper models and binary for the Voice settings UI.
+pub fn inspect_custom(custom_models: &[String], custom_bin: Option<&str>) -> LocalWhisperState {
+    inspect_custom_with_path(custom_models, custom_bin, std::env::var_os("PATH"))
+}
+
+pub fn inspect_custom_with_path(
+    custom_models: &[String],
+    custom_bin: Option<&str>,
+    path_env: Option<OsString>,
+) -> LocalWhisperState {
+    let trimmed_bin = custom_bin.map(str::trim).filter(|s| !s.is_empty());
+    let (bin_path, bin_missing, bin_custom) = match trimmed_bin {
+        Some(p) => (Some(p.to_string()), !is_executable_file(Path::new(p)), true),
+        None => (find_binary(path_env).map(|p| p.display().to_string()), false, false),
+    };
+    let models = custom_models
+        .iter()
+        .map(|raw| {
+            let p = Path::new(raw);
+            let missing = !p.is_file();
+            LocalWhisperModel { path: raw.clone(), name: name(p), missing }
+        })
+        .collect();
+    LocalWhisperState { bin_path, bin_missing, bin_custom, models }
+}
+
 /// In the order the picker shows them, which is also the order to fall back in.
-pub fn available(models: &Path, parakeet_ready: bool) -> Vec<ListenModel> {
+pub fn available_with_custom(
+    models: &Path,
+    parakeet_ready: bool,
+    custom_models: &[String],
+    custom_bin: Option<&str>,
+    path_env: Option<OsString>,
+) -> Vec<ListenModel> {
     let mut list = Vec::new();
     if parakeet_ready {
         list.push(ListenModel::Parakeet);
     }
-    if let Some(bin) = find_binary(std::env::var_os("PATH")) {
-        list.extend(find_models(&model_dirs(models)).into_iter().map(|model| ListenModel::Whisper { bin: bin.clone(), model }));
+    if let Some(bin) = resolve_binary(custom_bin, path_env) {
+        let mut seen: Vec<PathBuf> = Vec::new();
+        for raw in custom_models {
+            let p = Path::new(raw);
+            if p.is_file() {
+                let canon = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+                if !seen.contains(&canon) {
+                    seen.push(canon.clone());
+                    list.push(ListenModel::Whisper { bin: bin.clone(), model: canon });
+                }
+            }
+        }
+        for model in find_models(&model_dirs(models)) {
+            if !seen.contains(&model) {
+                seen.push(model.clone());
+                list.push(ListenModel::Whisper { bin: bin.clone(), model });
+            }
+        }
     }
     list
 }
@@ -116,6 +252,17 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    fn write_exec(path: &Path) {
+        std::fs::write(path, b"#!/bin/sh\necho ok\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(path, perms).unwrap();
+        }
     }
 
     #[test]
@@ -153,6 +300,76 @@ mod tests {
         std::fs::write(dir.join("whisper-cli"), b"#!/bin/sh\n").unwrap();
         let path = std::env::join_paths([dir.join("nothing"), dir.clone()]).unwrap();
         assert_eq!(find_binary(Some(path)), Some(dir.join("whisper-cli")));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn validates_ggml_and_gguf_headers_and_rejects_corrupt_files() {
+        let dir = scratch("validate-model");
+        let valid_ggml = dir.join("ggml-custom.bin");
+        std::fs::write(&valid_ggml, b"lmgg\x01\x00\x00\x00").unwrap();
+        assert!(validate_whisper_model(&valid_ggml).is_ok());
+
+        let valid_gguf = dir.join("my-model.bin");
+        std::fs::write(&valid_gguf, b"GGUF\x03\x00\x00\x00").unwrap();
+        assert!(validate_whisper_model(&valid_gguf).is_ok());
+
+        let bad_magic = dir.join("not-a-model.bin");
+        std::fs::write(&bad_magic, b"HTML<html>").unwrap();
+        assert!(validate_whisper_model(&bad_magic).is_err());
+
+        let too_short = dir.join("short.bin");
+        std::fs::write(&too_short, b"lm").unwrap();
+        assert!(validate_whisper_model(&too_short).is_err());
+
+        assert!(validate_whisper_model(&dir).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn validates_custom_whisper_binary_and_degrades_gracefully_when_deleted() {
+        let dir = scratch("custom-fallback");
+        let fake_bin = dir.join("my-whisper-cli");
+        std::fs::write(&fake_bin, b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&fake_bin).unwrap().permissions();
+            perms.set_mode(0o644);
+            std::fs::set_permissions(&fake_bin, perms).unwrap();
+            assert!(validate_whisper_bin(&fake_bin).is_err(), "non-executable file must be rejected");
+        }
+        write_exec(&fake_bin);
+        let canon_bin = validate_whisper_bin(&fake_bin).unwrap();
+
+        let custom_model = dir.join("ggml-medium.en.bin");
+        std::fs::write(&custom_model, b"lmgg\x01\x00\x00\x00").unwrap();
+        let canon_model = validate_whisper_model(&custom_model).unwrap();
+        let custom_list = vec![canon_model.display().to_string()];
+        let custom_bin_str = canon_bin.display().to_string();
+
+        // Both present: Parakeet + custom whisper model appear.
+        let avail = available_with_custom(&dir, true, &custom_list, Some(&custom_bin_str), None);
+        assert_eq!(avail.len(), 2);
+        assert_eq!(avail[0], ListenModel::Parakeet);
+        assert_eq!(avail[1], ListenModel::Whisper { bin: canon_bin.clone(), model: canon_model.clone() });
+
+        let state = inspect_custom_with_path(&custom_list, Some(&custom_bin_str), None);
+        assert!(!state.bin_missing && state.bin_custom);
+        assert_eq!(state.models.len(), 1);
+        assert!(!state.models[0].missing);
+
+        // Delete the custom model after registration: inspect flags missing, available falls back cleanly to Parakeet.
+        std::fs::remove_file(&canon_model).unwrap();
+        let state_after = inspect_custom_with_path(&custom_list, Some(&custom_bin_str), None);
+        assert!(state_after.models[0].missing);
+        let avail_after = available_with_custom(&dir, true, &custom_list, Some(&custom_bin_str), None);
+        assert_eq!(avail_after, vec![ListenModel::Parakeet]);
+
+        // Delete the custom binary: bin_missing becomes true.
+        std::fs::remove_file(&canon_bin).unwrap();
+        let state_no_bin = inspect_custom_with_path(&custom_list, Some(&custom_bin_str), None);
+        assert!(state_no_bin.bin_missing);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

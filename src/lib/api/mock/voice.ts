@@ -1,10 +1,12 @@
-import type { BackendEvents, ModelKind, VoiceOption, VoiceStatus } from '../types';
+import type { BackendEvents, LocalWhisperModel, LocalWhisperState, ModelKind, VoiceOption, VoiceStatus } from '../types';
 import { KOKORO, PARAKEET, SPEECHD, WHISPER } from './fixtures';
 
 type Emit = <K extends keyof BackendEvents>(event: K, payload: BackendEvents[K]) => void;
 
 export class MockVoice {
   private voice: VoiceStatus = { stt: 'missing', vad: 'missing', tts: 'missing', progress: 0, error: null, listening: false };
+  private customModels: LocalWhisperModel[] = [];
+  private customBin: string | null = null;
   private levelTimer = 0;
   private transcriptTimer = 0;
   private speakTimer = 0;
@@ -35,12 +37,62 @@ export class MockVoice {
     }, 100);
   }
 
+  async voiceRemove(kind: ModelKind): Promise<VoiceStatus> {
+    this.setVoice({ [kind]: 'missing', progress: 0, error: null });
+    return { ...this.voice };
+  }
+
+  private localState(): LocalWhisperState {
+    return {
+      binPath: this.customBin ?? '/usr/bin/whisper-cli',
+      binMissing: Boolean(this.customBin && this.customBin.includes('missing')),
+      binCustom: this.customBin !== null,
+      models: this.customModels.map((m) => ({ ...m })),
+    };
+  }
+
+  async getLocalWhisperState(): Promise<LocalWhisperState> {
+    return this.localState();
+  }
+
+  async addWhisperModel(path: string): Promise<LocalWhisperState> {
+    if (!path.endsWith('.bin')) throw new Error('Not a valid whisper.cpp GGML/GGUF model file.');
+    const file = path.split(/[\\/]/).pop() ?? path;
+    const name = file.replace(/^ggml-/, '').replace(/\.bin$/, '') || file;
+    if (!this.customModels.some((m) => m.path === path)) {
+      this.customModels.push({ path, name, missing: path.includes('missing') });
+    }
+    return this.localState();
+  }
+
+  async removeWhisperModel(path: string): Promise<LocalWhisperState> {
+    this.customModels = this.customModels.filter((m) => m.path !== path);
+    return this.localState();
+  }
+
+  async setWhisperBin(path: string | null): Promise<LocalWhisperState> {
+    const trimmed = path?.trim() || null;
+    if (trimmed && trimmed.endsWith('.txt')) throw new Error('Selected file is not executable.');
+    this.customBin = trimmed;
+    return this.localState();
+  }
+
   async listVoices(_refresh: boolean): Promise<VoiceOption[]> {
     return [...(this.voice.tts === 'ready' ? KOKORO : []), ...SPEECHD].map((v) => ({ ...v }));
   }
 
   async listListenModels(): Promise<VoiceOption[]> {
-    return [...(this.voice.stt === 'ready' ? [PARAKEET] : []), ...WHISPER].map((m) => ({ ...m }));
+    const custom: VoiceOption[] = this.customModels
+      .filter((m) => !m.missing)
+      .map((m) => ({
+        id: `whisper/${m.path}`,
+        name: m.name,
+        description: m.name.split('-')[0]?.endsWith('.en') ? 'English' : 'Many languages',
+        engine: 'whisper.cpp',
+        source: 'on this computer',
+        language: null,
+      }));
+    return [...(this.voice.stt === 'ready' ? [PARAKEET] : []), ...custom, ...WHISPER].map((m) => ({ ...m }));
   }
 
   async listenStart(handsFree: boolean): Promise<void> {

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getBackend } from '../../api/backend';
-  import type { ModelKind, Settings, VoiceOption } from '../../api/types';
+  import { pickOpenPath } from '../../api/platform';
+  import type { LocalWhisperState, ModelKind, Settings, VoiceOption } from '../../api/types';
   import { settings, updateSettings } from '../../state/settings.svelte';
   import { chosenListenModel, chosenVoice, refreshVoices, voice } from '../../state/voice.svelte';
   import SwitchRow from './SwitchRow.svelte';
@@ -31,17 +32,29 @@
   const st = $derived(voice.status);
   const busy = $derived(MODELS.some((m) => st[m.kind] === 'downloading'));
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
-  const system = $derived.by(() => {
+  const speechdSummary = $derived.by(() => {
     const speechd = voice.voices.filter((v) => v.source === 'Speech Dispatcher');
-    const whisper = voice.listenModels.filter((m) => m.engine === 'whisper.cpp');
     const modules = [...new Set(speechd.map((v) => v.engine))].join(', ');
-    return [
-      { name: 'Speech Dispatcher', what: 'System voices', found: speechd.length ? `${modules} · ${count(speechd.length, 'voice')}` : '' },
-      { name: 'whisper.cpp', what: 'Speech to text', found: whisper.length ? count(whisper.length, 'model') : '' },
-    ];
+    return speechd.length ? `${modules} · ${count(speechd.length, 'voice')}` : '';
   });
+  const whisperCount = $derived(voice.listenModels.filter((m) => m.engine === 'whisper.cpp').length);
 
-  onMount(() => void refreshVoices(true));
+  let localWhisper = $state<LocalWhisperState>({ binPath: null, binMissing: false, binCustom: false, models: [] });
+  let localError = $state<string | null>(null);
+  let removing = $state<ModelKind | null>(null);
+
+  async function loadLocalWhisper() {
+    try {
+      localWhisper = await (await getBackend()).getLocalWhisperState();
+    } catch {
+      // Best-effort refresh.
+    }
+  }
+
+  onMount(() => {
+    void refreshVoices(true);
+    void loadLocalWhisper();
+  });
 
   let modelsEl = $state<HTMLElement>();
   const showModels = () => modelsEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -55,6 +68,70 @@
       failed = String(e);
     }
   }
+
+  async function removeBuiltin(kind: ModelKind) {
+    if (busy || removing) return;
+    failed = null;
+    removing = kind;
+    try {
+      voice.status = await (await getBackend()).voiceRemove(kind);
+      await refreshVoices(false);
+    } catch (e) {
+      failed = String(e);
+    } finally {
+      removing = null;
+    }
+  }
+
+  async function addLocalWhisperModel() {
+    localError = null;
+    const path = await pickOpenPath({
+      filters: [{ name: 'whisper.cpp model', extensions: ['bin'] }],
+      mockFallback: '/home/you/models/ggml-medium.en.bin',
+    });
+    if (!path) return;
+    try {
+      localWhisper = await (await getBackend()).addWhisperModel(path);
+      await refreshVoices(false);
+    } catch (e) {
+      localError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function removeLocalWhisperModel(path: string) {
+    localError = null;
+    try {
+      localWhisper = await (await getBackend()).removeWhisperModel(path);
+      await refreshVoices(false);
+    } catch (e) {
+      localError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function pickWhisperBin() {
+    localError = null;
+    const path = await pickOpenPath({
+      mockFallback: '/usr/local/bin/whisper-cli',
+    });
+    if (!path) return;
+    try {
+      localWhisper = await (await getBackend()).setWhisperBin(path);
+      await refreshVoices(false);
+    } catch (e) {
+      localError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function clearWhisperBin() {
+    localError = null;
+    try {
+      localWhisper = await (await getBackend()).setWhisperBin(null);
+      await refreshVoices(false);
+    } catch (e) {
+      localError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   const error = $derived(st.error ?? failed);
 </script>
 
@@ -102,13 +179,24 @@
       <div class="model">
         <div><div class="name">{m.name}</div><div class="what">{m.what}</div></div>
         {#if state === 'ready'}
-          <div class="state ready">Installed</div>
+          <div class="ready-actions">
+            <span class="state ready">Installed</span>
+            <button
+              type="button"
+              class="quiet"
+              disabled={busy || removing !== null}
+              aria-label="Remove {m.name}"
+              onclick={() => removeBuiltin(m.kind)}
+            >
+              {removing === m.kind ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
         {:else if state === 'downloading'}
           <div class="state" role="progressbar" aria-label="Downloading {m.name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(st.progress * 100)}>
             Downloading {Math.round(st.progress * 100)}%
           </div>
         {:else}
-          <button class="install" disabled={busy} aria-label="{state === 'error' ? 'Try again' : 'Install'} {m.name}" onclick={() => install(m.kind)}>
+          <button class="install" disabled={busy || removing !== null} aria-label="{state === 'error' ? 'Try again' : 'Install'} {m.name}" onclick={() => install(m.kind)}>
             {state === 'error' ? 'Try again' : 'Install'} <span class="size">{m.size}</span>
           </button>
         {/if}
@@ -123,13 +211,71 @@
 
   <h4 class="syshead">On this computer</h4>
   <div class="list">
-    {#each system as sys (sys.name)}
-      <div class="model">
-        <div><div class="name">{sys.name}</div><div class="what">{sys.what}</div></div>
-        <div class="state" class:found={sys.found}>{sys.found || 'Not found'}</div>
+    <div class="model">
+      <div><div class="name">Speech Dispatcher</div><div class="what">System voices</div></div>
+      <div class="state" class:found={Boolean(speechdSummary)}>{speechdSummary || 'Not found'}</div>
+    </div>
+
+    <div class="model">
+      <div>
+        <div class="name">whisper.cpp</div>
+        <div class="what">
+          {#if whisperCount > 0}
+            {count(whisperCount, 'model')} ready
+          {:else if localWhisper.binPath && !localWhisper.binMissing}
+            Binary ready · add a .bin model
+          {:else}
+            Speech to text · local GGML models
+          {/if}
+        </div>
+      </div>
+      <div class="local-actions">
+        <button type="button" class="chip" onclick={addLocalWhisperModel}>Add model…</button>
+        <button type="button" class="quiet" onclick={pickWhisperBin}>
+          {localWhisper.binCustom ? 'Change binary…' : 'Set binary…'}
+        </button>
+      </div>
+    </div>
+
+    {#if localWhisper.binCustom && localWhisper.binPath}
+      <div class="subrow">
+        <div class="subtext">
+          <span class="subname">whisper-cli binary</span>
+          <span class="subpath" title={localWhisper.binPath}>{localWhisper.binPath}</span>
+        </div>
+        <div class="ready-actions">
+          {#if localWhisper.binMissing}
+            <span class="badge missing">Missing</span>
+          {:else}
+            <span class="badge ready">Ready</span>
+          {/if}
+          <button type="button" class="quiet" onclick={clearWhisperBin}>Reset</button>
+        </div>
+      </div>
+    {/if}
+
+    {#each localWhisper.models as item (item.path)}
+      <div class="subrow">
+        <div class="subtext">
+          <span class="subname">{item.name}</span>
+          <span class="subpath" title={item.path}>{item.path}</span>
+        </div>
+        <div class="ready-actions">
+          {#if item.missing}
+            <span class="badge missing">Missing</span>
+          {:else}
+            <span class="badge ready">Ready</span>
+          {/if}
+          <button type="button" class="quiet" aria-label="Remove {item.name}" onclick={() => removeLocalWhisperModel(item.path)}>Remove</button>
+        </div>
       </div>
     {/each}
   </div>
+
+  {#if localError}<p class="error" role="alert">{localError}</p>{/if}
+  <p class="footnote">
+    Add any local <code>whisper.cpp</code> GGML/GGUF <code>.bin</code> model from disk. For custom system voices, install voices in Speech Dispatcher (raw Piper <code>.onnx.json</code> files require converted <code>tokens.txt</code> and <code>espeak-ng-data</code> for <code>sherpa-onnx</code>).
+  </p>
 </section>
 
 <style>
@@ -157,14 +303,61 @@
   .list { margin-top: 18px; border: 1px solid var(--rule); border-radius: 12px; }
   .model { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 62px; padding: 12px 16px; border-top: 1px solid var(--rule); }
   .model:first-child { border-top: 0; }
+  .subrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 16px 9px 24px;
+    border-top: 1px solid var(--rule);
+    background: color-mix(in srgb, var(--shelf) 55%, transparent);
+  }
+  .subrow:last-child { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; }
+  .subtext { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .subname { font-size: 13px; line-height: 1.3; font-weight: 500; color: var(--ink); }
+  .subpath { font-size: 12px; line-height: 1.3; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .name { font-size: 14px; font-weight: 500; }
   .what { margin-top: 1px; font-size: 13px; color: var(--faint); }
   .state { font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; }
   .state.ready { color: var(--text-green); }
   .state.found { color: var(--graphite); }
+  .ready-actions, .local-actions { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+  .badge { font-size: 12px; line-height: 1.3; font-weight: 500; }
+  .badge.ready { color: var(--text-green); }
+  .badge.missing { color: var(--text-red); }
+  .chip {
+    flex: none;
+    height: 28px;
+    padding: 0 11px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 12.5px;
+    line-height: 1;
+    text-box: trim-both cap alphabetic;
+    transition: background-color var(--dur-ui) var(--ease-ui), border-color var(--dur-ui) var(--ease-ui);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .chip:hover {
+      background: var(--shelf);
+      border-color: color-mix(in srgb, var(--ink) 20%, var(--rule));
+    }
+  }
+  .quiet {
+    flex: none;
+    font-size: 12.5px;
+    line-height: 1.3;
+    color: var(--faint);
+    transition: color var(--dur-ui) var(--ease-ui);
+  }
+  .quiet:hover:not(:disabled) { color: var(--ink); }
+  .quiet:disabled { opacity: 0.4; cursor: default; }
   .bar { height: 2px; margin: -1px 16px 0; border-radius: 1px; background: var(--rule); overflow: hidden; }
   .bar span { display: block; height: 100%; background: var(--ink); transform-origin: left; transition: transform 120ms linear; }
-  .error { margin-top: 14px; font-size: 13.5px; color: var(--text-red); }
+  .error { margin-top: 12px; font-size: 13px; line-height: 1.4; color: var(--text-red); }
+  .footnote { margin-top: 10px; max-width: 520px; font-size: 12.5px; line-height: 1.45; color: var(--faint); }
+  .footnote code { font-family: var(--font-mono); font-size: 11.5px; }
   .install { flex: none; height: 30px; padding: 0 14px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 13px; transition: opacity 150ms var(--ease-ui), transform 160ms var(--ease-step); }
   .install .size { opacity: 0.7; }
   .install:disabled { opacity: 0.4; cursor: default; }

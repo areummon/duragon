@@ -438,8 +438,13 @@ export class MockBackend implements Backend {
 
   voiceStatus = () => this.voice.voiceStatus();
   voiceInstall = (kind: ModelKind) => this.voice.voiceInstall(kind);
+  voiceRemove = (kind: ModelKind) => this.voice.voiceRemove(kind);
   listVoices = (refresh: boolean) => this.voice.listVoices(refresh);
   listListenModels = () => this.voice.listListenModels();
+  getLocalWhisperState = () => this.voice.getLocalWhisperState();
+  addWhisperModel = (path: string) => this.voice.addWhisperModel(path);
+  removeWhisperModel = (path: string) => this.voice.removeWhisperModel(path);
+  setWhisperBin = (path: string | null) => this.voice.setWhisperBin(path);
   listenStart = (handsFree: boolean) => this.voice.listenStart(handsFree);
   listenStop = () => this.voice.listenStop();
   speak = (messageId: string | null, text: string, voice?: string) => this.voice.speak(messageId, text, voice);

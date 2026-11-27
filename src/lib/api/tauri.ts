@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Backend, Unsubscribe } from './backend';
 import type {
-  BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch, NoteRevision,
+  BackendEvents, DeleteMode, ExportFormat, Folder, LocalWhisperState, Message, Note, NoteMeta, NoteMetaPatch, NoteRevision,
   ProviderCredentialStatus, Riddler, SearchEngine, SearchStatus, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
 } from './types';
 
@@ -71,8 +71,13 @@ export class TauriBackend implements Backend {
 
   voiceStatus = () => invoke<VoiceStatus>('voice_status');
   voiceInstall = (kind: ModelKind) => invoke<void>('voice_install', { kind });
+  voiceRemove = (kind: ModelKind) => invoke<VoiceStatus>('voice_remove', { kind });
   listVoices = (refresh: boolean) => invoke<VoiceOption[]>('list_voices', { refresh });
   listListenModels = () => invoke<VoiceOption[]>('list_listen_models');
+  getLocalWhisperState = () => invoke<LocalWhisperState>('get_local_whisper_state');
+  addWhisperModel = (path: string) => invoke<LocalWhisperState>('add_whisper_model', { path });
+  removeWhisperModel = (path: string) => invoke<LocalWhisperState>('remove_whisper_model', { path });
+  setWhisperBin = (path: string | null) => invoke<LocalWhisperState>('set_whisper_bin', { path });
   listenStart = (handsFree: boolean) => invoke<void>('listen_start', { handsFree });
   listenStop = () => invoke<string>('listen_stop');
   speak = (messageId: string | null, text: string, voice?: string) => invoke<void>('speak', { messageId, text, voice });

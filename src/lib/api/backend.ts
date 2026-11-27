@@ -1,5 +1,5 @@
 import type {
-  BackendEvents, DeleteMode, ExportFormat, Folder, Message, Note, NoteMeta, NoteMetaPatch, NoteRevision,
+  BackendEvents, DeleteMode, ExportFormat, Folder, LocalWhisperState, Message, Note, NoteMeta, NoteMetaPatch, NoteRevision,
   ProviderCredentialStatus, Riddler, SearchEngine, SearchStatus, Settings, Thread, ThreadKind, ThreadStatus, TrashList, ModelKind, VoiceOption, VoiceStatus,
 } from './types';
 
@@ -71,9 +71,15 @@ export interface Backend {
   voiceStatus(): Promise<VoiceStatus>;
   /** Download one model into the app data dir. Progress via voice:status. */
   voiceInstall(kind: ModelKind): Promise<void>;
+  /** Remove a downloaded Duragon model from disk. */
+  voiceRemove(kind: ModelKind): Promise<VoiceStatus>;
   /** Kokoro's voices when installed, then Speech Dispatcher's; `refresh` lists the system's again. */
   listVoices(refresh: boolean): Promise<VoiceOption[]>;
   listListenModels(): Promise<VoiceOption[]>;
+  getLocalWhisperState(): Promise<LocalWhisperState>;
+  addWhisperModel(path: string): Promise<LocalWhisperState>;
+  removeWhisperModel(path: string): Promise<LocalWhisperState>;
+  setWhisperBin(path: string | null): Promise<LocalWhisperState>;
   /** Start capturing the microphone; transcripts arrive as voice:transcript events. */
   listenStart(handsFree: boolean): Promise<void>;
   /** Stop capturing and return the final transcript of the utterance. */
