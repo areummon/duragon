@@ -6,10 +6,10 @@ Duragon includes fully local, CPU-based speech-to-text and text-to-speech via th
 
 - **Speech-to-text (Dictation):**
   - **NVIDIA Parakeet TDT 0.6B v2** (built-in one-click download in **Customize → Voice**)
-  - **whisper.cpp** — auto-detects `whisper-cli`/`whisper-cpp` on `PATH` and `ggml-*.bin` models in standard directories, and lets you register any local GGML/GGUF `.bin` model file or custom `whisper-cli` binary path from **Customize → Voice → On this computer** (validated at selection time; if a file is later moved or deleted, Duragon shows a *Missing* badge and falls back cleanly to the next ready model)
+  - **whisper.cpp** — auto-detects `whisper-cli`/`whisper-cpp` on `PATH` and `ggml-*.bin` models in standard directories, and lets you register any local GGML `.bin` model file or custom `whisper-cli` binary path from **Customize → Voice → On this computer** (validated at selection time; if a file is later moved or deleted, Duragon shows a *Missing* badge and falls back cleanly to the next ready model)
 - **Text-to-speech (Read aloud):**
   - **Kokoro** (built-in neural voices: George, Emma, Michael, Heart — downloaded with the voice bundle)
-  - **Speech Dispatcher (`speechd`)** system voices on Linux (auto-detected if installed). Raw Piper `.onnx` + `.onnx.json` files are not loaded directly because `sherpa-onnx` 1.13.8's `OfflineTtsVitsModelConfig` requires converted `tokens.txt` and `espeak-ng-data` rather than raw `.onnx.json`.
+  - **Speech Dispatcher (`speechd`)** system voices on Linux (auto-detected if installed)
 
 The built-in Parakeet + Silero VAD + Kokoro bundle is a one-time download of **~615 MB** (~850 MB unpacked on disk) managed directly from **Customize → Voice**, where any downloaded model can also be removed to reclaim disk space.
 

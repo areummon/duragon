@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getBackend } from '../../api/backend';
+  import { getBackend, type Backend } from '../../api/backend';
   import { pickOpenPath } from '../../api/platform';
   import type { LocalWhisperState, ModelKind, Settings, VoiceOption } from '../../api/types';
   import { settings, updateSettings } from '../../state/settings.svelte';
@@ -46,8 +46,8 @@
   async function loadLocalWhisper() {
     try {
       localWhisper = await (await getBackend()).getLocalWhisperState();
-    } catch {
-      // Best-effort refresh.
+    } catch (e) {
+      localError = e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -83,54 +83,34 @@
     }
   }
 
-  async function addLocalWhisperModel() {
+  async function localAction(f: (b: Backend) => Promise<LocalWhisperState>) {
     localError = null;
+    try {
+      localWhisper = await f(await getBackend());
+      await refreshVoices(false);
+    } catch (e) {
+      localError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function addLocalWhisperModel() {
     const path = await pickOpenPath({
       filters: [{ name: 'whisper.cpp model', extensions: ['bin'] }],
       mockFallback: '/home/you/models/ggml-medium.en.bin',
     });
-    if (!path) return;
-    try {
-      localWhisper = await (await getBackend()).addWhisperModel(path);
-      await refreshVoices(false);
-    } catch (e) {
-      localError = e instanceof Error ? e.message : String(e);
-    }
+    if (path) await localAction((b) => b.addWhisperModel(path));
   }
 
-  async function removeLocalWhisperModel(path: string) {
-    localError = null;
-    try {
-      localWhisper = await (await getBackend()).removeWhisperModel(path);
-      await refreshVoices(false);
-    } catch (e) {
-      localError = e instanceof Error ? e.message : String(e);
-    }
-  }
+  const removeLocalWhisperModel = (path: string) => localAction((b) => b.removeWhisperModel(path));
 
   async function pickWhisperBin() {
-    localError = null;
     const path = await pickOpenPath({
       mockFallback: '/usr/local/bin/whisper-cli',
     });
-    if (!path) return;
-    try {
-      localWhisper = await (await getBackend()).setWhisperBin(path);
-      await refreshVoices(false);
-    } catch (e) {
-      localError = e instanceof Error ? e.message : String(e);
-    }
+    if (path) await localAction((b) => b.setWhisperBin(path));
   }
 
-  async function clearWhisperBin() {
-    localError = null;
-    try {
-      localWhisper = await (await getBackend()).setWhisperBin(null);
-      await refreshVoices(false);
-    } catch (e) {
-      localError = e instanceof Error ? e.message : String(e);
-    }
-  }
+  const clearWhisperBin = () => localAction((b) => b.setWhisperBin(null));
 
   const error = $derived(st.error ?? failed);
 </script>
@@ -274,7 +254,7 @@
 
   {#if localError}<p class="error" role="alert">{localError}</p>{/if}
   <p class="footnote">
-    Add any local <code>whisper.cpp</code> GGML/GGUF <code>.bin</code> model from disk. For custom system voices, install voices in Speech Dispatcher (raw Piper <code>.onnx.json</code> files require converted <code>tokens.txt</code> and <code>espeak-ng-data</code> for <code>sherpa-onnx</code>).
+    Add any local <code>whisper.cpp</code> <code>.bin</code> model from disk.
   </p>
 </section>
 

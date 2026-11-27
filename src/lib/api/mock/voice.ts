@@ -56,7 +56,7 @@ export class MockVoice {
   }
 
   async addWhisperModel(path: string): Promise<LocalWhisperState> {
-    if (!path.endsWith('.bin')) throw new Error('Not a valid whisper.cpp GGML/GGUF model file.');
+    if (!path.endsWith('.bin')) throw new Error('Not a valid whisper.cpp GGML model file.');
     const file = path.split(/[\\/]/).pop() ?? path;
     const name = file.replace(/^ggml-/, '').replace(/\.bin$/, '') || file;
     if (!this.customModels.some((m) => m.path === path)) {

@@ -7,10 +7,11 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use tokio::sync::oneshot;
 
+use duragon_core::model::LocalWhisperConfig;
 use crate::listen_models::{self, ListenModel};
 
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
@@ -176,6 +177,7 @@ struct Shared {
     next_id: AtomicU64,
     worker: Mutex<Option<Worker>>,
     last_status: Mutex<Option<VoiceStatus>>,
+    worker_speaking: AtomicBool,
     speechd_voices: Mutex<Option<Vec<VoiceOption>>>,
     /// Held from stopping the last speech until the next one is stored, so no speech goes unstopped.
     speaking: tokio::sync::Mutex<Option<Speech>>,
@@ -209,6 +211,7 @@ impl VoiceClient {
                 next_id: AtomicU64::new(1),
                 worker: Mutex::new(None),
                 last_status: Mutex::new(None),
+                worker_speaking: AtomicBool::new(false),
                 speechd_voices: Mutex::new(None),
                 speaking: tokio::sync::Mutex::new(None),
                 asked: AtomicU64::new(0),
@@ -262,6 +265,9 @@ impl VoiceClient {
                             if let Ok(st) = serde_json::from_value::<VoiceStatus>(payload.clone()) {
                                 *shared.last_status.lock().unwrap_or_else(|e| e.into_inner()) = Some(st);
                             }
+                        } else if event == "voice:speaking" {
+                            let playing = payload.get("playing").and_then(Value::as_bool).unwrap_or(false);
+                            shared.worker_speaking.store(playing, Ordering::SeqCst);
                         }
                         (shared.emit)(event, payload);
                     } else if let Some(id) = msg.get("id").and_then(Value::as_u64) {
@@ -285,6 +291,7 @@ impl VoiceClient {
                 if slot.as_ref().is_none_or(|w| Arc::ptr_eq(&w.pending, &pending_reader)) {
                     *slot = None;
                     *shared.last_status.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    shared.worker_speaking.store(false, Ordering::SeqCst);
                 }
             })?;
 
@@ -332,9 +339,29 @@ impl VoiceClient {
     /// Removes a downloaded Duragon model from disk, stopping any idle worker first so file handles are released.
     pub fn remove_model(&self, kind: ModelKind) -> Result<VoiceStatus> {
         {
-            let mut slot = self.shared.worker.lock().unwrap_or_else(|e| e.into_inner());
-            *slot = None;
-            *self.shared.last_status.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            let mut slot = lock(&self.shared.worker);
+            if let Some(w) = slot.as_mut() {
+                let alive = w.child.try_wait().ok().flatten().is_none();
+                if alive {
+                    if let Some(st) = lock(&self.shared.last_status).as_ref() {
+                        if st.listening {
+                            bail!("Cannot remove a model while listening.");
+                        }
+                        if [st.stt, st.vad, st.tts].contains(&ModelState::Downloading) {
+                            bail!("Cannot remove a model while a download is in progress.");
+                        }
+                    }
+                    if self.shared.worker_speaking.load(Ordering::SeqCst) {
+                        bail!("Cannot remove a model while speech is playing.");
+                    }
+                    if !lock(&w.pending).is_empty() {
+                        bail!("Cannot remove a model while voice is busy.");
+                    }
+                }
+                *slot = None;
+                *lock(&self.shared.last_status) = None;
+                self.shared.worker_speaking.store(false, Ordering::SeqCst);
+            }
         }
         let target = match kind {
             ModelKind::Stt => self.shared.models.join(STT_DIR),
@@ -358,23 +385,21 @@ impl VoiceClient {
     }
 
     /// What this computer can listen with, in the order to fall back in.
-    pub fn listen_models(&self, custom_models: &[String], custom_bin: Option<&str>) -> Vec<ListenModel> {
+    pub fn listen_models(&self, whisper: &LocalWhisperConfig) -> Vec<ListenModel> {
         listen_models::available_with_custom(
             &self.shared.models,
             disk_status(&self.shared.models).stt == ModelState::Ready,
-            custom_models,
-            custom_bin,
+            whisper,
             std::env::var_os("PATH"),
         )
     }
 
     /// Listens with the model `chosen` names, or the first one there is.
-    pub async fn listen_start(&self, hands_free: bool, chosen: &str, custom_models: &[String], custom_bin: Option<&str>) -> Result<()> {
-        let custom_models = custom_models.to_vec();
-        let custom_bin = custom_bin.map(str::to_string);
+    pub async fn listen_start(&self, hands_free: bool, chosen: &str, whisper: &LocalWhisperConfig) -> Result<()> {
+        let whisper = whisper.clone();
         let models = tokio::task::spawn_blocking({
             let me = self.clone();
-            move || me.listen_models(&custom_models, custom_bin.as_deref())
+            move || me.listen_models(&whisper)
         })
         .await?;
         let model = models
@@ -491,8 +516,12 @@ while read -r line; do
 done
 "#;
 
+    /// Serializes tests that write executable scripts or spawn child processes to avoid Linux ETXTBSY races.
+    static PROCESS_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     #[tokio::test]
     async fn an_old_helper_ending_late_leaves_the_new_one_running() {
+        let _proc = PROCESS_TESTS.lock().await;
         let dir = std::env::temp_dir().join(format!("duragon-voice-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let bin = dir.join("helper");
@@ -519,6 +548,7 @@ done
 
     #[test]
     fn a_failed_listing_is_tried_again() {
+        let _proc = PROCESS_TESTS.blocking_lock();
         let _env = SPEECHD_ADDRESS.blocking_lock();
         let dir = std::env::temp_dir().join(format!("duragon-listing-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -634,6 +664,47 @@ done
         assert_eq!(after_vad.vad, ModelState::Missing);
         assert!(!dir.join(VAD_FILE).exists());
         assert_eq!(emitted.lock().unwrap().len(), 2);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn remove_model_refuses_while_worker_is_busy() {
+        let _proc = PROCESS_TESTS.blocking_lock();
+        let dir = std::env::temp_dir().join(format!("duragon-remove-busy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(STT_DIR)).unwrap();
+        for f in STT_REQUIRED {
+            std::fs::write(dir.join(STT_DIR).join(f), b"x").unwrap();
+        }
+
+        let client = VoiceClient::new(dir.clone(), Arc::new(|_, _| {}));
+        let mut child = Command::new("sleep").arg("30").stdin(Stdio::piped()).spawn().unwrap();
+        let stdin = child.stdin.take().unwrap();
+        *lock(&client.shared.worker) = Some(Worker { child, stdin, pending: Arc::default() });
+
+        let mut st = disk_status(&dir);
+        st.listening = true;
+        *lock(&client.shared.last_status) = Some(st.clone());
+        assert!(client.remove_model(ModelKind::Stt).is_err());
+        assert!(dir.join(STT_DIR).exists());
+
+        st.listening = false;
+        st.tts = ModelState::Downloading;
+        *lock(&client.shared.last_status) = Some(st.clone());
+        assert!(client.remove_model(ModelKind::Stt).is_err());
+        assert!(dir.join(STT_DIR).exists());
+
+        st.tts = ModelState::Missing;
+        *lock(&client.shared.last_status) = Some(st);
+        client.shared.worker_speaking.store(true, Ordering::SeqCst);
+        assert!(client.remove_model(ModelKind::Stt).is_err());
+        assert!(dir.join(STT_DIR).exists());
+
+        client.shared.worker_speaking.store(false, Ordering::SeqCst);
+        let after = client.remove_model(ModelKind::Stt).unwrap();
+        assert_eq!(after.stt, ModelState::Missing);
+        assert!(!dir.join(STT_DIR).exists());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

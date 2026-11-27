@@ -181,8 +181,6 @@ export interface Settings {
   sidebarOpen: boolean;
   deletedNotes: DeleteMode;
   vimMode: boolean;
-  customWhisperModels?: string[];
-  whisperBin?: string | null;
 }
 
 /** Where a deleted note goes: Duragon's own trash, the system's, or nowhere. */

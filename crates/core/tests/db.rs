@@ -426,3 +426,17 @@ fn a_provider_that_cannot_be_read_costs_only_itself() {
     assert!(settings.providers.iter().any(|p| p.id == "mine"));
     assert!(settings.providers.iter().all(|p| p.id != "later"));
 }
+
+#[test]
+fn local_whisper_config_round_trips() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("duragon.db")).unwrap();
+    assert_eq!(db.get_local_whisper().unwrap(), LocalWhisperConfig::default());
+
+    let cfg = LocalWhisperConfig {
+        models: vec!["/models/ggml-base.en.bin".into()],
+        bin: Some("/usr/local/bin/whisper-cli".into()),
+    };
+    db.save_local_whisper(&cfg).unwrap();
+    assert_eq!(db.get_local_whisper().unwrap(), cfg);
+}

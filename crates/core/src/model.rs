@@ -590,8 +590,13 @@ pub struct Settings {
     pub deleted_notes: DeleteMode,
     pub web_search_engine: Option<SearchEngine>,
     pub vim_mode: bool,
-    pub custom_whisper_models: Vec<String>,
-    pub whisper_bin: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalWhisperConfig {
+    pub models: Vec<String>,
+    pub bin: Option<String>,
 }
 
 impl Default for Settings {
@@ -629,8 +634,6 @@ impl Default for Settings {
             deleted_notes: DeleteMode::Duragon,
             web_search_engine: None,
             vim_mode: false,
-            custom_whisper_models: Vec::new(),
-            whisper_bin: None,
         }
     }
 }

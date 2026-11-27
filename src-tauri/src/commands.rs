@@ -381,28 +381,15 @@ pub async fn list_voices(state: State<'_, AppState>, refresh: bool) -> Res<Vec<c
 
 #[tauri::command]
 pub async fn list_listen_models(state: State<'_, AppState>) -> Res<Vec<crate::voice_client::VoiceOption>> {
-    let settings = db_blocking(&state, |db| db.get_settings()).await?;
+    let whisper = db_blocking(&state, |db| db.get_local_whisper()).await?;
     let voice = state.voice.clone();
-    blocking(move || {
-        Ok(voice
-            .listen_models(&settings.custom_whisper_models, settings.whisper_bin.as_deref())
-            .iter()
-            .map(|m| m.option())
-            .collect())
-    })
-    .await
+    blocking(move || Ok(voice.listen_models(&whisper).iter().map(|m| m.option()).collect())).await
 }
 
 #[tauri::command]
 pub async fn get_local_whisper_state(state: State<'_, AppState>) -> Res<crate::listen_models::LocalWhisperState> {
-    let settings = db_blocking(&state, |db| db.get_settings()).await?;
-    blocking(move || {
-        Ok(crate::listen_models::inspect_custom(
-            &settings.custom_whisper_models,
-            settings.whisper_bin.as_deref(),
-        ))
-    })
-    .await
+    let whisper = db_blocking(&state, |db| db.get_local_whisper()).await?;
+    blocking(move || Ok(crate::listen_models::inspect_custom(&whisper))).await
 }
 
 #[tauri::command]
@@ -411,15 +398,12 @@ pub async fn add_whisper_model(state: State<'_, AppState>, path: String) -> Res<
     blocking(move || {
         let canon = crate::listen_models::validate_whisper_model(std::path::Path::new(&path))?;
         let canon_str = canon.display().to_string();
-        let mut settings = db.get_settings()?;
-        if !settings.custom_whisper_models.contains(&canon_str) {
-            settings.custom_whisper_models.push(canon_str);
-            db.save_settings(&settings)?;
+        let mut whisper = db.get_local_whisper()?;
+        if !whisper.models.contains(&canon_str) {
+            whisper.models.push(canon_str);
+            db.save_local_whisper(&whisper)?;
         }
-        Ok(crate::listen_models::inspect_custom(
-            &settings.custom_whisper_models,
-            settings.whisper_bin.as_deref(),
-        ))
+        Ok(crate::listen_models::inspect_custom(&whisper))
     })
     .await
 }
@@ -428,32 +412,41 @@ pub async fn add_whisper_model(state: State<'_, AppState>, path: String) -> Res<
 pub async fn remove_whisper_model(state: State<'_, AppState>, path: String) -> Res<crate::listen_models::LocalWhisperState> {
     let db = state.db.clone();
     blocking(move || {
-        let mut settings = db.get_settings()?;
-        settings.custom_whisper_models.retain(|p| p != &path);
-        db.save_settings(&settings)?;
-        Ok(crate::listen_models::inspect_custom(
-            &settings.custom_whisper_models,
-            settings.whisper_bin.as_deref(),
-        ))
+        let mut whisper = db.get_local_whisper()?;
+        whisper.models.retain(|p| p != &path);
+        db.save_local_whisper(&whisper)?;
+        Ok(crate::listen_models::inspect_custom(&whisper))
     })
     .await
 }
 
 #[tauri::command]
-pub async fn set_whisper_bin(state: State<'_, AppState>, path: Option<String>) -> Res<crate::listen_models::LocalWhisperState> {
+pub async fn set_whisper_bin(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    path: Option<String>,
+) -> Res<crate::listen_models::LocalWhisperState> {
     let db = state.db.clone();
     blocking(move || {
         let validated = match path.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
             Some(p) => Some(crate::listen_models::validate_whisper_bin(std::path::Path::new(p))?.display().to_string()),
             None => None,
         };
-        let mut settings = db.get_settings()?;
-        settings.whisper_bin = validated;
-        db.save_settings(&settings)?;
-        Ok(crate::listen_models::inspect_custom(
-            &settings.custom_whisper_models,
-            settings.whisper_bin.as_deref(),
-        ))
+        let mut whisper = db.get_local_whisper()?;
+        if let Some(ref bin) = validated {
+            if whisper.bin.as_deref() != Some(bin.as_str()) {
+                let asks = Asks {
+                    programs: vec![duragon_core::consent::plain(bin)],
+                    addresses: vec![],
+                };
+                if !allowed(&window, &asks) {
+                    anyhow::bail!("The change was not allowed");
+                }
+            }
+        }
+        whisper.bin = validated;
+        db.save_local_whisper(&whisper)?;
+        Ok(crate::listen_models::inspect_custom(&whisper))
     })
     .await
 }
@@ -465,16 +458,8 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> anyhow::Result<T> + Sen
 
 #[tauri::command]
 pub async fn listen_start(state: State<'_, AppState>, hands_free: bool) -> Res<()> {
-    let settings = db_blocking(&state, |db| db.get_settings()).await?;
-    s(state
-        .voice
-        .listen_start(
-            hands_free,
-            &settings.listen_model,
-            &settings.custom_whisper_models,
-            settings.whisper_bin.as_deref(),
-        )
-        .await)
+    let (settings, whisper) = db_blocking(&state, |db| Ok((db.get_settings()?, db.get_local_whisper()?))).await?;
+    s(state.voice.listen_start(hands_free, &settings.listen_model, &whisper).await)
 }
 
 #[tauri::command]

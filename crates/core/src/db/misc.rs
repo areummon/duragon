@@ -100,6 +100,22 @@ impl Db {
         Ok(())
     }
 
+    pub fn get_local_whisper(&self) -> Result<LocalWhisperConfig> {
+        let raw: Option<String> = self
+            .conn()
+            .query_row("SELECT value FROM kv WHERE key='local_whisper'", [], |r| r.get(0))
+            .optional()?;
+        Ok(raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default())
+    }
+
+    pub fn save_local_whisper(&self, config: &LocalWhisperConfig) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO kv(key,value) VALUES('local_whisper',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [serde_json::to_string(config)?],
+        )?;
+        Ok(())
+    }
+
     pub fn list_riddlers(&self) -> Result<Vec<Riddler>> {
         let conn = self.conn();
         let mut st = conn.prepare_cached(&format!(

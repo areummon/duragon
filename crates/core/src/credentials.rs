@@ -326,14 +326,15 @@ pub fn save_settings(
             }
         }
     }
-    let asks = asks(db.stored_settings()?.as_ref(), settings);
+    let stored = db.stored_settings()?;
+    let asks = asks(stored.as_ref(), settings);
     if !asks.is_empty() && !allow(&asks) {
         bail!("The change was not allowed");
     }
     let kept = settings.resolved_providers();
-    let stored = db.stored_settings()?.map(|s| s.resolved_providers()).unwrap_or_default();
+    let stored_providers = stored.as_ref().map(|s| s.resolved_providers()).unwrap_or_default();
     let removed: Vec<String> =
-        stored.into_iter().map(|p| p.id).filter(|id| kept.iter().all(|p| p.id != *id)).collect();
+        stored_providers.into_iter().map(|p| p.id).filter(|id| kept.iter().all(|p| p.id != *id)).collect();
     store.forget(&removed).context("The settings were not saved, because a removed provider's API key could not be deleted")?;
     db.save_settings(settings)
 }

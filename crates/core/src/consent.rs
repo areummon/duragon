@@ -38,7 +38,7 @@ fn reach(provider: &ProviderConfig) -> Reach {
 }
 
 /// Quoted where it could be read as something else.
-fn plain(word: &str) -> String {
+pub fn plain(word: &str) -> String {
     match word.chars().all(|c| c.is_ascii_graphic()) && !word.is_empty() {
         true => word.to_string(),
         false => format!("{word:?}"),
