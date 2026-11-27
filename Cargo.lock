@@ -1181,7 +1181,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "duragon"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "duragon-core",
@@ -1198,7 +1198,7 @@ dependencies = [
 
 [[package]]
 name = "duragon-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "docx-rs",
@@ -1214,7 +1214,7 @@ dependencies = [
 
 [[package]]
 name = "duragon-voice"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bzip2 0.5.2",
