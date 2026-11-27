@@ -10,3 +10,6 @@ src-tauri/binaries/
 docs/screenshots/
 .audit/
 .agents/
+.claude/
+docs/reference-riddled.md
+docs/architecture.md

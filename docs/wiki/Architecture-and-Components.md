@@ -37,8 +37,7 @@ duragon/
 │   └── styles/              # tokens.css, editor.css, ui.css, motion.css, riddle.css
 └── docs/
     ├── demos/               # README demonstration GIFs
-    ├── wiki/                # Documentation wiki
-    └── architecture.md      # Original design notes
+    └── wiki/                # Documentation wiki
 ```
 
 ## SQLite Schema & Migrations
