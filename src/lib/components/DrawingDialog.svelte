@@ -1,9 +1,9 @@
 <script lang="ts">
-  import X from 'lucide-svelte/icons/x';
   import { lightbox } from '../state/layout.svelte';
   import { closeOnEscape } from '../escape';
   import { takeFocus } from '../focus';
   import { pop, veil } from '../motion/transitions';
+  import CloseButton from './CloseButton.svelte';
   import Drawing from './Drawing.svelte';
 
   const close = () => (lightbox.svg = null);
@@ -17,7 +17,7 @@
     <div class="card" role="dialog" aria-modal="true" aria-label="The drawing, larger" tabindex="-1" use:takeFocus in:pop|global out:pop={{ duration: 140 }}>
       <header>
         <h2>The drawing, larger</h2>
-        <button aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
+        <CloseButton onclick={close} />
       </header>
       <Drawing status="done" svg={lightbox.svg} fresh size="dialog" />
     </div>
@@ -46,28 +46,4 @@
   }
   header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
   h2 { margin: 0; font-family: var(--font-voice); font-size: 18px; font-weight: 400; color: var(--riddle); }
-  header button {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border: 1px solid var(--rule);
-    border-radius: 8px;
-    background: var(--shelf);
-    color: var(--graphite);
-    transition:
-      color 150ms var(--ease-ui),
-      background-color 150ms var(--ease-ui),
-      border-color 150ms var(--ease-ui),
-      transform 140ms var(--ease-step);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    header button:hover {
-      color: var(--ink);
-      background: var(--riddle-wash);
-      border-color: color-mix(in srgb, var(--ink) 20%, var(--rule));
-    }
-  }
-  header button:active { transform: scale(0.95); }
-  @media (prefers-reduced-motion: reduce) { header button:active { transform: none; } }
 </style>

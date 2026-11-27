@@ -106,6 +106,7 @@
   :global(.card.customize-card > .x) {
     top: 18px;
     right: 20px;
+    z-index: 4;
   }
   nav {
     flex: none;

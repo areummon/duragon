@@ -1,5 +1,4 @@
 <script lang="ts">
-  import X from 'lucide-svelte/icons/x';
   import { tick } from 'svelte';
   import { BUILTIN_RIDDLER_ID, type Frequency, type Tone } from '../../api/types';
   import { RIDDLER_PRESETS } from '../../api/presets';
@@ -9,6 +8,7 @@
   import { notes, removeMind, saveMind } from '../../state/notes.svelte';
   import { showToast } from '../../state/toast.svelte';
   import Blot from '../Blot.svelte';
+  import CloseButton from '../CloseButton.svelte';
 
   const TONES: [Tone, string][] = [['plain', 'Plain'], ['warm', 'Warm'], ['blunt', 'Blunt'], ['riddle', 'Riddle']];
   const FREQS: [Frequency, string][] = [['rarely', 'Rarely'], ['matters', 'When it matters'], ['often', 'Often']];
@@ -104,7 +104,7 @@
 {#if app.mindEditor}
   <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} transition:veil|global>
     <div class="card" role="dialog" aria-modal="true" aria-label={editing ? `Edit ${editing.name}` : 'New Mind'} in:pop|global out:pop={{ duration: 140 }}>
-      <button class="x" aria-label="Close" onclick={close}><X size={17} strokeWidth={1.5} /></button>
+      <CloseButton class="x" onclick={close} />
       <h2><Blot size={14} seed="duragon" />{editing ? `Edit ${editing.name}` : 'New Mind'}</h2>
       <p class="intro">A Mind reads your notes: what it looks for, and how it asks. Give any note the one it needs.</p>
 
@@ -172,34 +172,11 @@
     font-size: 14px;
     line-height: 1.4;
   }
-  .x {
+  .card > :global(.x) {
     position: absolute;
     top: 18px;
     right: 18px;
-    z-index: 4;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border: 1px solid var(--rule);
-    border-radius: 8px;
-    background: var(--shelf);
-    color: var(--graphite);
-    transition:
-      color 150ms var(--ease-ui),
-      background-color 150ms var(--ease-ui),
-      border-color 150ms var(--ease-ui),
-      transform 140ms var(--ease-step);
   }
-  @media (hover: hover) and (pointer: fine) {
-    .x:hover {
-      color: var(--ink);
-      background: var(--riddle-wash);
-      border-color: color-mix(in srgb, var(--ink) 20%, var(--rule));
-    }
-  }
-  .x:active { transform: scale(0.95); }
-  @media (prefers-reduced-motion: reduce) { .x:active { transform: none; } }
   h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; }
   .intro { margin-top: 6px; max-width: 500px; font-size: 13.5px; color: var(--graphite); }
   .field { display: block; margin-top: 20px; }

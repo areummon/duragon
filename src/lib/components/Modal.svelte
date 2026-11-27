@@ -1,9 +1,9 @@
 <script lang="ts">
-  import X from 'lucide-svelte/icons/x';
   import type { Snippet } from 'svelte';
   import { closeOnEscape } from '../escape';
   import { takeFocus } from '../focus';
   import { pop, veil } from '../motion/transitions';
+  import CloseButton from './CloseButton.svelte';
 
   interface Props {
     open: boolean;
@@ -50,7 +50,7 @@
       in:pop|global
       out:pop={{ duration: 140 }}
     >
-      <button class="x" aria-label="Close" onclick={onclose}><X size={17} strokeWidth={1.5} /></button>
+      <CloseButton class="x" onclick={onclose} />
       {@render children()}
     </div>
   </div>
@@ -76,38 +76,9 @@
     line-height: 1.4;
     outline: none;
   }
-  .x {
+  .card > :global(.x) {
     position: absolute;
     top: 18px;
     right: 18px;
-    z-index: 4;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border: 1px solid var(--rule);
-    border-radius: 8px;
-    background: var(--shelf);
-    color: var(--graphite);
-    transition:
-      color 150ms var(--ease-ui),
-      background-color 150ms var(--ease-ui),
-      border-color 150ms var(--ease-ui),
-      transform 140ms var(--ease-step);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .x:hover {
-      color: var(--ink);
-      background: var(--riddle-wash);
-      border-color: color-mix(in srgb, var(--ink) 20%, var(--rule));
-    }
-  }
-  .x:active {
-    transform: scale(0.95);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .x:active {
-      transform: none;
-    }
   }
 </style>
