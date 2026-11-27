@@ -5,6 +5,7 @@ src-tauri/gen/
 src-tauri/binaries/
 .flatpak-builder/
 .direnv/
+.envrc
 .tools/
 docs/screenshots/
 .audit/
