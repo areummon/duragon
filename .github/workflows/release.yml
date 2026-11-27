@@ -18,7 +18,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux & Tauri build dependencies
         run: |
@@ -35,7 +35,7 @@ jobs:
             flatpak-builder
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -69,7 +69,7 @@ jobs:
           flatpak build-bundle flatpak-repo "Duragon-${TAG}-x86_64.flatpak" dev.duragon.app
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
           name: Duragon ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
