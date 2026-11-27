@@ -80,19 +80,34 @@
     position: absolute;
     top: 18px;
     right: 18px;
-    z-index: 2;
+    z-index: 4;
     display: grid;
     place-items: center;
     width: 30px;
     height: 30px;
+    border: 1px solid var(--rule);
     border-radius: 8px;
-    color: var(--faint);
-    transition: color 150ms var(--ease-ui), background-color 150ms var(--ease-ui);
+    background: var(--shelf);
+    color: var(--graphite);
+    transition:
+      color 150ms var(--ease-ui),
+      background-color 150ms var(--ease-ui),
+      border-color 150ms var(--ease-ui),
+      transform 140ms var(--ease-step);
   }
   @media (hover: hover) and (pointer: fine) {
     .x:hover {
       color: var(--ink);
-      background: var(--shelf);
+      background: var(--riddle-wash);
+      border-color: color-mix(in srgb, var(--ink) 20%, var(--rule));
+    }
+  }
+  .x:active {
+    transform: scale(0.95);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .x:active {
+      transform: none;
     }
   }
 </style>

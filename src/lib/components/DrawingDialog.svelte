@@ -46,6 +46,28 @@
   }
   header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
   h2 { margin: 0; font-family: var(--font-voice); font-size: 18px; font-weight: 400; color: var(--riddle); }
-  header button { display: grid; place-items: center; width: 28px; height: 28px; margin-right: -6px; color: var(--faint); transition: color var(--dur-ui) var(--ease-ui); }
-  header button:hover { color: var(--ink); }
+  header button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--shelf);
+    color: var(--graphite);
+    transition:
+      color 150ms var(--ease-ui),
+      background-color 150ms var(--ease-ui),
+      border-color 150ms var(--ease-ui),
+      transform 140ms var(--ease-step);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    header button:hover {
+      color: var(--ink);
+      background: var(--riddle-wash);
+      border-color: color-mix(in srgb, var(--ink) 20%, var(--rule));
+    }
+  }
+  header button:active { transform: scale(0.95); }
+  @media (prefers-reduced-motion: reduce) { header button:active { transform: none; } }
 </style>

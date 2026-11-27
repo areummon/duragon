@@ -83,8 +83,10 @@
     {/each}
   </nav>
   <div class="main">
-    <div class="scroll" bind:this={scrollEl}>
+    <div class="head">
       <h2>{current.title}</h2>
+    </div>
+    <div class="scroll" bind:this={scrollEl}>
       {#key app.customizePage}
         <div class="page" in:rise={{ y: 4, duration: 180 }}>
           <current.component />
@@ -102,8 +104,8 @@
     overflow: hidden;
   }
   :global(.card.customize-card > .x) {
-    top: 28px;
-    right: 28px;
+    top: 18px;
+    right: 20px;
   }
   nav {
     flex: none;
@@ -158,12 +160,19 @@
   }
   nav button.active { color: var(--ink); font-weight: 500; background: var(--riddle-wash); }
   nav button.active .nav-icon { color: var(--ink); }
-  .main { position: relative; flex: 1; min-width: 0; }
-  .scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 34px 40px 40px 40px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
+  .main { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .head {
+    flex: none;
+    padding: 20px 64px 16px 40px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+  }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px 40px 40px 40px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
   h2 { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; letter-spacing: -0.01em; }
-  .page { margin-top: 22px; }
+  .page { margin-top: 0; }
   @media (max-width: 700px) {
     nav { width: 156px; }
-    .scroll { padding: 28px 20px; }
+    .head { padding: 18px 56px 14px 20px; }
+    .scroll { padding: 20px; }
   }
 </style>

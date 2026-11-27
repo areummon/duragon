@@ -172,8 +172,34 @@
     font-size: 14px;
     line-height: 1.4;
   }
-  .x { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 28px; height: 28px; color: var(--graphite); }
-  .x:hover { color: var(--ink); }
+  .x {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    z-index: 4;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--shelf);
+    color: var(--graphite);
+    transition:
+      color 150ms var(--ease-ui),
+      background-color 150ms var(--ease-ui),
+      border-color 150ms var(--ease-ui),
+      transform 140ms var(--ease-step);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .x:hover {
+      color: var(--ink);
+      background: var(--riddle-wash);
+      border-color: color-mix(in srgb, var(--ink) 20%, var(--rule));
+    }
+  }
+  .x:active { transform: scale(0.95); }
+  @media (prefers-reduced-motion: reduce) { .x:active { transform: none; } }
   h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 19px; line-height: 1.3; font-weight: 500; }
   .intro { margin-top: 6px; max-width: 500px; font-size: 13.5px; color: var(--graphite); }
   .field { display: block; margin-top: 20px; }
