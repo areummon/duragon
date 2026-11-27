@@ -1,108 +1,124 @@
+<div align="center">
+
 # Duragon
 
-A quiet, local-first notebook where an AI mind reads along. Based on [Riddled](https://www.riddled.ai/).
+**A quiet, local-first notebook where an AI mind reads along.**
 
-Write in a calm, distraction-free page: Duragon reads along in the background, asks questions in the margin when something deserves a second look, answers inline when addressed by name (`Duragon, …`), and sketches step-by-step diagrams when a picture explains faster than prose. Everything stays on your machine in SQLite, works with local CLIs, HTTP APIs, or local models, and runs voice fully offline.
+[![Release](https://img.shields.io/github/v/release/areummon/duragon?style=flat-square)](https://github.com/areummon/duragon/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey?style=flat-square)](#installation)
+[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB?style=flat-square)](https://tauri.app)
 
-> **Stack:** Tauri 2 + Rust (`duragon-core`, `duragon-voice`), Svelte 5 + TipTap, SQLite.
-> **Documentation:** Browse the **[Wiki](docs/wiki/Home.md)** for full guides on [Providers & Web Search](docs/wiki/Providers-and-Web-Search.md), [Editor, Links & History](docs/wiki/Editor-Links-and-History.md), [Keyboard & Vim](docs/wiki/Keyboard-and-Vim.md), [Minds & Reading](docs/wiki/Minds-and-Reading.md), [Offline Voice](docs/wiki/Voice.md), and [Architecture](docs/wiki/Architecture-and-Components.md).
+[Installation](#installation) · [Features](#features) · [Documentation](docs/wiki/Home.md) · [Building from source](#building-from-source) · [Contributing](#contributing)
 
----
+![Duragon asking questions in the margin while you write](docs/demos/writing-and-margin.gif)
 
-## See it in action
+</div>
 
-### Margin questions & step-by-step sketches
+## About
 
-With **Thinks with you** enabled, Duragon reads each paragraph after you pause and surfaces questions in the margin without interrupting. Address it directly (`Duragon, …`) for an inline answer or a hand-drawn diagram right under your line.
+Duragon is a distraction-free writing app with an AI companion that stays out of the way. While you write, it reads along in the background and leaves questions in the margin when a passage deserves a second look. Address it by name (`Duragon, …`) and it answers inline, or sketches a step-by-step diagram when a picture explains faster than prose.
 
-![Margin questions and inline sketches](docs/demos/writing-and-margin.gif)
+Your notes stay on your machine in SQLite. Duragon works with the AI tools you already have: a logged-in CLI (Claude, Codex, Antigravity), an HTTP API key, or a local model through Ollama or llama.cpp. Speech-to-text and text-to-speech run fully offline.
 
-### Note-to-note `[[links]]`, backlinks & in-note find
+## Features
 
-Type `[[` to link another note inline. Linked notes display a quiet **Mentioned in** backlinks footer, and when cross-note search is enabled in chat, the AI receives a compact index of linked titles and reads them on demand. Press `Ctrl+F` (or `/` in Vim mode) to search inside the current note.
+- **Margin questions.** With *Thinks with you* on, Duragon reads each paragraph after you pause and surfaces questions beside the text without interrupting you.
+- **Inline answers and sketches.** Write `Duragon, …` to get an answer or a hand-drawn diagram right under your line. A side chat is one keystroke away (`Ctrl+J`).
+- **Custom Minds.** Give each note a brief (*Tell Duragon*) and create your own Minds.
+- **Any model, per job.** Choose the model and thinking effort for each task across CLIs, HTTP APIs and local servers. Optional web search (Tavily, Brave, Exa, Firecrawl, Ollama) with an SSRF-safe fetcher.
+- **A real editor.** Rich text, KaTeX math, highlighted code blocks, `[[note links]]` with backlinks, in-note find, revision history, and Markdown import and export.
+- **Keyboard first.** Every shortcut can be rebound, and an optional Vim mode covers motions, operators, search and `g` chords.
+- **Offline voice.** Local CPU transcription (NVIDIA Parakeet TDT 0.6B v2 or Whisper) and speech (Kokoro or speech-dispatcher).
+- **Private by default.** Local SQLite storage, atomic writes, and *Veil*, which masks emails and API keys before anything leaves your machine.
 
-![Note-to-note links, backlinks, and in-note find](docs/demos/links-and-find.gif)
+<table>
+<tr>
+<td width="50%"><img src="docs/demos/links-and-find.gif" alt="Note links, backlinks and in-note find"><br><sub>Note links, backlinks and in-note find</sub></td>
+<td width="50%"><img src="docs/demos/customize-and-history.gif" alt="Revision history and settings"><br><sub>Revision history, providers and keyboard settings</sub></td>
+</tr>
+</table>
 
-### Revision history, providers & keyboard / Vim mode
+## Installation
 
-Browse automatic per-note snapshots from the History icon and restore any earlier draft safely (your current draft is saved first). Configure models, thinking effort, web search providers, custom keybindings, and optional Vim mode in **Customize**.
+Duragon currently supports **Linux (x86_64)**. Download a package from the [latest release](https://github.com/areummon/duragon/releases/latest).
 
-![Revision history, providers, and keyboard settings](docs/demos/customize-and-history.gif)
+| Format | Install |
+| :--- | :--- |
+| AppImage | `chmod +x Duragon_*.AppImage && ./Duragon_*.AppImage` |
+| Flatpak | `flatpak install --user Duragon-*.flatpak && flatpak run dev.duragon.app` |
+| Debian / Ubuntu | `sudo apt install ./Duragon_*.deb` |
 
----
+You also need **at least one AI backend**:
 
-## Highlights
+- a logged-in CLI on your `PATH`: `claude`, `codex`, or `agy`;
+- an HTTP API key, set in **Customize → Providers**; or
+- a local Ollama or llama.cpp server with an OpenAI-compatible API.
 
-| Area | What Duragon does | Guide |
-| :--- | :--- | :--- |
-| **Minds & Reading** | Margin questions, inline answers (`Duragon, …`), side chat (`Ctrl+J`), per-note briefs (*Tell Duragon*), and custom Minds | [Minds & Reading](docs/wiki/Minds-and-Reading.md) |
-| **Providers & Web** | Per-job model & thinking effort across Claude CLI, Antigravity CLI, Codex CLI, HTTP APIs, and Ollama / llama.cpp; optional Tavily/Brave/Exa/Firecrawl/Ollama search + SSRF-safe `web_fetch` | [Providers & Web Search](docs/wiki/Providers-and-Web-Search.md) |
-| **Editor & Notes** | Rich text, KaTeX math, highlighted code blocks, `[[links]]` + indexed backlinks, in-note find, revision history, and Markdown import/export | [Editor, Links & History](docs/wiki/Editor-Links-and-History.md) |
-| **Keyboard & Vim** | Rebindable shortcuts and optional Duragon-tailored Vim mode (`hjkl`, `w`/`b`/`e`, `dd`/`cc`/`yy`, `p`/`P`, `/`, `n`/`N`, `g` chords) | [Keyboard & Vim](docs/wiki/Keyboard-and-Vim.md) |
-| **Offline Voice** | Local CPU speech-to-text (NVIDIA Parakeet TDT 0.6B v2 / Whisper) and text-to-speech (Kokoro / speech-dispatcher) | [Offline Voice](docs/wiki/Voice.md) |
-| **Architecture** | Local-first SQLite storage, privacy masking (`Veil`), atomic transactions, and modular Rust/Svelte layout | [Architecture](docs/wiki/Architecture-and-Components.md) |
+Notes are stored in `~/.local/share/dev.duragon.app/duragon.db`, with voice models in `models/` next to it. Set `XDG_DATA_HOME` to store data elsewhere.
 
----
+## Documentation
 
-## Download (Linux)
+The [wiki](docs/wiki/Home.md) covers each part of the app in depth:
 
-Prebuilt **AppImage**, **Flatpak**, and **`.deb`** packages are published on the [GitHub Releases](https://github.com/areummon/duragon/releases) page.
+- [Minds and Reading](docs/wiki/Minds-and-Reading.md)
+- [Providers and Web Search](docs/wiki/Providers-and-Web-Search.md)
+- [Editor, Links and History](docs/wiki/Editor-Links-and-History.md)
+- [Keyboard and Vim](docs/wiki/Keyboard-and-Vim.md)
+- [Offline Voice](docs/wiki/Voice.md)
+- [Architecture and Components](docs/wiki/Architecture-and-Components.md)
 
-- **AppImage:**
-  ```sh
-  chmod +x Duragon_*.AppImage
-  ./Duragon_*.AppImage
-  ```
-- **Flatpak:**
-  ```sh
-  flatpak install --user Duragon-*.flatpak
-  flatpak run dev.duragon.app
-  ```
+## Building from source
 
----
+**Stack:** Tauri 2 and Rust (`duragon-core`, `duragon-voice`), Svelte 5 with TipTap, SQLite.
 
-## Quick start (from source)
-
-### Requirements
-
-- **Nix with flakes** (the dev shell provides Rust, `cargo-tauri`, Node, WebKitGTK, and audio libraries).
-- **At least one AI backend:**
-  - a logged-in CLI on your `PATH` (`claude`, `agy`, or `codex`),
-  - an HTTP API key configured in **Customize → Providers**, or
-  - a local Ollama / llama.cpp OpenAI-compatible server.
-
-### Run in development
+The only prerequisite is [Nix](https://nixos.org/download) with flakes enabled. The dev shell provides Rust, `cargo-tauri`, Node, WebKitGTK and the audio libraries.
 
 ```sh
-nix develop
-npm install
+git clone https://github.com/areummon/duragon.git
+cd duragon
+nix develop -c npm install
+
+# Run the app in development mode
 nix develop -c cargo tauri dev
-```
 
-### Build a standalone binary
-
-```sh
+# Build a release binary
 nix develop -c cargo tauri build --no-bundle
 ./target/release/duragon
 ```
 
-Notes live in `~/.local/share/dev.duragon.app/duragon.db` (voice models in `models/` next to it). Set `XDG_DATA_HOME` to store data elsewhere.
+### Project layout
 
----
+```
+crates/core      Rust core: storage, AI providers, prompts, Minds
+crates/voice     Offline speech-to-text and text-to-speech
+src-tauri        Tauri shell and IPC commands
+src              Svelte 5 frontend
+scripts          Voice build and end-to-end test drivers
+packaging        Flatpak manifest and desktop metadata
+docs             Wiki and demo media
+```
 
-## Development & checks
+### Tests and checks
 
 ```sh
-npm run dev                                # UI only, in a browser, against an in-memory mock backend
-npm run check                              # svelte-check
-npm run build                              # production frontend bundle
-nix develop -c cargo test --workspace      # Rust unit & integration tests (offline)
+npm run dev                                 # frontend only, in a browser, against an in-memory mock backend
+npm run check                               # svelte-check
+nix develop -c cargo test --workspace       # Rust unit and integration tests (offline)
 nix develop -c cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-- `scripts/e2e/` drives the real desktop window via `tauri-driver` with real CLI calls (see `scripts/e2e/README.md`).
-- `cargo test -p duragon-voice --test real_models -- --ignored` downloads the voice models and tests a speak-then-transcribe round trip.
+- `scripts/e2e/` drives the real desktop window through `tauri-driver` with real CLI calls. See [`scripts/e2e/README.md`](scripts/e2e/README.md).
+- `cargo test -p duragon-voice --test real_models -- --ignored` downloads the voice models and runs a speak-then-transcribe round trip.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. For anything larger than a small fix, please [open an issue](https://github.com/areummon/duragon/issues) first so we can agree on the approach. Before you open a pull request, make sure `npm run check`, `cargo test --workspace` and `cargo clippy` pass.
+
+## Acknowledgments
+
+Duragon is inspired by [Riddled](https://www.riddled.ai/). All code, art and copy are original.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Released under the [MIT License](LICENSE).
