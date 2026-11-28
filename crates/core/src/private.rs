@@ -47,10 +47,17 @@ pub(crate) struct WorkDir(PathBuf);
 impl WorkDir {
     pub(crate) fn new() -> io::Result<Self> {
         let path = work_root()?.join(format!("duragon-{}", uuid::Uuid::new_v4()));
-        let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
-        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        let builder = {
+            let mut b = fs::DirBuilder::new();
+            std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+            b
+        };
+        #[cfg(not(unix))]
+        let builder = fs::DirBuilder::new();
         builder.create(&path)?;
+        #[cfg(target_os = "macos")]
+        let path = path.canonicalize().unwrap_or(path);
         Ok(Self(path))
     }
 

@@ -6,4 +6,5 @@ pub mod doc;
 pub mod export;
 pub mod model;
 mod private;
+pub mod process;
 pub mod trash;

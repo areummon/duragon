@@ -3,9 +3,8 @@ use serde_json::Value;
 use std::io::Write;
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 
-use super::quiet::{quiet, CODEX_OFF};
+use super::quiet::{cli_command, CODEX_OFF};
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, strict_schema};
 use crate::model::ThinkingLevel;
@@ -68,7 +67,7 @@ pub async fn run_codex(req: &AiRequest) -> Result<Value, AiError> {
     args.extend(["-c".into(), format!("web_search={}", if req.web.is_builtin() { "live" } else { "disabled" })]);
     args.push("-".into());
 
-    let mut child = quiet(&mut Command::new(command), req.provider.kind)
+    let mut child = cli_command(command, req.provider.kind)
         .args(&args)
         .current_dir(cwd.path())
         .stdin(Stdio::piped())

@@ -113,7 +113,7 @@ fn disk_status(models: &Path) -> VoiceStatus {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn speechd_voices() -> Result<Vec<VoiceOption>> {
     let listed = crate::speechd::connect().and_then(|mut c| c.voices())?;
     Ok(listed
@@ -130,7 +130,7 @@ fn speechd_voices() -> Result<Vec<VoiceOption>> {
         .collect())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 fn speechd_voices() -> Result<Vec<VoiceOption>> {
     Ok(Vec::new())
 }
@@ -185,12 +185,11 @@ struct Shared {
     asked: AtomicU64,
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use crate::speechd::Speech;
-/// Nothing speaks through Speech Dispatcher off Unix.
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 enum Speech {}
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 impl Speech {
     fn stop(self) {
         match self {}
@@ -239,11 +238,13 @@ impl VoiceClient {
             *slot = None;
         }
         let bin = find_worker_binary()?;
-        let mut child = Command::new(&bin)
-            .arg(&self.shared.models)
+        let mut cmd = Command::new(&bin);
+        cmd.arg(&self.shared.models)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        duragon_core::process::no_window_std(&mut cmd);
+        let mut child = cmd
             .spawn()
             .map_err(|e| anyhow!("could not start voice helper ({}): {e}. Build it with: cargo build -p duragon-voice", bin.display()))?;
         let stdin = child.stdin.take().ok_or_else(|| anyhow!("voice helper stdin unavailable"))?;
@@ -390,7 +391,7 @@ impl VoiceClient {
             &self.shared.models,
             disk_status(&self.shared.models).stt == ModelState::Ready,
             whisper,
-            std::env::var_os("PATH"),
+            Some(duragon_core::process::effective_path()),
         )
     }
 
@@ -465,7 +466,7 @@ impl VoiceClient {
                 self.call(json!({ "cmd": "speak", "messageId": message_id, "text": text, "voice": name, "speed": speed }))
                     .await?;
             }
-            #[cfg(unix)]
+            #[cfg(target_os = "linux")]
             VoiceId::Speechd { module, name } => {
                 let (emit, text) = (self.shared.emit.clone(), text.to_string());
                 let voice = crate::speechd::SdVoice { module, name, language: chosen.language.clone().unwrap_or_default() };
@@ -474,7 +475,7 @@ impl VoiceClient {
                 let speech = tokio::task::spawn_blocking(move || crate::speechd::connect()?.speak(&voice, rate, None, &text, on_playing));
                 *speaking = Some(speech.await??);
             }
-            #[cfg(not(unix))]
+            #[cfg(not(target_os = "linux"))]
             VoiceId::Speechd { .. } => bail!("Speech Dispatcher is not available here"),
         }
         Ok(())
@@ -499,112 +500,9 @@ impl VoiceClient {
     }
 }
 
-#[cfg(all(test, unix))]
-mod tests {
+#[cfg(test)]
+mod pure_tests {
     use super::*;
-    use std::os::unix::fs::PermissionsExt;
-    use std::time::Duration;
-
-    /// Its first run answers once and exits, but leaves its output open for a while. Later runs stay.
-    const HELPER: &str = r#"#!/bin/sh
-echo started >> "$1/starts"
-first=$(wc -l < "$1/starts")
-while read -r line; do
-  id=$(echo "$line" | sed 's/.*"id":\([0-9]*\).*/\1/')
-  echo "{\"id\":$id,\"ok\":\"run $first\"}"
-  if [ "$first" -eq 1 ]; then sleep 1 & exit 0; fi
-done
-"#;
-
-    /// Serializes tests that write executable scripts or spawn child processes to avoid Linux ETXTBSY races.
-    static PROCESS_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-    #[tokio::test]
-    async fn an_old_helper_ending_late_leaves_the_new_one_running() {
-        let _proc = PROCESS_TESTS.lock().await;
-        let dir = std::env::temp_dir().join(format!("duragon-voice-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let bin = dir.join("helper");
-        std::fs::write(&bin, HELPER).unwrap();
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::env::set_var("DURAGON_VOICE_BIN", &bin);
-        let voice = VoiceClient::new(dir.clone(), Arc::new(|_, _| {}));
-
-        voice.call(json!({ "cmd": "listen_start" })).await.unwrap();
-        std::thread::sleep(Duration::from_millis(300));
-        assert_eq!(voice.call(json!({ "cmd": "listen_stop" })).await.unwrap(), "run 2");
-        std::thread::sleep(Duration::from_millis(1500));
-        assert_eq!(voice.listen_stop().await.unwrap(), "run 2");
-        assert_eq!(std::fs::read_to_string(dir.join("starts")).unwrap().lines().count(), 2);
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    /// Tests that point `SPEECHD_ADDRESS` at their own fake take turns.
-    static SPEECHD_ADDRESS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-    fn speechd_at(socket: &Path) {
-        std::env::set_var("SPEECHD_ADDRESS", format!("unix_socket:{}", socket.display()));
-    }
-
-    #[test]
-    fn a_failed_listing_is_tried_again() {
-        let _proc = PROCESS_TESTS.blocking_lock();
-        let _env = SPEECHD_ADDRESS.blocking_lock();
-        let dir = std::env::temp_dir().join(format!("duragon-listing-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        speechd_at(&crate::speechd::tests::fake_refusing(&dir, 1).0);
-        let voice = VoiceClient::new(dir.clone(), Arc::new(|_, _| {}));
-        assert_eq!(voice.voices(false).len(), 0, "the first listing fails");
-        assert_eq!(voice.voices(false).len(), 3, "the next one asks again");
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn one_voice_speaks_at_a_time_and_stop_ends_a_speech_still_starting() {
-        let _env = SPEECHD_ADDRESS.lock().await;
-        let dir = std::env::temp_dir().join(format!("duragon-speaking-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        speechd_at(&crate::speechd::tests::fake(&dir).0);
-        let heard: Arc<Mutex<Vec<(String, bool)>>> = Arc::default();
-        let sink = heard.clone();
-        let voice = VoiceClient::new(
-            dir.clone(),
-            Arc::new(move |event, p| {
-                if event == "voice:speaking" {
-                    sink.lock().unwrap().push((p["messageId"].as_str().unwrap().into(), p["playing"].as_bool().unwrap()));
-                }
-            }),
-        );
-        let playing = || {
-            let heard = heard.lock().unwrap();
-            let mut ids: Vec<String> = heard.iter().map(|e| e.0.clone()).collect();
-            ids.dedup();
-            ids.retain(|id| heard.iter().rev().find(|e| &e.0 == id).is_some_and(|e| e.1));
-            ids
-        };
-        let pico = "speechd/pico/samantha";
-
-        let starting = tokio::spawn({
-            let voice = voice.clone();
-            async move { voice.speak(Some("a".into()), "Hello.", pico, 1.0).await }
-        });
-        tokio::task::spawn_blocking(|| std::thread::sleep(Duration::from_millis(50))).await.unwrap();
-        voice.stop_speaking().await.unwrap();
-        starting.await.unwrap().unwrap();
-        assert_eq!(playing(), Vec::<String>::new(), "a stop while it starts ends it: {:?}", heard.lock().unwrap());
-
-        let (b, c) = tokio::join!(
-            voice.speak(Some("b".into()), "Hello.", pico, 1.0),
-            voice.speak(Some("c".into()), "Hello.", pico, 1.0)
-        );
-        b.unwrap();
-        c.unwrap();
-        voice.stop_speaking().await.unwrap();
-        assert_eq!(playing(), Vec::<String>::new(), "two speeches at once leave none behind: {:?}", heard.lock().unwrap());
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
 
     #[test]
     fn voice_ids_name_their_engine_and_old_names_are_kokoro() {
@@ -666,6 +564,118 @@ done
         assert_eq!(emitted.lock().unwrap().len(), 2);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::Duration;
+
+    /// Its first run answers once and exits, but leaves its output open for a while. Later runs stay.
+    const HELPER: &str = r#"#!/bin/sh
+echo started >> "$1/starts"
+first=$(wc -l < "$1/starts" | tr -d ' ')
+while read -r line; do
+  id=$(echo "$line" | sed 's/.*"id":\([0-9]*\).*/\1/')
+  echo "{\"id\":$id,\"ok\":\"run $first\"}"
+  if [ "$first" -eq 1 ]; then sleep 1 & exit 0; fi
+done
+"#;
+
+    /// Serializes tests that write executable scripts or spawn child processes to avoid Linux ETXTBSY races.
+    static PROCESS_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    #[tokio::test]
+    async fn an_old_helper_ending_late_leaves_the_new_one_running() {
+        let _proc = PROCESS_TESTS.lock().await;
+        let dir = std::env::temp_dir().join(format!("duragon-voice-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("helper");
+        std::fs::write(&bin, HELPER).unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::env::set_var("DURAGON_VOICE_BIN", &bin);
+        let voice = VoiceClient::new(dir.clone(), Arc::new(|_, _| {}));
+
+        voice.call(json!({ "cmd": "listen_start" })).await.unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(voice.call(json!({ "cmd": "listen_stop" })).await.unwrap(), "run 2");
+        std::thread::sleep(Duration::from_millis(1500));
+        assert_eq!(voice.listen_stop().await.unwrap(), "run 2");
+        assert_eq!(std::fs::read_to_string(dir.join("starts")).unwrap().lines().count(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Tests that point `SPEECHD_ADDRESS` at their own fake take turns.
+    #[cfg(target_os = "linux")]
+    static SPEECHD_ADDRESS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    #[cfg(target_os = "linux")]
+    fn speechd_at(socket: &Path) {
+        std::env::set_var("SPEECHD_ADDRESS", format!("unix_socket:{}", socket.display()));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_failed_listing_is_tried_again() {
+        let _proc = PROCESS_TESTS.blocking_lock();
+        let _env = SPEECHD_ADDRESS.blocking_lock();
+        let dir = std::env::temp_dir().join(format!("duragon-listing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        speechd_at(&crate::speechd::tests::fake_refusing(&dir, 1).0);
+        let voice = VoiceClient::new(dir.clone(), Arc::new(|_, _| {}));
+        assert_eq!(voice.voices(false).len(), 0, "the first listing fails");
+        assert_eq!(voice.voices(false).len(), 3, "the next one asks again");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn one_voice_speaks_at_a_time_and_stop_ends_a_speech_still_starting() {
+        let _env = SPEECHD_ADDRESS.lock().await;
+        let dir = std::env::temp_dir().join(format!("duragon-speaking-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        speechd_at(&crate::speechd::tests::fake(&dir).0);
+        let heard: Arc<Mutex<Vec<(String, bool)>>> = Arc::default();
+        let sink = heard.clone();
+        let voice = VoiceClient::new(
+            dir.clone(),
+            Arc::new(move |event, p| {
+                if event == "voice:speaking" {
+                    sink.lock().unwrap().push((p["messageId"].as_str().unwrap().into(), p["playing"].as_bool().unwrap()));
+                }
+            }),
+        );
+        let playing = || {
+            let heard = heard.lock().unwrap();
+            let mut ids: Vec<String> = heard.iter().map(|e| e.0.clone()).collect();
+            ids.dedup();
+            ids.retain(|id| heard.iter().rev().find(|e| &e.0 == id).is_some_and(|e| e.1));
+            ids
+        };
+        let pico = "speechd/pico/samantha";
+
+        let starting = tokio::spawn({
+            let voice = voice.clone();
+            async move { voice.speak(Some("a".into()), "Hello.", pico, 1.0).await }
+        });
+        tokio::task::spawn_blocking(|| std::thread::sleep(Duration::from_millis(50))).await.unwrap();
+        voice.stop_speaking().await.unwrap();
+        starting.await.unwrap().unwrap();
+        assert_eq!(playing(), Vec::<String>::new(), "a stop while it starts ends it: {:?}", heard.lock().unwrap());
+
+        let (b, c) = tokio::join!(
+            voice.speak(Some("b".into()), "Hello.", pico, 1.0),
+            voice.speak(Some("c".into()), "Hello.", pico, 1.0)
+        );
+        b.unwrap();
+        c.unwrap();
+        voice.stop_speaking().await.unwrap();
+        assert_eq!(playing(), Vec::<String>::new(), "two speeches at once leave none behind: {:?}", heard.lock().unwrap());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

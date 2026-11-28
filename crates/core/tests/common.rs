@@ -6,6 +6,7 @@ use duragon_core::trash::{SystemTrash, Trash};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::net::TcpListener;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -99,6 +100,7 @@ pub fn wrap(structured: Value) -> String {
 }
 
 /// A fake `claude` that answers draw calls (schema mentions "svg") with `draw`, everything else with `other`.
+#[cfg(unix)]
 pub fn fake_claude(dir: &Path, other: &Value, draw: &Value) -> PathBuf {
     let path = dir.join("claude");
     let script = format!(
@@ -113,6 +115,7 @@ pub fn fake_claude(dir: &Path, other: &Value, draw: &Value) -> PathBuf {
 
 /// A fake `claude` that appends each call's stdin to `<bin>.stdin` and a line to `<bin>.calls`,
 /// then answers `out` after `delay` seconds.
+#[cfg(unix)]
 pub fn recording_claude(dir: &Path, out: &Value, delay: &str) -> PathBuf {
     let path = dir.join("claude-rec");
     let script = format!(

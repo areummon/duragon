@@ -1,3 +1,4 @@
+#![cfg(unix)]
 mod common;
 use common::{fake_claude, fixture, recording_claude, Capture};
 use duragon_core::ai::tasks::{SUMMARIZE_AFTER, SUMMARIZE_FOLD};

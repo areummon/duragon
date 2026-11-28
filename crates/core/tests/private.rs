@@ -1,6 +1,8 @@
 //! Nothing that says who the writer is leaves with what they write.
 mod common;
+#[cfg(unix)]
 use common::fixture;
+#[cfg(unix)]
 use duragon_core::ai::notes_mcp::NotesSearch;
 use duragon_core::ai::search::SearchClient;
 use duragon_core::ai::{notes_mcp, run_ai, AiRequest, WebAccess};
@@ -10,7 +12,9 @@ use duragon_core::model::*;
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::net::TcpListener;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -122,6 +126,7 @@ fn other_notes_are_masked_before_a_model_reads_them() {
     }
 }
 
+#[cfg(unix)]
 fn script(dir: &Path, body: &str) -> String {
     let path = dir.join("program");
     std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
@@ -129,6 +134,7 @@ fn script(dir: &Path, body: &str) -> String {
     path.to_string_lossy().into()
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn claude_runs_without_its_telemetry_in_a_folder_that_names_no_one_and_without_others_keys() {
     std::env::set_var("OPENROUTER_API_KEY", "sk-or-other");
@@ -147,6 +153,7 @@ async fn claude_runs_without_its_telemetry_in_a_folder_that_names_no_one_and_wit
     assert!(!cwd.contains(&std::env::var("USER").unwrap_or("\0".into())), "{cwd}");
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn codex_and_antigravity_run_without_their_telemetry() {
     let dir = tempfile::tempdir().unwrap();
@@ -235,6 +242,7 @@ async fn malformed_provider_base_urls_are_rejected_at_save_and_call() {
     }
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn search_keys_are_stripped_from_cli_env_and_only_active_key_forwarded_to_mcp() {
     use duragon_core::ai::notes_mcp::McpLaunch;

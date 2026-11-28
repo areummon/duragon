@@ -6,11 +6,10 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command;
 
 use super::all_but::all_but;
 use super::notes_mcp::{ACP_NOTES_TOOL_NAMES, ACP_WEB_TOOL_NAMES};
-use super::quiet::{quiet, AGY_OFF};
+use super::quiet::{cli_command, AGY_OFF};
 use super::runner::{AiError, AiRequest};
 use super::schema_util::{extract_json, json_instruction};
 use crate::model::{ProviderKind, ThinkingLevel};
@@ -54,7 +53,7 @@ pub async fn run_acp(req: &AiRequest) -> Result<Value, AiError> {
         deny_other_tools(cwd.path(), grants).map_err(|e| AiError::Failed(format!("could not limit {command}'s tools: {e}")))?;
     }
 
-    let mut child = quiet(&mut Command::new(command), req.provider.kind)
+    let mut child = cli_command(command, req.provider.kind)
         .args(&args)
         .current_dir(cwd.path())
         .stdin(Stdio::piped())
@@ -347,7 +346,16 @@ fn deny_other_tools(cwd: &Path, grants: Grants) -> std::io::Result<()> {
     let web_mcp = ACP_WEB_TOOL_NAMES.iter().filter(|_| grants.web_mcp);
     let notes = ACP_NOTES_TOOL_NAMES.iter().filter(|_| grants.notes);
     let allowed: Vec<&str> = web_builtin.chain(web_mcp).chain(notes).copied().collect();
-    let deny = r#"echo '{"decision":"deny","reason":"The writer has not allowed this tool. Answer without it."}'"#;
+    let payload = json!({
+        "decision": "deny",
+        "reason": "The writer has not allowed this tool. Answer without it.",
+    })
+    .to_string();
+    let deny = if cfg!(windows) {
+        format!("echo {payload}")
+    } else {
+        format!("echo '{payload}'")
+    };
     let hooks = json!({ "duragon": { "PreToolUse": [{
         "matcher": all_but(&allowed),
         "hooks": [{ "type": "command", "command": deny, "timeout": 10 }],

@@ -8,7 +8,6 @@ use std::process::Stdio;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 use tokio::sync::Notify;
 
 use super::acp::run_acp;
@@ -16,7 +15,7 @@ use super::codex::run_codex;
 use super::http::{run_anthropic, run_gemini, run_openai};
 use super::local::run_local;
 use super::notes_mcp::{McpLaunch, NotesSearch};
-use super::quiet::quiet;
+use super::quiet::cli_command;
 use super::search::SearchClient;
 use super::veil::Veil;
 use crate::db::Db;
@@ -222,7 +221,7 @@ fn args(req: &ClaudeRequest, thinking: ThinkingLevel) -> Vec<String> {
 async fn spawn(bin: &Path, cwd: &Path, req: &ClaudeRequest, thinking: ThinkingLevel) -> Result<tokio::process::Child, AiError> {
     let mut attempts = 0;
     loop {
-        let spawned = quiet(&mut Command::new(bin), ProviderKind::ClaudeCli)
+        let spawned = cli_command(bin, ProviderKind::ClaudeCli)
             .current_dir(cwd)
             .args(args(req, thinking))
             .stdin(Stdio::piped())

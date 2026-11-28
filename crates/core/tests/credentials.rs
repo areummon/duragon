@@ -1,13 +1,18 @@
 mod common;
+#[cfg(unix)]
 use common::{fake_claude, Capture};
+#[cfg(unix)]
 use duragon_core::ai::Ai;
 use duragon_core::credentials::{delete_provider_key, save_settings, set_provider_key, CredentialsStore};
 use duragon_core::db::Db;
 use duragon_core::model::{ProviderConfig, ProviderKind, Settings};
 use serde_json::{json, Value};
+#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::PathBuf;
+#[cfg(unix)]
 use std::sync::Arc;
+#[cfg(unix)]
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -116,6 +121,7 @@ fn a_built_in_provider_missing_from_the_saved_list_keeps_its_key() {
     assert!(app.has_key("openai"));
 }
 
+#[cfg(unix)]
 #[test]
 fn saving_settings_leaves_a_file_with_nothing_to_drop_alone() {
     let app = app();
@@ -179,6 +185,7 @@ fn a_damaged_file_is_never_written_over() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn a_file_that_cannot_be_opened_is_never_written_over() {
     let app = app();
@@ -224,6 +231,7 @@ fn a_damaged_file_is_named_on_the_providers_that_need_a_key() {
     assert_eq!((&well["error"], &well["hasEnvKey"]), (&Value::Null, &json!(true)));
 }
 
+#[cfg(unix)]
 async fn asked_with(app: &App, settings: Settings) -> Vec<(String, Value)> {
     app.save(&settings).unwrap();
     std::fs::write(&app.file, DAMAGED[3]).unwrap();
@@ -236,12 +244,14 @@ async fn asked_with(app: &App, settings: Settings) -> Vec<(String, Value)> {
     cap.all()
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn a_damaged_file_never_blocks_a_provider_that_needs_no_key() {
     let events = asked_with(&app(), Settings { learn_about_you: false, ..Settings::default() }).await;
     assert!(events.iter().any(|(name, _)| name == "ai:thread"), "{events:?}");
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn a_call_that_needs_a_key_says_the_file_is_damaged_and_sends_nothing() {
     std::env::set_var("DURAGON_TEST_CALL_KEY", "sk-from-env-1234");

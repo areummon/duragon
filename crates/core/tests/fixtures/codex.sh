@@ -13,8 +13,8 @@ printf '%s\n' "$@" > "$out/args"
 cat > "$out/stdin"
 pwd > "$out/cwd"
 ls -A > "$out/ls"
-stat -c %a . > "$out/mode"
-stat -c %a "$schema" > "$out/schema-mode"
+(stat -c %a . 2>/dev/null || stat -f %Lp .) > "$out/mode"
+(stat -c %a "$schema" 2>/dev/null || stat -f %Lp "$schema") > "$out/schema-mode"
 cat "$schema" > "$out/schema"
 touch left-behind
 [ -f "$out/hang" ] && exec sleep 30
