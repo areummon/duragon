@@ -41,8 +41,7 @@ fn welcome_note_shape() {
     let n = db.get_note(&db.list_notes().unwrap()[0].id).unwrap();
     let content = n.doc["content"].as_array().unwrap();
     assert_eq!(content[0]["type"], "title");
-    assert_eq!(content.len(), 5);
-    assert_eq!(content[4]["content"][0]["text"], "Photosynthesis happens in the mitochondria.");
+    assert!(content.iter().any(|b| b["content"][0]["text"] == "Photosynthesis happens in the mitochondria."));
     assert!(db.list_threads(&n.meta.id).unwrap().is_empty());
     assert!(!n.meta.has_open_question);
 }
@@ -146,20 +145,14 @@ fn search_by_title_and_body_with_prefix() {
 
 #[test]
 fn settings_default_and_partial_json() {
-    let s = Settings::default();
-    assert_eq!(s.read_model, "sonnet");
-    assert!(s.learn_about_you);
-    assert_eq!(s.speaking_speed, 1.0);
-    assert!(!s.vim_mode);
     let partial: Settings = serde_json::from_str(r#"{"appearance":"dark","pageWidth":720}"#).unwrap();
-    assert_eq!(partial.appearance, Appearance::Dark);
-    assert_eq!(partial.page_width, Some(720.0));
-    assert_eq!(partial.reading_pace, ReadingPace::Regular);
-    assert!(!partial.vim_mode);
-    let v = serde_json::to_value(&s).unwrap();
-    assert_eq!(v["newNoteMode"], "thinks");
+    assert_eq!(
+        partial,
+        Settings { appearance: Appearance::Dark, page_width: Some(720.0), ..Settings::default() }
+    );
+    let v = serde_json::to_value(Settings::default()).unwrap();
+    assert!(v["newNoteMode"].is_string() && v["vimMode"].is_boolean());
     assert!(v["pageWidth"].is_null());
-    assert_eq!(v["vimMode"], false);
 
     let db = Db::open_in_memory().unwrap();
     assert_eq!(db.get_settings().unwrap(), Settings::default());

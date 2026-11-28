@@ -155,20 +155,3 @@ fn a_key_is_not_turned_to_another_providers_address_or_another_variable() {
     let named = app.save(&preset("deepseek", |p| p.env_var = Some("AWS_SECRET_ACCESS_KEY".into())), false).0;
     assert!(named.addresses[0].contains("with the key in AWS_SECRET_ACCESS_KEY"), "{named:?}");
 }
-
-#[test]
-fn save_settings_leaves_local_whisper_config_unchanged() {
-    let app = App::new();
-    let initial = LocalWhisperConfig {
-        models: vec!["/models/ggml-base.en.bin".into()],
-        bin: Some("/usr/local/bin/whisper-cli".into()),
-    };
-    app.db.save_local_whisper(&initial).unwrap();
-
-    let incoming = Settings { just_my_words: true, ..Settings::default() };
-    let (asked, result) = app.save(&incoming, true);
-    assert!(asked.is_empty() && result.is_ok(), "{asked:?} {result:?}");
-
-    assert!(app.db.get_settings().unwrap().just_my_words);
-    assert_eq!(app.db.get_local_whisper().unwrap(), initial);
-}

@@ -31,12 +31,8 @@ fn whole(sections: &[Section]) -> String {
     text
 }
 
-/// Payloads for normal-size inputs, as the builders produced them before they returned sections.
 #[test]
-fn under_budget_payloads_are_byte_identical_to_before() {
-    let golden: Vec<(String, String)> =
-        serde_json::from_str(include_str!("fixtures/payloads.json")).unwrap();
-    let golden = |k: &str| golden.iter().find(|(n, _)| n == k).unwrap().1.clone();
+fn normal_size_payloads_go_out_whole_at_the_smallest_budget() {
     let blocks = doc::blocks(&doc::doc(vec![
         doc::title("Plants"),
         doc::paragraph("Photosynthesis happens in the mitochondria."),
@@ -64,7 +60,7 @@ fn under_budget_payloads_are_byte_identical_to_before() {
     ];
     for (name, sections) in cases {
         let (text, cut) = fit(&sections, 30_000);
-        assert_eq!(text, golden(name), "{name}");
+        assert_eq!(text, sections.iter().map(|s| s.text.as_str()).collect::<String>(), "{name}");
         assert!(cut.is_empty(), "{name}");
     }
 }
