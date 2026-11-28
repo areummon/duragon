@@ -6,7 +6,7 @@
 
 [![Release](https://img.shields.io/github/v/release/areummon/duragon?style=flat-square)](https://github.com/areummon/duragon/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey?style=flat-square)](#installation)
+[![Platform: Linux | Windows | macOS](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey?style=flat-square)](#installation)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB?style=flat-square)](https://tauri.app)
 
 [Installation](#installation) · [Features](#features) · [Documentation](docs/wiki/Home.md) · [Building from source](#building-from-source) · [Contributing](#contributing)
@@ -41,21 +41,39 @@ Your notes stay on your machine in SQLite. Duragon works with the AI tools you a
 
 ## Installation
 
-Duragon currently supports **Linux (x86_64)**. Download a package from the [latest release](https://github.com/areummon/duragon/releases/latest).
+Download a package from the [latest release](https://github.com/areummon/duragon/releases/latest).
+
+### Linux (x86_64)
 
 | Format | Install |
 | :--- | :--- |
 | AppImage | `chmod +x Duragon_*.AppImage && ./Duragon_*.AppImage` |
 | Flatpak | `flatpak install --user Duragon-*.flatpak && flatpak run dev.duragon.app` |
-| Debian / Ubuntu | `sudo apt install ./Duragon_*.deb` |
+| Debian and Ubuntu | `sudo apt install ./Duragon_*.deb` |
 
-You also need **at least one AI backend**:
+### Windows (x64)
+
+Download the `.exe` installer and run it. Because the Windows installer is unsigned, Microsoft Defender SmartScreen shows a warning. Select **More info**, then select **Run anyway**.
+
+### macOS (Apple Silicon)
+
+Download the `.dmg` file, open it, and drag **Duragon** to **Applications**. Because the macOS app is unsigned, Gatekeeper blocks the first launch. Run `xattr -cr /Applications/Duragon.app` in Terminal, or open **System Settings**, select **Privacy & Security**, and select **Open Anyway**.
+
+### AI backends and data
+
+You need at least one AI backend:
 
 - a logged-in CLI on your `PATH`: `claude`, `codex`, or `agy`;
-- an HTTP API key, set in **Customize → Providers**; or
+- an HTTP API key, set in **Customize**, then **Providers**; or
 - a local Ollama or llama.cpp server with an OpenAI-compatible API.
 
-Notes are stored in `~/.local/share/dev.duragon.app/duragon.db`, with voice models in `models/` next to it. Set `XDG_DATA_HOME` to store data elsewhere.
+Duragon stores notes in `duragon.db` and voice models in `models/` next to it.
+
+| Platform | Database path |
+| :--- | :--- |
+| Linux | `~/.local/share/dev.duragon.app/duragon.db` (set `XDG_DATA_HOME` to override) |
+| macOS | `~/Library/Application Support/dev.duragon.app/duragon.db` |
+| Windows | `%APPDATA%\dev.duragon.app\duragon.db` |
 
 ## Documentation
 
