@@ -80,7 +80,7 @@ pub fn augment_macos_path(current: Option<&OsStr>, home: Option<&Path>) -> OsStr
         }
         let nvm_root = home.join(".nvm/versions/node");
         if let Ok(entries) = std::fs::read_dir(&nvm_root) {
-            let mut nvm_bins: Vec<(Option<(u64, u64, u64)>, OsString, PathBuf)> = entries
+            let mut nvm_bins: Vec<_> = entries
                 .flatten()
                 .filter_map(|e| {
                     let bin = e.path().join("bin");
