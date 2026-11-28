@@ -576,7 +576,7 @@ mod tests {
     /// Its first run answers once and exits, but leaves its output open for a while. Later runs stay.
     const HELPER: &str = r#"#!/bin/sh
 echo started >> "$1/starts"
-first=$(wc -l < "$1/starts")
+first=$(wc -l < "$1/starts" | tr -d ' ')
 while read -r line; do
   id=$(echo "$line" | sed 's/.*"id":\([0-9]*\).*/\1/')
   echo "{\"id\":$id,\"ok\":\"run $first\"}"
