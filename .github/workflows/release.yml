@@ -44,12 +44,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - run: npm ci
-      - run: cargo install tauri-cli --version "^2" --locked
 
       - name: Build AppImage and deb
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
-        run: cargo tauri build --config src-tauri/tauri.bundle.conf.json --bundles appimage,deb
+        run: npx --yes @tauri-apps/cli@2 build --config src-tauri/tauri.bundle.conf.json --bundles appimage,deb
 
       - name: Build Flatpak single-file bundle
         run: |
@@ -92,10 +91,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - run: npm ci
-      - run: cargo install tauri-cli --version "^2" --locked
 
       - name: Build NSIS installer
-        run: cargo tauri build --config src-tauri/tauri.bundle.conf.json --bundles nsis
+        run: npx --yes @tauri-apps/cli@2 build --config src-tauri/tauri.bundle.conf.json --bundles nsis
 
       - name: Inspect and stage Windows bundle
         shell: pwsh
@@ -135,10 +133,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - run: npm ci
-      - run: cargo install tauri-cli --version "^2" --locked
 
       - name: Build Apple Silicon DMG
-        run: cargo tauri build --config src-tauri/tauri.bundle.conf.json --target aarch64-apple-darwin --bundles dmg
+        run: npx --yes @tauri-apps/cli@2 build --config src-tauri/tauri.bundle.conf.json --target aarch64-apple-darwin --bundles dmg
 
       - name: Inspect and stage macOS bundle
         run: |

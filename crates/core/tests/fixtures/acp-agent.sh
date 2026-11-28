@@ -7,7 +7,7 @@ read -r line
 echo "$line" > "$out/session-new"
 pwd > "$out/cwd"
 ls -A > "$out/ls"
-stat -c %a . > "$out/mode"
+(stat -c %a . 2>/dev/null || stat -f %Lp .) > "$out/mode"
 [ -f .agents/hooks.json ] && cp .agents/hooks.json "$out/hooks"
 [ -f "$out/linger" ] && sleep 30 > /dev/null &
 echo '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"s1"}}'

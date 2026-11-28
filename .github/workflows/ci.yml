@@ -71,13 +71,12 @@ jobs:
       - run: npm run build
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      - run: cargo install tauri-cli --version "^2" --locked
 
       - name: Build and inspect Windows NSIS bundle
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
-          cargo tauri build --config src-tauri/tauri.bundle.conf.json --bundles nsis
+          npx --yes @tauri-apps/cli@2 build --config src-tauri/tauri.bundle.conf.json --bundles nsis
           Get-ChildItem target/release/bundle/nsis/*.exe | Format-Table Name, @{Name='SizeMB';Expression={[math]::Round($_.Length / 1MB, 2)}}
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -90,7 +89,7 @@ jobs:
       - name: Build and inspect macOS Apple Silicon DMG bundle
         if: matrix.platform == 'macos'
         run: |
-          cargo tauri build --config src-tauri/tauri.bundle.conf.json --target aarch64-apple-darwin --bundles dmg
+          npx --yes @tauri-apps/cli@2 build --config src-tauri/tauri.bundle.conf.json --target aarch64-apple-darwin --bundles dmg
           ls -lh target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
           for bin in target/aarch64-apple-darwin/release/bundle/macos/Duragon.app/Contents/MacOS/*; do
             echo "=== $bin ==="
