@@ -56,6 +56,8 @@ impl WorkDir {
         #[cfg(not(unix))]
         let builder = fs::DirBuilder::new();
         builder.create(&path)?;
+        #[cfg(target_os = "macos")]
+        let path = path.canonicalize().unwrap_or(path);
         Ok(Self(path))
     }
 
