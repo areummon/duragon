@@ -46,7 +46,7 @@ jobs:
           - os: windows-latest
             platform: windows
             target: ''
-          - os: macos-14
+          - os: macos-latest
             platform: macos
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
