@@ -346,10 +346,16 @@ fn deny_other_tools(cwd: &Path, grants: Grants) -> std::io::Result<()> {
     let web_mcp = ACP_WEB_TOOL_NAMES.iter().filter(|_| grants.web_mcp);
     let notes = ACP_NOTES_TOOL_NAMES.iter().filter(|_| grants.notes);
     let allowed: Vec<&str> = web_builtin.chain(web_mcp).chain(notes).copied().collect();
-    #[cfg(not(windows))]
-    let deny = r#"echo '{"decision":"deny","reason":"The writer has not allowed this tool. Answer without it."}'"#;
-    #[cfg(windows)]
-    let deny = r#"echo {"decision":"deny","reason":"The writer has not allowed this tool. Answer without it."}"#;
+    let payload = json!({
+        "decision": "deny",
+        "reason": "The writer has not allowed this tool. Answer without it.",
+    })
+    .to_string();
+    let deny = if cfg!(windows) {
+        format!("echo {payload}")
+    } else {
+        format!("echo '{payload}'")
+    };
     let hooks = json!({ "duragon": { "PreToolUse": [{
         "matcher": all_but(&allowed),
         "hooks": [{ "type": "command", "command": deny, "timeout": 10 }],

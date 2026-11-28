@@ -1,3 +1,4 @@
+#![cfg(unix)]
 mod common;
 use common::{fake_claude, Capture};
 use duragon_core::ai::Ai;

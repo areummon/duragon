@@ -1,12 +1,11 @@
 mod common;
 use common::StubServer;
-use duragon_core::ai::notes_mcp::{serve_with_web, serve_with_web_async, NotesSearch};
+use duragon_core::ai::notes_mcp::{serve_with_web, serve_with_web_async};
 use duragon_core::ai::search::{run_web_search_tool, SearchClient, SearchHit};
 use duragon_core::ai::{run_ai, AiRequest, WebAccess};
 use duragon_core::db::Db;
 use duragon_core::model::{ProviderConfig, ProviderKind, SearchEngine, ThinkingLevel};
 use serde_json::{json, Value};
-use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 
 #[tokio::test]
@@ -348,8 +347,11 @@ fn notes_mcp_sync_session_handles_repeated_web_search_calls_on_one_runtime() {
     assert!(replies[1]["result"]["content"][0]["text"].as_str().unwrap().contains("Hit 1"));
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn claude_cli_uses_builtin_web_without_search_key_and_mcp_web_with_search_key() {
+    use duragon_core::ai::notes_mcp::NotesSearch;
+    use std::os::unix::fs::PermissionsExt;
     let run_with = |web: WebAccess, notes_exclude: Option<String>, mcp_server: Option<NotesSearch>| async move {
         let dir = tempfile::tempdir().unwrap();
         let bin = dir.path().join("claude");

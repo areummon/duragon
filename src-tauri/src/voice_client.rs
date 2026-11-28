@@ -243,11 +243,7 @@ impl VoiceClient {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000);
-        }
+        duragon_core::process::no_window_std(&mut cmd);
         let mut child = cmd
             .spawn()
             .map_err(|e| anyhow!("could not start voice helper ({}): {e}. Build it with: cargo build -p duragon-voice", bin.display()))?;
@@ -395,7 +391,7 @@ impl VoiceClient {
             &self.shared.models,
             disk_status(&self.shared.models).stt == ModelState::Ready,
             whisper,
-            std::env::var_os("PATH"),
+            Some(duragon_core::process::effective_path()),
         )
     }
 
@@ -501,6 +497,73 @@ impl VoiceClient {
         }
         self.call(json!({ "cmd": "stop_speaking" })).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod pure_tests {
+    use super::*;
+
+    #[test]
+    fn voice_ids_name_their_engine_and_old_names_are_kokoro() {
+        assert_eq!(VoiceId::parse("bm_george"), VoiceId::Kokoro("bm_george".into()));
+        assert_eq!(VoiceId::parse("kokoro/bf_emma"), VoiceId::Kokoro("bf_emma".into()));
+        let sd = VoiceId::parse("speechd/espeak-ng/English (America)/x");
+        assert_eq!(sd, VoiceId::Speechd { module: "espeak-ng".into(), name: "English (America)/x".into() });
+        assert_eq!(sd.id(), "speechd/espeak-ng/English (America)/x");
+        assert_eq!(VoiceId::parse("bm_george").id(), "kokoro/bm_george");
+    }
+
+    #[test]
+    fn hands_free_listening_is_its_own_model_on_disk() {
+        let dir = std::env::temp_dir().join(format!("duragon-disk-status-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(STT_DIR)).unwrap();
+        std::fs::write(dir.join(VAD_FILE), b"x").unwrap();
+        let s = disk_status(&dir);
+        assert_eq!((s.stt, s.vad, s.tts), (ModelState::Missing, ModelState::Ready, ModelState::Missing));
+        for f in STT_REQUIRED {
+            std::fs::write(dir.join(STT_DIR).join(f), b"x").unwrap();
+        }
+        assert_eq!(disk_status(&dir).stt, ModelState::Ready);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn removing_a_downloaded_model_deletes_files_and_updates_status() {
+        let dir = std::env::temp_dir().join(format!("duragon-remove-model-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(STT_DIR)).unwrap();
+        for f in STT_REQUIRED {
+            std::fs::write(dir.join(STT_DIR).join(f), b"x").unwrap();
+        }
+        std::fs::write(dir.join(VAD_FILE), b"x").unwrap();
+
+        let emitted: Arc<Mutex<Vec<VoiceStatus>>> = Arc::default();
+        let sink = emitted.clone();
+        let client = VoiceClient::new(
+            dir.clone(),
+            Arc::new(move |ev, payload| {
+                if ev == "voice:status" {
+                    if let Ok(st) = serde_json::from_value::<VoiceStatus>(payload) {
+                        sink.lock().unwrap().push(st);
+                    }
+                }
+            }),
+        );
+        assert_eq!(client.status().stt, ModelState::Ready);
+        assert_eq!(client.status().vad, ModelState::Ready);
+
+        let after_stt = client.remove_model(ModelKind::Stt).unwrap();
+        assert_eq!(after_stt.stt, ModelState::Missing);
+        assert_eq!(after_stt.vad, ModelState::Ready);
+        assert!(!dir.join(STT_DIR).exists());
+
+        let after_vad = client.remove_model(ModelKind::Vad).unwrap();
+        assert_eq!(after_vad.vad, ModelState::Missing);
+        assert!(!dir.join(VAD_FILE).exists());
+        assert_eq!(emitted.lock().unwrap().len(), 2);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
@@ -613,68 +676,6 @@ done
         voice.stop_speaking().await.unwrap();
         assert_eq!(playing(), Vec::<String>::new(), "two speeches at once leave none behind: {:?}", heard.lock().unwrap());
         std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn voice_ids_name_their_engine_and_old_names_are_kokoro() {
-        assert_eq!(VoiceId::parse("bm_george"), VoiceId::Kokoro("bm_george".into()));
-        assert_eq!(VoiceId::parse("kokoro/bf_emma"), VoiceId::Kokoro("bf_emma".into()));
-        let sd = VoiceId::parse("speechd/espeak-ng/English (America)/x");
-        assert_eq!(sd, VoiceId::Speechd { module: "espeak-ng".into(), name: "English (America)/x".into() });
-        assert_eq!(sd.id(), "speechd/espeak-ng/English (America)/x");
-        assert_eq!(VoiceId::parse("bm_george").id(), "kokoro/bm_george");
-    }
-
-    #[test]
-    fn hands_free_listening_is_its_own_model_on_disk() {
-        let dir = std::env::temp_dir().join(format!("duragon-disk-status-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join(STT_DIR)).unwrap();
-        std::fs::write(dir.join(VAD_FILE), b"x").unwrap();
-        let s = disk_status(&dir);
-        assert_eq!((s.stt, s.vad, s.tts), (ModelState::Missing, ModelState::Ready, ModelState::Missing));
-        for f in STT_REQUIRED {
-            std::fs::write(dir.join(STT_DIR).join(f), b"x").unwrap();
-        }
-        assert_eq!(disk_status(&dir).stt, ModelState::Ready);
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn removing_a_downloaded_model_deletes_files_and_updates_status() {
-        let dir = std::env::temp_dir().join(format!("duragon-remove-model-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join(STT_DIR)).unwrap();
-        for f in STT_REQUIRED {
-            std::fs::write(dir.join(STT_DIR).join(f), b"x").unwrap();
-        }
-        std::fs::write(dir.join(VAD_FILE), b"x").unwrap();
-
-        let emitted: Arc<Mutex<Vec<VoiceStatus>>> = Arc::default();
-        let sink = emitted.clone();
-        let client = VoiceClient::new(
-            dir.clone(),
-            Arc::new(move |ev, payload| {
-                if ev == "voice:status" {
-                    if let Ok(st) = serde_json::from_value::<VoiceStatus>(payload) {
-                        sink.lock().unwrap().push(st);
-                    }
-                }
-            }),
-        );
-        assert_eq!(client.status().stt, ModelState::Ready);
-        assert_eq!(client.status().vad, ModelState::Ready);
-
-        let after_stt = client.remove_model(ModelKind::Stt).unwrap();
-        assert_eq!(after_stt.stt, ModelState::Missing);
-        assert_eq!(after_stt.vad, ModelState::Ready);
-        assert!(!dir.join(STT_DIR).exists());
-
-        let after_vad = client.remove_model(ModelKind::Vad).unwrap();
-        assert_eq!(after_vad.vad, ModelState::Missing);
-        assert!(!dir.join(VAD_FILE).exists());
-        assert_eq!(emitted.lock().unwrap().len(), 2);
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

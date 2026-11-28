@@ -129,7 +129,7 @@ pub fn find_binary(path: Option<OsString>) -> Option<PathBuf> {
     let suffix = std::env::consts::EXE_SUFFIX;
     std::env::split_paths(&path?)
         .flat_map(|d| WHISPER_BINARIES.map(move |b| d.join(format!("{b}{suffix}"))))
-        .find(|p| p.is_file())
+        .find(|p| is_executable_file(p))
 }
 
 /// Resolves the whisper binary: prefers a valid custom path, falling back to `PATH`.
@@ -146,13 +146,32 @@ pub fn resolve_binary(custom: Option<&str>, path_env: Option<OsString>) -> Optio
 /// Where whisper.cpp's models are usually kept, Duragon's own folder first.
 fn model_dirs(models: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![models.join("whisper")];
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        dirs.extend([".local/share/whisper.cpp", ".local/share/whisper", ".cache/whisper.cpp", ".cache/whisper"].map(|d| home.join(d)));
-        #[cfg(target_os = "macos")]
-        dirs.push(home.join("Library/Application Support/whisper.cpp"));
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            dirs.extend(
+                [".local/share/whisper.cpp", ".local/share/whisper", ".cache/whisper.cpp", ".cache/whisper"]
+                    .map(|d| home.join(d)),
+            );
+        }
+        dirs.extend(["/usr/share/whisper.cpp/models", "/usr/local/share/whisper.cpp/models"].map(PathBuf::from));
     }
     #[cfg(target_os = "macos")]
-    dirs.push(PathBuf::from("/opt/homebrew/share/whisper.cpp/models"));
+    {
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            dirs.extend(
+                [
+                    "Library/Application Support/whisper.cpp",
+                    ".local/share/whisper.cpp",
+                    ".local/share/whisper",
+                    ".cache/whisper.cpp",
+                    ".cache/whisper",
+                ]
+                .map(|d| home.join(d)),
+            );
+        }
+        dirs.extend(["/opt/homebrew/share/whisper.cpp/models", "/usr/local/share/whisper.cpp/models"].map(PathBuf::from));
+    }
     #[cfg(windows)]
     {
         if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
@@ -162,7 +181,6 @@ fn model_dirs(models: &Path) -> Vec<PathBuf> {
             dirs.push(user_profile.join(".cache/whisper.cpp"));
         }
     }
-    dirs.extend(["/usr/share/whisper.cpp/models", "/usr/local/share/whisper.cpp/models"].map(PathBuf::from));
     dirs.extend(std::env::var_os("WHISPER_CPP_MODELS").map(PathBuf::from));
     dirs
 }
@@ -193,7 +211,7 @@ pub fn find_models(dirs: &[PathBuf]) -> Vec<PathBuf> {
 
 /// Live status of user-registered custom whisper models and binary for the Voice settings UI.
 pub fn inspect_custom(config: &LocalWhisperConfig) -> LocalWhisperState {
-    inspect_custom_with_path(config, std::env::var_os("PATH"))
+    inspect_custom_with_path(config, Some(duragon_core::process::effective_path()))
 }
 
 pub fn inspect_custom_with_path(
@@ -302,10 +320,18 @@ mod tests {
     fn finds_a_whisper_binary_on_the_path() {
         let dir = scratch("bin");
         let bin_name = format!("whisper-cli{}", std::env::consts::EXE_SUFFIX);
-        assert_eq!(find_binary(Some(dir.clone().into_os_string())), None);
-        std::fs::write(dir.join(&bin_name), b"#!/bin/sh\n").unwrap();
+        let bin_path = dir.join(&bin_name);
         let path = std::env::join_paths([dir.join("nothing"), dir.clone()]).unwrap();
-        assert_eq!(find_binary(Some(path)), Some(dir.join(&bin_name)));
+        assert_eq!(find_binary(Some(dir.clone().into_os_string())), None);
+        #[cfg(unix)]
+        {
+            write_file_mode(&bin_path, 0o644);
+            assert_eq!(find_binary(Some(path.clone())), None);
+            write_file_mode(&bin_path, 0o755);
+        }
+        #[cfg(not(unix))]
+        std::fs::write(&bin_path, b"mz").unwrap();
+        assert_eq!(find_binary(Some(path)), Some(bin_path));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -645,13 +645,14 @@ fn files_that_are_not_a_whole_note_are_counted_and_left() {
     fs::create_dir(f.dir().join(format!("a directory {id}.json"))).unwrap();
     let outside = f.root.path().join(format!("outside {id}.json"));
     fs::write(&outside, &good).unwrap();
+    #[cfg(unix)]
     std::os::unix::fs::symlink(&outside, f.dir().join(format!("a link {id}.json"))).unwrap();
     fs::write(f.dir().join(".DS_Store"), "x").unwrap();
     let before = f.files();
 
     let list = f.trash.list().unwrap();
     assert_eq!(list.notes, vec![]);
-    assert_eq!(list.unreadable, bad.len() + 2);
+    assert_eq!(list.unreadable, bad.len() + if cfg!(unix) { 2 } else { 1 });
     for id in [id, other] {
         assert!(f.trash.restore(&id).is_err());
         f.trash.delete_forever(&[id]).unwrap();
@@ -779,6 +780,7 @@ fn a_note_the_system_trash_refused_stays_in_duragons() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn a_note_already_deleted_is_never_reported_as_a_failed_delete() {
     use std::os::unix::fs::PermissionsExt;

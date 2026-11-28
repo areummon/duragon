@@ -1,3 +1,4 @@
+#![cfg(unix)]
 mod common;
 use common::fixture;
 use duragon_core::ai::{run_ai, AiError, AiRequest, WebAccess};

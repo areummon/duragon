@@ -1,3 +1,4 @@
+#![cfg(unix)]
 mod common;
 use common::fixture;
 use duragon_core::ai::{cancel, run_claude, AiError, CancelKey, ClaudeRequest};

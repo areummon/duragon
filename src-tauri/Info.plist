@@ -4,5 +4,7 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Duragon uses the microphone for offline voice dictation.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Duragon uses Finder to move deleted notes to the Trash so Put Back works.</string>
 </dict>
 </plist>
