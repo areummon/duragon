@@ -2,7 +2,7 @@
 
 mod commands;
 mod listen_models;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 mod speechd;
 mod system_trash;
 mod voice_client;

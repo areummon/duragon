@@ -113,7 +113,7 @@ fn disk_status(models: &Path) -> VoiceStatus {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn speechd_voices() -> Result<Vec<VoiceOption>> {
     let listed = crate::speechd::connect().and_then(|mut c| c.voices())?;
     Ok(listed
@@ -130,7 +130,7 @@ fn speechd_voices() -> Result<Vec<VoiceOption>> {
         .collect())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 fn speechd_voices() -> Result<Vec<VoiceOption>> {
     Ok(Vec::new())
 }
@@ -185,12 +185,12 @@ struct Shared {
     asked: AtomicU64,
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use crate::speechd::Speech;
-/// Nothing speaks through Speech Dispatcher off Unix.
-#[cfg(not(unix))]
+/// Nothing speaks through Speech Dispatcher off Linux.
+#[cfg(not(target_os = "linux"))]
 enum Speech {}
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 impl Speech {
     fn stop(self) {
         match self {}
@@ -239,11 +239,17 @@ impl VoiceClient {
             *slot = None;
         }
         let bin = find_worker_binary()?;
-        let mut child = Command::new(&bin)
-            .arg(&self.shared.models)
+        let mut cmd = Command::new(&bin);
+        cmd.arg(&self.shared.models)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
+        }
+        let mut child = cmd
             .spawn()
             .map_err(|e| anyhow!("could not start voice helper ({}): {e}. Build it with: cargo build -p duragon-voice", bin.display()))?;
         let stdin = child.stdin.take().ok_or_else(|| anyhow!("voice helper stdin unavailable"))?;
@@ -465,7 +471,7 @@ impl VoiceClient {
                 self.call(json!({ "cmd": "speak", "messageId": message_id, "text": text, "voice": name, "speed": speed }))
                     .await?;
             }
-            #[cfg(unix)]
+            #[cfg(target_os = "linux")]
             VoiceId::Speechd { module, name } => {
                 let (emit, text) = (self.shared.emit.clone(), text.to_string());
                 let voice = crate::speechd::SdVoice { module, name, language: chosen.language.clone().unwrap_or_default() };
@@ -474,7 +480,7 @@ impl VoiceClient {
                 let speech = tokio::task::spawn_blocking(move || crate::speechd::connect()?.speak(&voice, rate, None, &text, on_playing));
                 *speaking = Some(speech.await??);
             }
-            #[cfg(not(unix))]
+            #[cfg(not(target_os = "linux"))]
             VoiceId::Speechd { .. } => bail!("Speech Dispatcher is not available here"),
         }
         Ok(())
@@ -540,12 +546,15 @@ done
     }
 
     /// Tests that point `SPEECHD_ADDRESS` at their own fake take turns.
+    #[cfg(target_os = "linux")]
     static SPEECHD_ADDRESS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+    #[cfg(target_os = "linux")]
     fn speechd_at(socket: &Path) {
         std::env::set_var("SPEECHD_ADDRESS", format!("unix_socket:{}", socket.display()));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_failed_listing_is_tried_again() {
         let _proc = PROCESS_TESTS.blocking_lock();
@@ -560,6 +569,7 @@ done
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread")]
     async fn one_voice_speaks_at_a_time_and_stop_ends_a_speech_still_starting() {
         let _env = SPEECHD_ADDRESS.lock().await;

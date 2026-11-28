@@ -112,13 +112,19 @@ impl Whisper {
         }
         let wav = tempfile::Builder::new().prefix("duragon-listen-").suffix(".wav").tempfile()?;
         wav::write(wav.path(), samples, STT_RATE)?;
-        let out = Command::new(&self.bin)
-            .arg("-m")
+        let mut cmd = Command::new(&self.bin);
+        cmd.arg("-m")
             .arg(&self.model)
             .arg("-f")
             .arg(wav.path())
             .args(["-nt", "-np", "-l", &self.language, "-t", &threads().to_string()])
-            .stdin(Stdio::null())
+            .stdin(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
+        }
+        let out = cmd
             .output()
             .with_context(|| format!("running {}", self.bin.display()))?;
         if !out.status.success() {

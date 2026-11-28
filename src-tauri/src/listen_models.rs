@@ -126,7 +126,10 @@ pub fn validate_whisper_bin(path: &Path) -> Result<PathBuf> {
 }
 
 pub fn find_binary(path: Option<OsString>) -> Option<PathBuf> {
-    std::env::split_paths(&path?).flat_map(|d| WHISPER_BINARIES.map(|b| d.join(b))).find(|p| p.is_file())
+    let suffix = std::env::consts::EXE_SUFFIX;
+    std::env::split_paths(&path?)
+        .flat_map(|d| WHISPER_BINARIES.map(move |b| d.join(format!("{b}{suffix}"))))
+        .find(|p| p.is_file())
 }
 
 /// Resolves the whisper binary: prefers a valid custom path, falling back to `PATH`.
@@ -145,6 +148,19 @@ fn model_dirs(models: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![models.join("whisper")];
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
         dirs.extend([".local/share/whisper.cpp", ".local/share/whisper", ".cache/whisper.cpp", ".cache/whisper"].map(|d| home.join(d)));
+        #[cfg(target_os = "macos")]
+        dirs.push(home.join("Library/Application Support/whisper.cpp"));
+    }
+    #[cfg(target_os = "macos")]
+    dirs.push(PathBuf::from("/opt/homebrew/share/whisper.cpp/models"));
+    #[cfg(windows)]
+    {
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+            dirs.push(local_app_data.join("whisper.cpp"));
+        }
+        if let Some(user_profile) = std::env::var_os("USERPROFILE").map(PathBuf::from) {
+            dirs.push(user_profile.join(".cache/whisper.cpp"));
+        }
     }
     dirs.extend(["/usr/share/whisper.cpp/models", "/usr/local/share/whisper.cpp/models"].map(PathBuf::from));
     dirs.extend(std::env::var_os("WHISPER_CPP_MODELS").map(PathBuf::from));
@@ -285,10 +301,11 @@ mod tests {
     #[test]
     fn finds_a_whisper_binary_on_the_path() {
         let dir = scratch("bin");
+        let bin_name = format!("whisper-cli{}", std::env::consts::EXE_SUFFIX);
         assert_eq!(find_binary(Some(dir.clone().into_os_string())), None);
-        std::fs::write(dir.join("whisper-cli"), b"#!/bin/sh\n").unwrap();
+        std::fs::write(dir.join(&bin_name), b"#!/bin/sh\n").unwrap();
         let path = std::env::join_paths([dir.join("nothing"), dir.clone()]).unwrap();
-        assert_eq!(find_binary(Some(path)), Some(dir.join("whisper-cli")));
+        assert_eq!(find_binary(Some(path)), Some(dir.join(&bin_name)));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
