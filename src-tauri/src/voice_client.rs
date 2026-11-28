@@ -187,7 +187,6 @@ struct Shared {
 
 #[cfg(target_os = "linux")]
 use crate::speechd::Speech;
-/// Nothing speaks through Speech Dispatcher off Linux.
 #[cfg(not(target_os = "linux"))]
 enum Speech {}
 #[cfg(not(target_os = "linux"))]

@@ -170,7 +170,6 @@ mod tests {
             resolve_windows_program(Path::new("missing"), Some(&path), None),
             PathBuf::from("missing")
         );
-        // Paths with an extension or directory separator are left untouched.
         assert_eq!(
             resolve_windows_program(Path::new("claude.cmd"), Some(&path), None),
             PathBuf::from("claude.cmd")
