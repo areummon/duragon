@@ -142,7 +142,7 @@ jobs:
           mkdir -p dist-bundles
           cp target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist-bundles/
           ls -lh dist-bundles
-          for bin in target/aarch64-apple-darwin/release/bundle/macos/Duragon.app/Contents/MacOS/*; do
+          for bin in target/aarch64-apple-darwin/release/duragon target/aarch64-apple-darwin/release/duragon-voice; do
             echo "=== $bin ==="
             otool -L "$bin"
           done

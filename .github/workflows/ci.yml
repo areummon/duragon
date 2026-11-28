@@ -91,7 +91,7 @@ jobs:
         run: |
           npx --yes @tauri-apps/cli@2 build --config src-tauri/tauri.bundle.conf.json --target aarch64-apple-darwin --bundles dmg
           ls -lh target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-          for bin in target/aarch64-apple-darwin/release/bundle/macos/Duragon.app/Contents/MacOS/*; do
+          for bin in target/aarch64-apple-darwin/release/duragon target/aarch64-apple-darwin/release/duragon-voice; do
             echo "=== $bin ==="
             otool -L "$bin"
           done
